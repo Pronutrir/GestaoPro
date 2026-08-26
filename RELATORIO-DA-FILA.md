@@ -18,6 +18,17 @@ diferentes, e este relatório mantém a distinção em todas as linhas.
 **10 commits · 315 verificações automáticas, todas passando · 3 migrations novas, nenhuma
 aplicada.**
 
+> **Houve uma SEGUNDA RODADA depois desta** — homônimos, progresso e responsáveis. Está no
+> fim do documento, a partir de *"Segunda rodada — 26/08/2026"*. Dois pontos que esta primeira
+> parte deixou em aberto foram resolvidos lá:
+>
+> - a **troca do progresso**, que aqui aparece como *BARRADO*, foi feita — invertendo o
+>   trabalho: o servidor aprendeu a régua da tela, com **zero barra mudando de valor**;
+> - a **etapa 5**, que aqui aparece como *TRAVADO*, destravou: os três triggers de sincronia
+>   estão escritos e as duas primeiras telas já leem por identificador.
+>
+> Totais atualizados: **14 commits · 367 verificações · 5 migrations, nenhuma aplicada.**
+
 ---
 
 ## ETAPA 0 — publicação · **FEITO**
@@ -350,3 +361,246 @@ node scripts/medicoes/comparar-progresso-cronograma.cjs
 
 E um aviso, para quando publicar: **42 pais mudam de percentual no Cronograma** sem que nada
 tenha mudado no trabalho. O número novo está certo; o antigo diluía as filhas nos netos.
+
+---
+---
+
+# Segunda rodada — 26/08/2026
+
+Três itens, na ordem pedida. **Um commit para cada.** Nada publicado: a máquina continua sem
+Docker.
+
+| Item | Estado |
+|---|---|
+| 1 — homônimos | **feito** · commit `4da67c4` |
+| 2 — progresso | **feito** · commit `6c60a67` |
+| 3 — responsáveis | **feito em parte** · commit `a8ad50e` |
+
+**367 verificações automáticas, todas passando** (eram 315).
+
+---
+
+## 1 · HOMÔNIMOS — a permissão parou de comparar por nome
+
+### O furo, reproduzido chamando as próprias funções
+
+```
+is_activity_actor_v2(<atividade do Williame>, b0b64edb…) = true
+is_activity_actor_v2(<atividade do Williame>, 149e6c4a…) = true
+```
+
+…enquanto `activity_assignees` diz que o responsável é **um só**.
+
+No nível de projeto era pior, porque a concessão é maior:
+
+```
+is_project_leader_v2(<Guia Jornada do Paciente>, b0b64edb…) = true
+is_project_leader_v2(<Guia Jornada do Paciente>, 149e6c4a…) = true
+```
+
+`projects.owner` guarda **nome**. Os dois viravam dono — e dono manda em tudo dentro do
+projeto.
+
+**Alcance:** 450 atividades, 6 participações, 2 projetos.
+
+### A decisão
+
+**Nome que pertence a mais de um perfil não concede a ninguém.** Decidem as vias por
+identificador: `created_by`, `activity_assignees`, `project_members`.
+
+Errar para "ninguém" é visível — a pessoa reclama que perdeu acesso. Errar para "os dois" é
+invisível, e é escalação de privilégio.
+
+**Ninguém fica sem acesso:** conferido antes de escrever, nos 2 projetos afetados os **dois**
+Williames já são membros com `can_edit` e `can_move`, por `user_id`. A rede de segurança da
+migration não insere nada nesta base.
+
+### O achado que o próprio teste encontrou
+
+No front a comparação é por **token**, então `williame_lima@hotmail.com` quebrava em
+`[williame, lima, hotmail]` e casava com o nome *"Williame Correia de Lima"* do **outro**
+perfil — o mesmo furo por outra porta, justamente onde havia informação para distinguir.
+E-mail agora casa por igualdade exata e para aí.
+
+A RLS já comparava e-mail por igualdade — esse lado nunca teve o defeito.
+
+### O levantamento dos dois perfis
+
+`docs/medicoes/homonimos-26-08-2026.md`. **Nada foi fundido, ninguém foi desativado.**
+
+| | **A** — hotmail | **B** — corporativo |
+|---|---|---|
+| e-mail | `williame_lima@hotmail.com` | `williame.correia@pronutrir.com.br` |
+| entrou por | senha | SSO (azure) |
+| criado em | 04/05/2026 19:43 | 05/05/2026 02:37 (7 h depois) |
+| último login | **nunca registrado** | 05/05/2026 |
+| responsável por | **0** | **460** |
+| criou | 41 atividades | **364** |
+| membro de | **1** projeto | **18** |
+| escritas | **3.280** | 3.068 |
+| última escrita | **14/08/2026** | **24/08/2026** |
+
+**Os dois estão vivos, e trabalham no MESMO projeto** — 249 e 172 escritas em "Guia Jornada
+do Paciente". Isso sugere **uma pessoa com dois logins**, não duas pessoas homônimas: ela
+trabalhava logada como **A** e recebia tarefa como **B**, o que só funcionava porque a
+comparação por nome deixava os dois passarem. O furo estava sendo usado como se fosse
+recurso.
+
+> ### Depende do Raphael, e tem efeito imediato
+>
+> Logado como **A**, o Williame deixa de enxergar como suas as 450 atividades atribuídas ao
+> nome. Ele **não perde o projeto** (é membro por `user_id`), mas perde o vínculo com as
+> atividades. **Se ele usa o login do hotmail no dia a dia, vai notar na primeira abertura.**
+>
+> As três perguntas: por qual login ele entra? os 3.280 registros de A devem migrar para B?
+> desativar A, ou deixar os dois?
+>
+> **Não desative A** antes de responder a primeira — ele pode ficar sem acesso na
+> segunda-feira.
+
+---
+
+## 2 · PROGRESSO — o servidor aprendeu a régua da tela
+
+Decisão respeitada: **mantém o crédito parcial por coluna.** Então o trabalho inverteu — em
+vez de a tela adotar a régua binária do banco, `derivar_do_pai()` copiou os pesos da tela.
+
+### O resultado exigido
+
+**582 pais conferidos contra o código real compilado: ZERO barra muda de valor.**
+
+A correção aparece só para quem enxerga uma **fatia** — que é o motivo da fase 09 existir: o
+cliente nunca tem a árvore toda, só o que a RLS deixou passar.
+
+### As duas diferenças que a conferência achou — as duas eram minhas
+
+**1. Recursão.** Minha primeira versão usava o derivado da filha quando ela também era pai.
+A tela não faz isso; `subAvanco` diz, com todas as letras: *"um nível é o que existe"* —
+pontua a filha pela **coluna** dela mesmo quando ela tem filhas. Com recursão, **56 dos 582**
+divergiam, um deles em **100 pontos**.
+
+**2. Arredondamento.** Eu guardava 2 casas; `clampPercent` da tela é `Math.round`. 62,5 no
+banco contra 63 na tela deixava **30 pais** divergindo por meio ponto.
+
+Corrigidas as duas, o número fechou em zero.
+
+### E um erro de diagnóstico, registrado no script
+
+Investigando uma divergência, abri a atividade errada: **há nove atividades chamadas
+"Cargas"**. Conclui que a conferência estava com defeito quando o número dela estava certo.
+O id agora vai na saída, e a nota está no cabeçalho do script.
+
+### O que a tela continua decidindo
+
+`progressoDoPai()` roda a régua de sempre e troca **só o número**. `paused`, `label`, `subs` e
+`divergente` continuam vindo da tela — o banco não tem esses estados. Derivado nulo vira
+`percent: null`, nunca o número do cliente.
+
+---
+
+## 3 · RESPONSÁVEIS — sincronia escrita, leituras começadas
+
+### Os três triggers
+
+A fase 02 prometeu no próprio cabeçalho *"sincronizada por trigger nos dois sentidos"* e nunca
+escreveu. Agora existem:
+
+| trigger | o que espelha |
+|---|---|
+| `trg_assigned_to_para_tabela` | `assigned_to` → `papel='responsavel'` |
+| `trg_participants_para_tabela` | `participants` → `papel='participante'` |
+| `trg_tabela_para_assigned_to` | a tabela → **as duas** colunas de volta |
+
+O backfill repara as **4 linhas** que já divergiam e os participantes que ficaram para trás.
+
+Nome ambíguo **não apaga linha**: 450 atividades trazem o nome dos dois Williames, e resolver
+para `NULL` não pode significar "tire essa pessoa". Os triggers só mexem quando o texto
+**resolve** ou quando o campo foi **esvaziado**.
+
+### O defeito que apareceu ao migrar as leituras
+
+`lib/pendencias.ts` fazia `responsavelId: a.assigned_to` — mas essa coluna guarda **nome**, e
+a aba "Minhas" compara com `user.id`.
+
+> **Medido: das 667 atividades com responsável, 657 guardam NOME e 10 guardam uuid.**
+> A aba "Minhas" de Pendências enxergava **1,5%** do que deveria.
+
+Agora o id vem de `activity_assignees`. Nome nunca vira `responsavelId`, e sobrevive em
+`responsavelTexto` para que "sem-dono" não conte como órfã uma atividade que tem dono.
+
+### O que ficou de fora, e por quê
+
+**Migradas: cronograma e pendências** — as duas primeiras da fila, como pedido.
+
+**Não migradas: as demais.** Restam **301 usos** de `assigned_to` em `src/`, concentrados em:
+
+| arquivo | usos |
+|---|---|
+| `MeetingsManager.tsx` | 24 |
+| `EditActivityDialog.tsx` | 22 |
+| `csc/page.tsx` | 20 |
+| `team/page.tsx` | 17 |
+| `BacklogSection.tsx` | 16 |
+| `ActivityKanban.tsx` | 15 |
+
+**Elas continuam corretas** enquanto os triggers mantiverem os dois lados iguais: quase todas
+resolvem *nome para exibir*, e o nome continua sendo gravado na coluna. O ganho de migrá-las é
+o mesmo de Pendências — deixar de confundir homônimo — e vale a pena, mas cada tela precisa
+ser aberta para conferir, e isso pede a aplicação de pé.
+
+`lib/responsaveisDaAtividade.ts` é a camada comum que elas devem consumir: a tabela ganha do
+texto quando responde, o fallback **se declara** (`origem: tabela | texto | ausente`) e recusa
+nome ambíguo, e uuid nunca vaza para a tela.
+
+---
+
+## As migrations pendentes — agora são cinco
+
+**Nenhuma aplicada.** Ordem, e a razão de ser esta:
+
+```bash
+# 1. Fecha o furo do homônimo. Independente das outras.
+#    Falta o script de apply — hoje depende de rodar o .sql à mão.
+#    supabase/migrations/20260826180000_homonimos_permissao_por_identificador.sql
+
+# 2. Sincronia dos responsáveis — ANTES de migrar mais leituras.
+./scripts/apply-fase05-sincronia-responsaveis.sh   # 20260826160000
+
+# 3. O progresso com crédito parcial.
+#    supabase/migrations/20260826190000_progresso_credito_parcial_no_servidor.sql
+
+# 4. O feed agregado. Nenhuma tela lê ainda; pode ir a qualquer momento.
+./scripts/apply-fase08-feed-da-subarvore.sh        # 20260826170000
+
+# 5. P00 — só depois de falar com o Bruno e o Williame.
+./scripts/apply-p00-escopo-de-leitura.sh           # 20260826150000
+```
+
+> ### O par que não pode se separar
+>
+> A migration `20260826190000` e o commit `6c60a67` (front) são **um par**.
+>
+> - Migration **sem** o front: `derived_progress` muda, ninguém lê. Inofensivo.
+> - Front **sem** a migration: as telas leem `derived_progress` com a régua **binária** ainda
+>   no banco — **74 barras caem**, até 66 pontos.
+>
+> **A migration vai primeiro.**
+
+Falta escrever `scripts/apply-homonimos.sh`. A migration e o rollback estão prontos; sem o
+script, ela depende de alguém rodar o `.sql` à mão — que é justamente o que os outros scripts
+existem para evitar.
+
+---
+
+## As perguntas que dependem de gente
+
+1. **Em qual máquina o build roda?** Continua bloqueando tudo.
+2. **Qual `APP_VERSION` está no ar?**
+3. **Por qual login o Williame entra?** — decide se a mudança dos homônimos o afeta.
+4. **A conversa com o Bruno e o Williame** — destrava a P00.
+5. ~~O progresso deve dar crédito parcial?~~ **Respondida: sim.** Implementado, com zero
+   mudança de número para quem enxerga o projeto inteiro.
+
+E o aviso de sempre, para quando publicar: **42 pais mudam de percentual no Cronograma** sem
+que nada tenha mudado no trabalho (commit `982ba60`, da primeira rodada). O número novo está
+certo; o antigo diluía as filhas nos netos.
