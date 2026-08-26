@@ -310,6 +310,17 @@ AS
 COMMENT ON VIEW public.activity_dependency_card IS
   'Cartao reduzido da dependencia que bloqueia, mesmo sendo irma invisivel. Excecao deliberada: quem esta bloqueado precisa saber O QUE e SE ja terminou -- e nada alem disso.';
 
+-- As duas views sao security_invoker=false: rodam com os privilegios do dono e
+-- BYPASSAM a RLS de activities. Sem restricao de privilegio, o papel `anon`
+-- (chave publica embarcada no bundle) leria codigo/nome/tipo/status de TODAS as
+-- atividades vivas, cross-projeto. Restringe a authenticated.
+REVOKE ALL ON public.activity_breadcrumb FROM PUBLIC;
+REVOKE ALL ON public.activity_breadcrumb FROM anon;
+REVOKE ALL ON public.activity_dependency_card FROM PUBLIC;
+REVOKE ALL ON public.activity_dependency_card FROM anon;
+GRANT SELECT ON public.activity_breadcrumb TO authenticated;
+GRANT SELECT ON public.activity_dependency_card TO authenticated;
+
 -- ───────────────────────────────────────────────────────────────────────────
 -- 8) RLS das tabelas novas
 -- ───────────────────────────────────────────────────────────────────────────
