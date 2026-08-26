@@ -58,6 +58,7 @@ import { formatarDataBR, formatarDiaMes, estaAtrasado } from "@/lib/dataLocal";
 import { type ActivityProgress } from "@/lib/activityProgress";
 
 import { normalizeGut, GUT_META } from "@/lib/gutPriority";
+import { faixaDoGut } from "@/lib/mesaDePlanejamento";
 
 import {
   suggestCategoryFromTitle,
@@ -538,13 +539,31 @@ function KanbanCardBase({
                     const lvl = normalizeGut(activity.priority);
                     if (lvl === "pendente") return null;
                     const meta = GUT_META[lvl];
+                    /**
+                     * DECISÃO 3 DA FASE 06 — o GUT mostra o NÚMERO, e só ganha
+                     * cor a partir de 60.
+                     *
+                     * O selo mostrava só o rótulo ("Alta"), colorido em toda
+                     * faixa. Duas consequências: o score — que é o diferencial
+                     * do produto — ficava invisível, e com tudo colorido nada
+                     * chamava atenção. Numa coluna de 30 cards, cor em todos é
+                     * o mesmo que cor em nenhum.
+                     *
+                     * A faixa vem de `lib/mesaDePlanejamento`, a mesma que o
+                     * Backlog usa — senão as duas telas divergem no limiar.
+                     */
+                    const score = activity.priority_score ?? null;
+                    const faixa = faixaDoGut(score);
+                    const colore = faixa === "critico" || faixa === "alto";
                     return (
                       <span
-                        className={`shrink-0 mt-0.5 inline-flex items-center h-4 px-1.5 rounded text-[9px] font-bold leading-none ${meta.badgeClass} ${meta.pulse ? "animate-pulse-strong" : ""}`}
-                        title={`Prioridade: ${meta.label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`}
-                        aria-label={`Prioridade ${meta.label}`}
+                        className={`shrink-0 mt-0.5 inline-flex items-center gap-1 h-4 px-1.5 rounded text-[9px] font-bold leading-none tabular-nums ${
+                          colore ? meta.badgeClass : "bg-muted text-muted-foreground"
+                        } ${colore && meta.pulse ? "animate-pulse-strong" : ""}`}
+                        title={`Prioridade: ${meta.label}${score ? ` (GUT ${score})` : ""}`}
+                        aria-label={`Prioridade ${meta.label}${score ? `, GUT ${score}` : ""}`}
                       >
-                        {meta.label}
+                        {score ?? meta.label}
                       </span>
                     );
                   })()}
