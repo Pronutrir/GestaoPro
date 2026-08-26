@@ -98,6 +98,7 @@ import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import {
   computeActivityProgress,
+  progressoDoPai,
   type ActivityProgress,
   type SubActivityLike,
 } from "@/lib/activityProgress";
@@ -3419,7 +3420,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id), activity.is_milestone, ehAgrupador(activity))}
+                      progress={progressoDoPai(activity, stages, filhosPorPai.get(activity.id), ehAgrupador(activity))}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -3831,7 +3832,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id), activeActivity.is_milestone, ehAgrupador(activeActivity))}
+              progress={progressoDoPai(activeActivity, stages, filhosPorPai.get(activeActivity.id), ehAgrupador(activeActivity))}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}

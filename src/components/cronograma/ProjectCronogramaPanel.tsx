@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { resolveEapKind, eapCanGroup, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
 import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import { supabase } from "@/integrations/supabase/client";
-import { computeActivityProgress } from "@/lib/activityProgress";
+import { computeActivityProgress, progressoDoPai } from "@/lib/activityProgress";
 import {
   resolveActivityState, isActivityOverdue, ACTIVITY_STATE_LABEL, type ActivityState,
 } from "@/lib/activityState";
@@ -948,12 +948,15 @@ export function ProjectCronogramaPanel({
         return;
       }
       const projStages = stagesByProjectLocal.get(a.project_id) || [];
-      const info = computeActivityProgress(
-        a.workflow_stage_id,
+      // `progressoDoPai` roda a régua de sempre e TROCA SÓ O NÚMERO por
+      // `derived_progress` quando o servidor o derivou — o mesmo valor, mas
+      // calculado sobre TODAS as filhas, não sobre a fatia que a RLS deixou
+      // passar. Conferido em 582 pais: zero barra muda para quem enxerga o
+      // projeto inteiro; a correção aparece só para quem enxerga uma fatia.
+      const info = progressoDoPai(
+        a as any,
         projStages as any,
-        a.last_progress_stage_id,
         filhas as any,
-        a.is_milestone,
         // Agrupador (Fase/Entrega/Pacote): a coluna onde a caixa está é
         // ignorada — ela vale a média das filhas. Mesma fonte que o Kanban usa
         // (lib/eapModel), para as duas telas não divergirem na classificação.
