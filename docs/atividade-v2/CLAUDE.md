@@ -5,9 +5,10 @@ Ele descreve o alvo. **O repositório é a verdade**: quando o que está escrito
 do código, o código ganha — e me avise da divergência em vez de "corrigir" o código para
 bater com o documento.
 
-> **Divergências já levantadas:** ver `docs/atividade-v2/DIVERGENCIAS.md`. Quatro premissas
-> deste documento não batem com o repositório (a principal: **`lider_id` não existe**; o que
-> existe é `assigned_to` + `participants`). Leia antes de executar qualquer fase.
+> **Divergências já levantadas:** ver `docs/atividade-v2/DIVERGENCIAS.md`. Seis pontos deste
+> documento divergem do repositório — as duas principais: **`lider_id` não existe** (o que
+> existe é `assigned_to` + `participants`) e **marco não tem `wbs_code`**. Leia antes de
+> executar qualquer fase.
 
 ## A decisão que organiza tudo
 
@@ -56,7 +57,19 @@ fase 03.
 - **Agrupador não é trabalho.** Fase, Entrega e Pacote nunca viram card no Kanban — viram chip
   no card da filha e, opcionalmente, raia. Marco vira marcador no topo da coluna, nunca card.
   Só itens do tipo **Atividade** viram card.
-- **Marco** não tem filhas, não tem duração e não entra no Kanban.
+- **Marco** — ponto no tempo, irmão das Atividades, **ancorado por `parent_id`** e podendo
+  ficar na raiz. **Não tem `wbs_code`** (decisão de 11/08/2026, `lib/eapModel.ts`: marco é do
+  CRONOGRAMA, não da EAP). Não tem filhas, duração, horas, custo, GUT nem responsável.
+  Não entra no Kanban e não é promovível.
+  - **Afeta o pai:** término previsto (a fase vai até o marco) e conclusão (conta como filha
+    aberta). *Ambos ainda não implementados — fase 09.*
+  - **Não afeta o pai:** soma de horas, soma de custo.
+  - **Peso no progresso:** hoje entra como 0 ou 100. O kit propõe peso zero — **decisão em
+    aberto**, ver `DIVERGENCIAS.md` item 6.
+  - GUT fica **ausente, não vazio**: no Marco quer dizer "não se aplica". O filtro
+    *Sem prioridade* exclui marcos.
+  - Fecha **por confirmação** de quem tem `canEditPlanejamento`, com volta a *proposto* se uma
+    predecessora for reaberta.
 - Horas e custo do pai são a soma dos subitens.
 - A policy de DELETE não aceita a via do ator da atividade.
 - **`can_edit_own`** é a única coluna que separa "Editar apenas as minhas" de "Visualizar e

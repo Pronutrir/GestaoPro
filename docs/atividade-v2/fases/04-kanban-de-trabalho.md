@@ -76,6 +76,18 @@ Adicione um limite de WIP por coluna que bloqueia em vez de avisar - hoje
 so bloqueia se wip_strict=true, e e so no front.
 ```
 
+
+## Marco no quadro  *(acrescentado da v3 do kit)*
+
+Marco **nunca vira card** e **nunca e promovivel** — ele nao tem estagio de trabalho.
+
+Aparece como **marcador no topo da coluna** correspondente a sua data, e no calendario.
+Quando todas as predecessoras concluirem, o marcador mostra **"proposto para conclusao"** com
+um botao de confirmar, visivel so para quem tem `canEditPlanejamento`.
+
+Nao depende de codigo EAP: marco nao tem `wbs_code` (ver `DIVERGENCIAS.md` item 6). Use
+`parent_id` e a data para posiciona-lo.
+
 ## Pronto quando
 
 - Promover `1.1.2` coloca **exatamente um** card no quadro, com o chip da fase, e nenhum

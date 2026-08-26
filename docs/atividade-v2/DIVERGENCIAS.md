@@ -113,3 +113,62 @@ Registrado para não se perder no meio das correções:
 
 Há ainda uma migration anterior pendente na VM: `20260825140000` (o Gestor do Projeto passa a
 ser reconhecido pela via da equipe), por `scripts/apply-gestor-do-projeto-na-via-da-equipe.sh`.
+
+---
+
+## 6. A especificação do Marco  ·  três acertos e duas contradições
+
+A terceira versão do kit trouxe uma spec detalhada de Marco. **A maior parte é ganho real e
+foi incorporada às fases 04, 06 e 09.** Dois pontos, porém, contradizem decisões documentadas.
+
+### O que foi incorporado (não existe hoje, e vale)
+
+| Regra | Estado |
+|---|---|
+| Marco **estende o término previsto do pai** (a fase vai até o marco) | não existe — fase 09 |
+| Marco **conta como filha aberta** (pai não conclui com marco pendente) | não existe — fase 09 |
+| Marco **recusa** gravação de horas, em vez de aceitar e somar | não existe — fase 09 |
+| GUT **ausente, não vazio** — e os chips *Sem responsável* / *Sem prioridade* **excluem** marcos | não existe — fase 06 |
+| Fechamento **por confirmação** de quem tem `canEditPlanejamento`, com volta a *proposto* se a predecessora reabrir | não existe — fases 04 e 09 |
+
+O achado do GUT é fino: hoje um marco sem GUT ficaria listado para sempre num filtro
+"Sem prioridade" como pendência que nunca fecha. Vazio num Atividade quer dizer "ainda não
+avaliado"; num Marco quer dizer "não se aplica".
+
+### Contradição A — "Marco tem código EAP próprio"
+
+**O código diz o contrário**, e com justificativa datada de 11/08/2026 em `lib/eapModel.ts`:
+
+> *"MARCO NÃO TEM CÓDIGO EAP. Marco é elemento do CRONOGRAMA, não da EAP: um ponto no tempo,
+> sem duração, sem horas e sem custo. A EAP decompõe TRABALHO, e a regra dos 100% diz que os
+> filhos somam 100% do trabalho do pai — somar um marco nessa conta é ruído."*
+
+Dois custos concretos estão registrados: a numeração do trabalho ganhava **buracos** (apagar
+"1.1.1.3 Marco" deixava um vão entre 1.1.1.2 e 1.1.1.4), e mover o marco obrigava a
+**renumerar vizinhos** por uma posição que não representa entrega nenhuma.
+
+`eapCodeAllowed()` e `wbsCodeParaBanco()` são a fonte única disso — todo caminho que grava
+código passa por lá, e devolve `null` para marco.
+
+O kit também diz que o marco é "filho de Fase ou Entrega". O código permite mais: o marco
+**pode ficar na raiz, sem pai** — *"Go-live é do projeto inteiro, não de uma fase específica"*.
+
+**Resolução:** mantido o que o código faz. O marco continua **ancorado** por `parent_id` (é o
+que lhe dá contexto e propaga datas) e **sem** `wbs_code`. As regras de derivação do kit
+funcionam iguais com essa ancoragem — nenhuma delas depende do código EAP.
+
+### Contradição B — "peso zero, sempre" no progresso
+
+O kit diz que o marco não entra no peso do progresso. **Hoje ele entra como 0 ou 100**
+(`activityProgress.ts:168`), com o comentário: *"marco entra na média como 0 ou 100, nunca
+pelo meio — arrastá-lo para 'Em Revisão' não realiza meio marco."*
+
+As duas leituras são defensáveis:
+
+- **Peso zero** (kit): o progresso mede trabalho, e marco não é trabalho.
+- **0 ou 100** (hoje): o marco é um compromisso de calendário, e uma fase com o marco pendente
+  não está 100%.
+
+**Não resolvi.** É decisão de produto, e as duas são coerentes. Está anotada na fase 09 como
+pendência explícita — o importante é que **as duas regras que o kit acrescenta**
+(marco estende o término do pai, e marco conta como filha aberta) valem **nas duas leituras**.

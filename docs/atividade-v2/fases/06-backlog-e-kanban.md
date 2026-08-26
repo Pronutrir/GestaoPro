@@ -40,6 +40,19 @@ As preferencias de exibicao do Kanban ja vivem no banco por usuario
 mova um para o outro sem decidir explicitamente.
 ```
 
+
+## Marco nas listas  *(acrescentado da v3 do kit)*
+
+No Backlog, marcos aparecem como **linha na arvore, com data e sem responsavel, esforco ou
+GUT** — esses campos nao sao renderizados para eles, e **nao ficam com "—"**.
+
+Os chips **Sem responsavel** e **Sem prioridade** EXCLUEM marcos: senao ficam listados para
+sempre como pendencia que nunca fecha. O chip **Sem data** continua valendo, porque marco sem
+data e lacuna de verdade.
+
+Marco nao tem `wbs_code` — na coluna de codigo, mostre a ancora (o codigo do pai) ou deixe
+vazio, nunca um codigo inventado.
+
 ## Pronto quando
 
 As duas paginas abrem sem barra de filtros, e qualquer coluna que sobrou responde

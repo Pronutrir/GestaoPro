@@ -50,6 +50,41 @@ ja carregam protecao (`visto`, `ancestors`). Mantenha.
 Escreva testes para cada regra.
 ```
 
+
+### O MARCO, em detalhe
+
+> **Duas correcoes ao que o kit propos** — ver `DIVERGENCIAS.md` item 6:
+>
+> - **Marco NAO tem codigo EAP.** Decisao de 11/08/2026 em `lib/eapModel.ts`: marco e
+>   elemento do CRONOGRAMA, nao da EAP. Dar codigo a ele abria buracos na numeracao do
+>   trabalho e obrigava a renumerar vizinhos. Ele fica **ancorado** por `parent_id` (que lhe
+>   da contexto e propaga datas) e **sem** `wbs_code`. E pode ficar na **raiz, sem pai** —
+>   "Go-live" e do projeto inteiro, nao de uma fase. Nenhuma regra abaixo depende do codigo.
+> - **"Peso zero no progresso" NAO esta decidido.** Hoje o marco entra na media do pai como
+>   0 ou 100 (`activityProgress.ts:168`), com o comentario *"arrasta-lo para Em Revisao nao
+>   realiza meio marco"*. As duas leituras sao defensaveis — decida antes de implementar.
+>   As duas regras novas abaixo valem nas duas leituras.
+
+Marco e irmao das Atividades, mas **nao e trabalho**: nao tem filhas, duracao, horas, custo,
+GUT nem responsavel de execucao.
+
+- **ENTRA no termino previsto do pai**: a fase termina no marco, nao na ultima atividade.
+  Marco em 12/09 com a ultima atividade fechando em 09/09 leva a fase ate 12/09. *(novo)*
+- **CONTA como filha aberta**: a fase nao conclui com marco pendente. *(novo)*
+- **NAO entra** na soma de horas nem na de custo. Recuse gravacao de horas num marco em vez
+  de aceitar e somar. *(novo)*
+- **Peso no progresso**: ver a ressalva acima. Hoje e 0 ou 100.
+- **GUT ausente, nao vazio**: no Marco o campo nao e renderizado e a API nao o aceita. Vazio
+  num Atividade quer dizer "ainda nao avaliado"; num Marco quer dizer "nao se aplica". *(novo)*
+- **Fecha por confirmacao**: quando todas as predecessoras concluem, marque-o como "proposto
+  para conclusao" e notifique quem tem `canEditPlanejamento`. Concluir exige o clique dessa
+  pessoa e vira evento no feed com autor e horario. Se uma predecessora for reaberta depois,
+  o marco volta para "proposto" e avisa quem o havia fechado. *(novo)*
+
+Testes: marco com data posterior a ultima atividade estende o termino da fase; marco pendente
+impede a conclusao da fase; horas lancadas num marco sao recusadas; marco sem `wbs_code` nao
+quebra a numeracao dos irmaos.
+
 ## Pronto quando
 
 Kanban, Gantt, tela de atividade e relatorios mostram **o mesmo numero** para o mesmo pai.
