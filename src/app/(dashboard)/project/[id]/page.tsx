@@ -56,7 +56,7 @@ import { normalizeProjectTabs } from "@/lib/projectTabs";
 import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
-import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
+import { anyMatchesIdentity, buildUserCandidates, matchesIdentity, definirNomesAmbiguos, nomesRepetidosEm } from "@/lib/identityMatch";
 import { ehAtividadeDaPessoa, podeMutarAtividade } from "@/lib/activityAccess";
 import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
@@ -981,6 +981,34 @@ export default function ProjectDetailsPage() {
     setProfilesMap(map);
     setProfileAvatarMap(avatarMap);
     setProfileSectorMap(sectorMap);
+
+    /**
+     * NOMES QUE PERTENCEM A MAIS DE UMA PESSOA.
+     *
+     * `owner`, `manager`, `assigned_to` e `participants` guardam NOME, e a
+     * comparação de permissão é por nome. Com dois perfis homônimos, os dois
+     * casam com as mesmas atividades — cada um recebendo o acesso do outro.
+     * Medido em 26/08: "Williame Correia de Lima" tem dois perfis ativos, e
+     * ambos apareciam como responsáveis das mesmas 450 atividades.
+     *
+     * A consulta é sobre `profiles` INTEIRA, de propósito: a lista acima já
+     * está recortada para as pessoas do projeto, e o homônimo pode estar fora
+     * dele — bastaria isso para o nome voltar a parecer único aqui.
+     *
+     * Espelha `nome_e_ambiguo` na migration 20260826180000. Se esta chamada
+     * falhar, o conjunto fica vazio e a comparação volta ao comportamento
+     * antigo (tolerante): é a única falha aceitável aqui, porque o banco
+     * continua barrando — a tela nunca é a última linha de defesa.
+     */
+    try {
+      const { data: todos } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .not("full_name", "is", null);
+      if (todos) definirNomesAmbiguos(nomesRepetidosEm(todos));
+    } catch {
+      // Silêncio proposital: ver o comentário acima.
+    }
   };
 
   const fetchActiveSprint = async () => {
