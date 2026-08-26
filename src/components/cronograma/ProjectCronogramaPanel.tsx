@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
+import { resolveEapKind, eapCanGroup, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
 import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
@@ -905,44 +905,61 @@ export function ProjectCronogramaPanel({
     return m;
   }, [activities, activityById]);
 
-  const descendantProgressById = useMemo(() => {
-    const memo = new Map<string, { sum: number; count: number }>();
+  /**
+   * PROGRESSO DO PAI — a mesma régua do Kanban, e só ela.
+   *
+   * Esta função era uma QUARTA fórmula de progresso, e discordava das outras
+   * em dois pontos:
+   *
+   *  1. **Achatava a árvore.** Somava todo descendente no mesmo saco — neto
+   *     pesava igual a filho. Uma fase com um ramo fundo era dominada por
+   *     aquele ramo: 1 filha com 9 netos dava à filha 10% do peso, não 100%.
+   *     O Kanban sempre mediu pelas filhas DIRETAS, cada uma respondendo pela
+   *     própria subárvore.
+   *
+   *  2. **Não passava as subatividades** para `computeActivityProgress`, então
+   *     cada filha era pontuada só pela coluna dela, ignorando o próprio
+   *     avanço interno — justamente o que o parâmetro `subActivities` existe
+   *     para corrigir (medido em 03/08: 703 de 1.317 atividades são filhas, e
+   *     o cálculo as ignorava).
+   *
+   * Resultado: o mesmo pai exibia percentuais diferentes no Cronograma e no
+   * Kanban, e nenhuma tela estava "errada" — eram réguas distintas.
+   *
+   * Agora as duas chamam `computeActivityProgress` com as filhas diretas. A
+   * fonte é uma só; quando a régua mudar, muda nos dois lugares.
+   *
+   * NÃO usa `derived_progress` do servidor: medido em 26/08, a régua do banco
+   * é binária (completed ? 100 : 0) e derrubaria 74 das 581 barras em até 66
+   * pontos. Ver docs/medicoes/progresso-tela-x-servidor-26-08-2026.md.
+   */
+  const progressoDoPaiById = useMemo(() => {
+    const memo = new Map<string, number | null>();
     const stagesByProjectLocal = new Map<string, typeof stages>();
     stages.forEach((s) => {
       if (!stagesByProjectLocal.has(s.project_id)) stagesByProjectLocal.set(s.project_id, [] as any);
       (stagesByProjectLocal.get(s.project_id) as any).push(s);
     });
 
-    const walk = (id: string, seen = new Set<string>()): { sum: number; count: number } => {
-      if (memo.has(id)) return memo.get(id)!;
-      if (seen.has(id)) return { sum: 0, count: 0 };
-
-      const nextSeen = new Set(seen);
-      nextSeen.add(id);
-
-      const children = childrenByParent.get(id) || [];
-      let sum = 0;
-      let count = 0;
-
-      children.forEach((child) => {
-        const projStages = stagesByProjectLocal.get(child.project_id) || [];
-        const info = computeActivityProgress(child.workflow_stage_id, projStages as any, child.last_progress_stage_id);
-        const pct = info.paused ? 0 : (info.percent ?? 0);
-        sum += pct;
-        count += 1;
-
-        const deep = walk(child.id, nextSeen);
-        sum += deep.sum;
-        count += deep.count;
-      });
-
-      const result = { sum, count };
-      memo.set(id, result);
-      return result;
-    };
-
     activities.forEach((a) => {
-      memo.set(a.id, walk(a.id));
+      const filhas = childrenByParent.get(a.id) || [];
+      if (filhas.length === 0) {
+        memo.set(a.id, null);
+        return;
+      }
+      const projStages = stagesByProjectLocal.get(a.project_id) || [];
+      const info = computeActivityProgress(
+        a.workflow_stage_id,
+        projStages as any,
+        a.last_progress_stage_id,
+        filhas as any,
+        a.is_milestone,
+        // Agrupador (Fase/Entrega/Pacote): a coluna onde a caixa está é
+        // ignorada — ela vale a média das filhas. Mesma fonte que o Kanban usa
+        // (lib/eapModel), para as duas telas não divergirem na classificação.
+        eapCanGroup(resolveEapKind(a as any, filhas.length > 0)),
+      );
+      memo.set(a.id, info.paused ? null : info.percent);
     });
 
     return memo;
@@ -1025,16 +1042,21 @@ export function ProjectCronogramaPanel({
   }, [stages]);
 
   const progressFor = useCallback((a: any): number => {
-    const deep = descendantProgressById.get(a.id);
-    const totalSubs = deep?.count || 0;
-    if (totalSubs > 0) {
-      return Math.max(0, Math.min(100, Math.round((deep!.sum / totalSubs))));
+    // Pai: a régua já foi aplicada em `progressoDoPaiById`, com as filhas
+    // diretas e a mesma fórmula do Kanban. `null` ali é pai pausado — devolve
+    // 0 na barra por falta de representação para "pausado" neste retorno, mas
+    // sem recalcular por baixo (era o que achatava a árvore).
+    const doPai = progressoDoPaiById.get(a.id);
+    if (doPai !== undefined && doPai !== null) {
+      return Math.max(0, Math.min(100, Math.round(doPai)));
     }
+    if (doPai === null && (childrenByParent.get(a.id) || []).length > 0) return 0;
+
     const projStages = stagesByProject.get(a.project_id) || [];
     const info = computeActivityProgress(a.workflow_stage_id, projStages as any, a.last_progress_stage_id);
     if (info.paused) return 0;
     return info.percent ?? 0;
-  }, [stagesByProject, descendantProgressById]);
+  }, [stagesByProject, progressoDoPaiById, childrenByParent]);
 
   /**
    * Linhas finais aplicadas ao Cronograma (tabela e Gantt).
