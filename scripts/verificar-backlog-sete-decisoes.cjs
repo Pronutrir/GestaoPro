@@ -96,6 +96,26 @@ check(
   /resumoDoGrupo\(acts/.test(backlog),
 );
 
+// ── 7b. O total do projeto, fixo no rodapé ────────────────────────────────
+check(
+  "decisão 7 — o total do projeto consome totalDoProjeto",
+  /totalDoProjeto\(raizes/.test(backlog),
+);
+check(
+  "e fica FIXO no rodapé (sticky), não no fim da rolagem",
+  /sticky bottom-0/.test(backlog),
+);
+
+// ── Densidade: guardada por usuário, no caminho que já existe ─────────────
+check(
+  "a densidade usa useKanbanPrefs, sem inventar um segundo armazenamento",
+  /useKanbanPrefs\(projectId/.test(backlog),
+);
+check(
+  "e a altura da linha vem de ALTURA_DA_LINHA",
+  /minHeight: alturaDaLinha/.test(backlog),
+);
+
 // ── A regra que atravessa tudo: agregado NÃO se recalcula na tela ─────────
 check(
   "o esforço do pai lê derived_hours (não soma no cliente)",

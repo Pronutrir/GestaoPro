@@ -61,6 +61,7 @@ import {
   faixaDoGut,
   mostrarBadgeDeTipo,
   resumoDoGrupo,
+  totalDoProjeto,
   corDoGut,
   ROTULO_GUT_VAZIO,
   comoMostrarVazio,
@@ -69,6 +70,9 @@ import {
   formatarCusto,
 
 } from "@/lib/mesaDePlanejamento";
+import { useAuth } from "@/contexts/AuthContext";
+import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
+import { ALTURA_DA_LINHA, type DensidadeBacklog } from "@/lib/kanbanPrefs";
 
 interface Phase {
   id: string;
@@ -246,6 +250,22 @@ export const BacklogSection = ({
   const [sequenciando, setSequenciando] = useState(false);
   // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
   // as demais exibem grupos planos por dimensão. Persistido por projeto.
+  /**
+   * DENSIDADE — compacto (30px) ou confortável (36px), guardada POR USUÁRIO.
+   *
+   * Vai pelo `useKanbanPrefs`, que já resolve o caminho inteiro: cache local
+   * síncrono no primeiro render, banco por cima quando responde, e debounce na
+   * escrita. A fase 06 pede exatamente isso — "siga o mesmo caminho, não
+   * invente um segundo".
+   *
+   * Sem usuário (ou com a migration de prefs pendente), o hook cai no cache
+   * local sozinho e a tela funciona igual.
+   */
+  const { user } = useAuth();
+  const { prefs, setPrefs } = useKanbanPrefs(projectId, user?.id ?? null);
+  const densidade: DensidadeBacklog = prefs.densidadeBacklog ?? "confortavel";
+  const alturaDaLinha = ALTURA_DA_LINHA[densidade];
+
   type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
   const groupByKey = `backlog-groupby:${projectId}`;
   const [groupBy, setGroupBy] = useState<GroupBy>(() => {
@@ -1840,6 +1860,36 @@ export const BacklogSection = ({
                 </label>
               ))}
             </div>
+
+            {/* DENSIDADE — dois níveis, guardada por usuário.
+                Fica aqui, junto das colunas, porque é a mesma pergunta ("como
+                eu quero ver esta lista") e a regra dos três não deixa nascer um
+                quarto controle no topo. */}
+            <div className="mt-2 pt-2 border-t">
+              <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
+                Densidade
+              </div>
+              <div className="flex gap-1">
+                {([
+                  { id: "compacto" as const, label: "Compacto" },
+                  { id: "confortavel" as const, label: "Confortável" },
+                ]).map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setPrefs({ ...prefs, densidadeBacklog: d.id })}
+                    className={cn(
+                      "flex-1 h-7 rounded text-[11px] normal-case font-normal border transition-colors",
+                      densidade === d.id
+                        ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                        : "border-border text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </PopoverContent>
         </Popover>
       </span>
@@ -2079,9 +2129,9 @@ export const BacklogSection = ({
     return (
       <div key={activity.id}>
         <div
-          // py-1.5 (era 2.5): com o texto em 13px e uma coluna de ícone a menos,
-          // a linha aperta sem ficar apertada — cabem ~15% mais tarefas na tela.
-          className={`grid items-center gap-2 border-b px-3 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+          // A altura da linha vem da DENSIDADE (30px compacto / 36px
+          // confortável), no `style` abaixo, em vez do `py-1.5` fixo de antes.
+          className={`grid items-center gap-2 border-b px-3 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           } ${
             /* MARCA DO QUE É SEU — uma barra fina na borda esquerda, só para
@@ -2096,7 +2146,11 @@ export const BacklogSection = ({
           // área do grid e empurra TODAS as colunas para a direita, tanto mais
           // quanto mais fundo o item — era o que desalinhava as linhas do
           // cabeçalho. O recuo é aplicado só na coluna do título, abaixo.
-          style={{ gridTemplateColumns: backlogGrid }}
+          //
+          // `minHeight` e não `height`: título que quebra em duas linhas
+          // continua cabendo. Cortar texto para respeitar a densidade seria
+          // trocar informação por alinhamento.
+          style={{ gridTemplateColumns: backlogGrid, minHeight: alturaDaLinha }}
           // No modo seleção a linha ALTERNA a marcação em vez de abrir a
           // edição: quem está escolhendo várias tarefas quer clicar rápido, e
           // mirar na caixinha de 14px a cada item é trabalho desnecessário.
@@ -3707,6 +3761,46 @@ export const BacklogSection = ({
         {groupBy === "phase" && (topLevelByPhase.get("none") || []).length > 0 &&
           renderPhaseGroup(null, "Sem fase")}
       </div>
+
+      {/* ── Decisão 7 — O TOTAL DO PROJETO, FIXO NO RODAPÉ ──────────────────
+          "Planejar é somar", e até aqui saber o total exigia exportar. Fica
+          FIXO (sticky) porque o número que importa não pode depender de rolar
+          até o fim de 700 linhas.
+
+          Consome `totalDoProjeto`, que lê o agregado do servidor — não é uma
+          soma nova, e nada disto é persistido. Some quando não há o que somar:
+          um rodapé com "0h · R$ 0" é ruído. */}
+      {(() => {
+        const raizes = [
+          ...(topLevelByPhase.get("none") || []),
+          ...phases.flatMap((p) => topLevelByPhase.get(p.id) || []),
+          ...virtualPhaseActs,
+        ];
+        if (raizes.length === 0) return null;
+        const total = totalDoProjeto(raizes as never);
+        const horas = formatarHoras(total.horas);
+        const custo = formatarCusto(total.custo);
+        if (!horas && !custo) return null;
+        return (
+          <div className="sticky bottom-0 z-10 flex items-center gap-4 px-3 py-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Total do projeto
+            </span>
+            <span className="ml-auto flex items-center gap-4 text-[12px] tabular-nums text-foreground/80">
+              <span title="Itens de primeiro nível">
+                {total.itens} {total.itens === 1 ? "item" : "itens"}
+              </span>
+              {horas && <span title="Somado no servidor a partir das subatividades">{horas}</span>}
+              {custo && <span title="Somado no servidor a partir das subatividades">{custo}</span>}
+              {(total.inicio || total.fim) && (
+                <span className="hidden sm:inline">
+                  {total.inicio ? formatarDataBR(total.inicio) : "?"} → {total.fim ? formatarDataBR(total.fim) : "?"}
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Trash Section */}
       <div className="border-t pt-4">
