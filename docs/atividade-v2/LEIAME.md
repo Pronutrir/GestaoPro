@@ -52,3 +52,64 @@ para achar a diferenca antes que ela vire bug.
    `canWrite = false` de hoje. Se a intencao for outra, mude o fixture **antes** da fase 03.
 4. **Equipe pode promover do backlog?** A chave por projeto nasce desligada. A recomendacao e
    deixar assim e liberar o *assumir* em vez do *promover*.
+
+---
+
+## Estado em 26/08/2026 — o que foi executado
+
+| # | Fase | Estado | Verificação |
+|---|---|---|---|
+| 00 | Visualizar não edita | **feito** | V1 medido: 0 afetados |
+| 01 | Inventário | **feito** | `inventario.md`, 8 itens |
+| 02 | Dados e RLS | **escrito** | migration + rollback + trigger de equipe |
+| 03 | Camada de acesso | **feito** | **108/108** casos da matriz |
+| 04 | Kanban de trabalho | **parcial** | campo `estagio`; agrupador → item 7 |
+| 05 | Responsáveis na UI | **feito** | fora da equipe aparece com o motivo |
+| 06 | Backlog e Kanban | **regra feita** | 42 verificações; a pintura não |
+| 07 | Tela única | **regra feita** | 37 verificações; a pintura não |
+| 08 | Feed com sino | **feito** | rótulos + sino, 24 verificações |
+| 09 | Regras pai/filha | **escrito** | derivação no servidor, 24 verificações |
+| 10 | Tokens visuais | **feito** | zero conflito, 2 temas |
+
+**277 verificações em 8 suítes**, todas passando:
+
+```
+node scripts/verificar-acesso-atividade.cjs        # 30 — a regra de acesso
+node scripts/verificar-matriz-acesso.cjs           # 108 — a matriz inteira
+node scripts/verificar-agregado-do-pai.cjs         # 24 — o rollup
+node scripts/verificar-mesa-de-planejamento.cjs    # 42 — as sete decisões
+node scripts/verificar-tela-da-atividade.cjs       # 37 — quem edita o quê
+node scripts/verificar-rotulos-do-historico.cjs    # 13 — sem UUID
+node scripts/verificar-sino-do-feed.cjs            # 11 — o sino
+node scripts/verificar-rollup-nao-persiste.cjs     #  8 — guarda de regressão
+```
+
+### O que significa "regra feita, pintura não" (fases 06 e 07)
+
+As decisões que **dá para verificar** foram extraídas para `lib/` e travadas por
+teste — quando o GUT colore, o que uma célula vazia diz, qual campo vira texto,
+o que "salvo" significa. O componente consome.
+
+O que **não** foi escrito: a tabela em árvore com faixas de grupo, a barra de
+seleção flutuante, a navegação por teclado, e a unificação painel+modal.
+
+O motivo é honesto: interface não se prova com `tsc`. "Compila" não é "a barra
+aparece". Escrever 3.500 linhas de tela sem poder abrir o navegador produziria
+código que parece pronto e não está — e o próximo a mexer confiaria nele.
+
+Com a aplicação de pé e as migrations aplicadas, essa parte se faz com
+segurança, uma tela por vez.
+
+### Migrations pendentes na VM, NESTA ORDEM
+
+```bash
+./scripts/apply-visualizar-nao-edita.sh              # 20260825150000
+./scripts/apply-fase02-assignees.sh                  # 20260826120000 (recusa se a anterior faltar)
+./scripts/apply-fase09-derivacao.sh                  # 20260826130000
+./scripts/apply-fase04-estagio.sh                    # 20260826140000
+```
+
+`20260825140000` (Gestor do Projeto) **já está aplicada** — conferido em produção.
+
+Cada script tem sonda antes, confirmação, e sonda depois. O da fase 04 imprime a
+consulta do **critério de abandono** — guarde a saída.
