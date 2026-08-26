@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { EAP_FASE_LEVEL, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { EAP_FASE_LEVEL, eapCanGroup, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import { ehBacklog } from "@/components/kanban/shared";
@@ -51,8 +51,24 @@ import {
 } from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { mutateInChunks } from "@/lib/chunkedIn";
-import { formatarDataBR, estaAtrasado } from "@/lib/dataLocal";
+import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
+// As sete decisões visuais da mesa de planejamento, como regras testáveis —
+// 42 verificações em scripts/verificar-mesa-de-planejamento.cjs. A tela
+// CONSOME; não reimplementa nenhuma delas, senão Backlog e Kanban divergem no
+// limiar do GUT e no que "vazio" significa.
+import {
+  faixaDoGut,
+  mostrarBadgeDeTipo,
+  resumoDoGrupo,
+  corDoGut,
+  ROTULO_GUT_VAZIO,
+  comoMostrarVazio,
+  CLASSE_NUMERO,
+  formatarHoras,
+  formatarCusto,
+
+} from "@/lib/mesaDePlanejamento";
 
 interface Phase {
   id: string;
@@ -97,6 +113,16 @@ interface Activity {
   is_trashed?: boolean | null;
   /** Gravidade do GUT — é o que marca a prioridade como definida. */
   gravity?: number | null;
+  /** G×U×T, de 1 a 125. É o número que a coluna de prioridade mostra. */
+  priority_score?: number | null;
+
+  // ── Derivado no servidor (migration 20260826130000) ────────────────────
+  // Preenchido por trigger sobre TODAS as filhas, não sobre a fatia que a RLS
+  // deixou passar. `null` = ainda não derivado; a célula mostra ausência e
+  // NUNCA cai para as horas próprias do pai (seria o total errado, calado).
+  derived_hours?: number | string | null;
+  derived_cost?: number | string | null;
+  derived_children?: number | null;
 }
 
 interface BacklogSectionProps {
@@ -1853,6 +1879,9 @@ export const BacklogSection = ({
   const renderActivityRow = (activity: Activity, depth: number = 0, flat: boolean = false) => {
     const isSelected = selectedIds.has(activity.id);
     const gutLevel = normalizeGut(activity.priority);
+    // O SCORE (1–125), não o rótulo: é ele que a coluna mostra e a faixa de cor
+    // consome. Mesma fonte do KanbanCard — `priority_score`.
+    const gutScore = activity.priority_score ?? null;
     const subs = flat ? [] : (childrenByParent.get(activity.id) || []);
     const hasChildren = subs.length > 0;
     const isCollapsed = collapsedParents.has(activity.id);
@@ -1869,29 +1898,61 @@ export const BacklogSection = ({
     const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);
 
     const renderCol = (colId: string) => {
+      // ── Decisão 3 — o GUT mostra o NÚMERO, e só colore a partir de 60 ────
+      //
+      // Era uma pílula com borda, fundo e ponto colorido, exibindo o rótulo
+      // ("Alta") em toda faixa. Duas perdas: o score — que é o diferencial do
+      // produto — ficava invisível, e com tudo colorido nada chamava atenção.
+      //
+      // Agora: número à direita, cinza abaixo de 60, âmbar de 60 a 99,
+      // vermelho de 100 em diante. A faixa vem de lib/mesaDePlanejamento, a
+      // mesma que o KanbanCard consome — não há segunda régua.
+      //
+      // MARCO não tem GUT: a célula fica literalmente vazia (decisão 5).
       if (colId === "priority") {
-        const meta = GUT_META[gutLevel];
-        return (
-          <span key="priority" className="min-w-0" title={`Prioridade: ${meta.label}`}>
-            <span className={`inline-flex items-center gap-1.5 h-5 px-2 rounded border text-[11px] font-medium ${meta.badgeClass}`}>
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} aria-hidden />
-              {meta.label}
+        const vazio = comoMostrarVazio(gutScore, "gut", !!activity.is_milestone);
+        if (vazio.tipo === "nao-se-aplica") return <span key="priority" />;
+        if (vazio.tipo === "a-definir") {
+          return (
+            <span key="priority" className={`${CLASSE_NUMERO} text-[12px] text-muted-foreground/40 italic`} title={ROTULO_GUT_VAZIO}>
+              a definir
             </span>
+          );
+        }
+        const faixa = faixaDoGut(gutScore);
+        return (
+          <span
+            key="priority"
+            className={`${CLASSE_NUMERO} text-[12px] ${corDoGut(faixa)}`}
+            title={`GUT ${gutScore} — ${GUT_META[gutLevel].label}`}
+          >
+            {gutScore}
           </span>
         );
       }
+      // ── Decisão 2 — status é um ponto de 7px, não uma pílula ─────────────
+      //
+      // Em 200 linhas, pílula colorida vira listra: a cor deixa de destacar e
+      // passa a ser o fundo da tela. O ponto guarda a mesma informação (a cor
+      // da coluna) no menor espaço que ainda a comunica, e o nome da coluna
+      // vai para o title — que é onde se pergunta "qual é mesmo o status?".
       if (colId === "status") {
         return (
-          <span key="status" className="min-w-0">
+          <span key="status" className="min-w-0 flex items-center">
             {stg ? (
               <span
-                className="inline-flex items-center h-5 max-w-full truncate text-[11px] font-medium px-2 rounded border"
-                style={{ borderColor: stg.color, color: stg.color, backgroundColor: `${stg.color}18` }}
+                className="w-[7px] h-[7px] rounded-full shrink-0"
+                style={{ backgroundColor: stg.color }}
                 title={`Status: ${stg.title}`}
-              >
-                {stg.title}
-              </span>
-            ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
+                aria-label={`Status: ${stg.title}`}
+              />
+            ) : (
+              <span
+                className="w-[7px] h-[7px] rounded-full shrink-0 border border-muted-foreground/30"
+                title="Sem status"
+                aria-label="Sem status"
+              />
+            )}
           </span>
         );
       }
@@ -1911,25 +1972,104 @@ export const BacklogSection = ({
                   <span className="text-[12px] text-foreground/90 truncate">{resolvedName}</span>
                 </>
               );
-            })() : (
-              <span className="text-[12px] text-muted-foreground/40">Sem responsável</span>
-            )}
+            })() : (() => {
+              // ── Decisão 5 — vazio diz O QUE FALTA ──────────────────────
+              // "Sem responsável" descrevia o campo; "a definir" descreve a
+              // pendência — e é o que a pessoa resolve. No MARCO a célula fica
+              // literalmente vazia: não é lacuna, marco não tem responsável.
+              const vazio = comoMostrarVazio(activity.assigned_to, "responsavel", !!activity.is_milestone);
+              if (vazio.tipo === "nao-se-aplica") return null;
+              return <span className="text-[12px] text-muted-foreground/40 italic">{vazio.tipo === "a-definir" ? vazio.texto : ""}</span>;
+            })()}
           </span>
         );
       }
       if (colId === "end_date") {
         const overdue = activity.status !== "completed" && estaAtrasado(activity.end_date);
+        // Atraso: a data fica vermelha COM os dias ao lado — "vermelho" diz
+        // que atrasou, o número diz o quanto, e é o quanto que prioriza.
+        // `diasAte` devolve negativo quando a data passou — e por dentro usa
+        // `parseDataLocal`, que é o caminho seguro: coluna `date` não pode
+        // virar `new Date()`, senão o fuso desloca o dia para quem está a
+        // oeste de UTC (ver lib/dataLocal).
+        const atraso = overdue ? Math.abs(diasAte(activity.end_date) ?? 0) : 0;
         return (
           <span key="end_date" className={`text-[12px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
-            {activity.end_date ? formatarDataBR(activity.end_date) : <span className="text-muted-foreground/40">—</span>}
+            {activity.end_date ? (
+              <>
+                {formatarDataBR(activity.end_date)}
+                {atraso > 0 && <span className="ml-1 font-normal">+{atraso}d</span>}
+              </>
+            ) : (
+              // Data é o único campo que o marco TEM — por isso "sem data"
+              // vale para ele também.
+              <span className="text-muted-foreground/40 italic">sem data</span>
+            )}
           </span>
         );
       }
+      // ── Decisão 4 — número à direita, com tabular-nums ───────────────────
+      //
+      // Esforço e custo existem para serem comparados de relance. À esquerda,
+      // e com dígito de largura variável, não comparam nada: 8h e 120h começam
+      // no mesmo ponto e terminam em lugares diferentes.
+      //
+      // O ESFORÇO DO PAI vem do servidor (`derived_hours`), não de soma no
+      // cliente — ver a fase 09. Ausência é ausência: pai sem derivação mostra
+      // "—" acinzentado, nunca as horas próprias dele no lugar do total.
       if (colId === "hours") {
-        const h = Number(activity.hours) || 0;
+        const ehPai = hasChildren || (activity.derived_children ?? 0) > 0;
+        const derivado = activity.derived_hours;
+        const h = ehPai
+          ? (derivado === null || derivado === undefined ? null : Number(derivado) || 0)
+          : (Number(activity.hours) || 0);
+
+        if (ehPai && h === null) {
+          return (
+            <span key="hours" className={`${CLASSE_NUMERO} text-[12px] text-muted-foreground/40`} title="As horas das subatividades ainda não foram somadas pelo servidor.">
+              —
+            </span>
+          );
+        }
+        const vazio = comoMostrarVazio(h, "esforco", !!activity.is_milestone);
+        if (vazio.tipo === "nao-se-aplica") return <span key="hours" />;
         return (
-          <span key="hours" className="text-[12px] tabular-nums text-foreground/80">
-            {h > 0 ? `${h % 1 === 0 ? h : h.toFixed(1)}h` : <span className="text-muted-foreground/40">—</span>}
+          <span
+            key="hours"
+            className={`${CLASSE_NUMERO} text-[12px] text-foreground/80`}
+            title={ehPai ? "Somado no servidor a partir das subatividades" : undefined}
+          >
+            {vazio.tipo === "preenchido"
+              ? formatarHoras(h ?? 0)
+              : <span className="text-muted-foreground/40 italic">a definir</span>}
+          </span>
+        );
+      }
+      if (colId === "cost") {
+        const ehPai = hasChildren || (activity.derived_children ?? 0) > 0;
+        const derivado = activity.derived_cost;
+        const c = ehPai
+          ? (derivado === null || derivado === undefined ? null : Number(derivado) || 0)
+          : (Number(activity.cost) || 0);
+
+        if (ehPai && c === null) {
+          return (
+            <span key="cost" className={`${CLASSE_NUMERO} text-[12px] text-muted-foreground/40`} title="O custo das subatividades ainda não foi somado pelo servidor.">
+              —
+            </span>
+          );
+        }
+        const vazio = comoMostrarVazio(c, "custo", !!activity.is_milestone);
+        if (vazio.tipo === "nao-se-aplica") return <span key="cost" />;
+        return (
+          <span
+            key="cost"
+            className={`${CLASSE_NUMERO} text-[12px] text-foreground/80`}
+            title={ehPai ? "Somado no servidor a partir das subatividades" : undefined}
+          >
+            {vazio.tipo === "preenchido"
+              ? formatarCusto(c ?? 0)
+              : <span className="text-muted-foreground/40 italic">a definir</span>}
           </span>
         );
       }
@@ -1981,16 +2121,35 @@ export const BacklogSection = ({
             onCheckedChange={() => {
               if (!selectMode) {
                 setSelectMode(true);
-                // Já entra com a família: quem clica na caixa de um
-                // agrupador quer o conjunto, não a linha do título.
-                setSelectedIds(new Set([activity.id, ...descendentesDe(activity.id)]));
+                // A FAMÍLIA VAI JUNTO SÓ EM AGRUPADOR.
+                //
+                // Quem clica na caixa de uma Fase ou Entrega quer o conjunto:
+                // a caixa é um contêiner, e mandá-la ao quadro sem o conteúdo
+                // deixa a fase para trás — o defeito relatado em 13/08.
+                //
+                // Mas ATIVIDADE não é contêiner. Antes o `descendentesDe` valia
+                // para qualquer linha, então marcar uma atividade com
+                // subatividades arrastava a subárvore inteira: mudar o status
+                // de uma tarefa mudava o das filhas, sem pedir. Promover move
+                // só a atividade escolhida — nunca ancestrais, nunca a
+                // subárvore (docs/atividade-v2/DIVERGENCIAS.md item 7).
+                //
+                // Quem quiser a subárvore continua conseguindo: marca as
+                // filhas, ou usa a caixa do agrupador que as contém.
+                const levaAFamilia = eapCanGroup(kind);
+                setSelectedIds(
+                  new Set(levaAFamilia ? [activity.id, ...descendentesDe(activity.id)] : [activity.id]),
+                );
                 return;
               }
               toggleSelect(activity.id);
             }}
             onClick={(e) => e.stopPropagation()}
             aria-label={`Selecionar ${activity.title}`}
-            title={hasChildren ? "Seleciona este item e o que está dentro" : "Selecionar esta tarefa"}
+            // O texto segue o comportamento: só o agrupador leva o conteúdo.
+            // Prometer "e o que está dentro" numa atividade seria mentir agora
+            // que ela vai sozinha.
+            title={eapCanGroup(kind) && hasChildren ? "Seleciona esta fase e o que está dentro" : "Selecionar esta tarefa"}
             className={cn("shrink-0", !selectMode && caixaNoHover)}
           />
           {hasChildren ? (
@@ -2033,13 +2192,26 @@ export const BacklogSection = ({
                 tipo faz pelo diálogo da atividade, onde o campo aparece junto do
                 Código EAP e do "Dentro de", que são o que de fato determinam o
                 papel. */}
-            <span
-              title={`Tipo: ${kindMeta.label}`}
-              aria-label={`Tipo: ${kindMeta.label}`}
-              className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded border bg-muted/60 ${kindMeta.cls}`}
-            >
-              {kindMeta.icon}
-            </span>
+            {/* ── Decisão 1 — sem badge de tipo em ATIVIDADE ───────────────
+                Fase e Entrega já viram faixa de grupo; Marco se identifica
+                sozinho pelo losango. O que sobra numa linha *é* atividade — o
+                badge repetia o que a indentação e o código EAP já diziam, e era
+                90% dos badges da tela.
+
+                A regra vem de `mostrarBadgeDeTipo`, testada: agrupador não,
+                marco sim, atividade não. O espaçador continua para o título das
+                atividades alinhar com o dos marcos. */}
+            {mostrarBadgeDeTipo(activity, eapCanGroup(kind)) ? (
+              <span
+                title={`Tipo: ${kindMeta.label}`}
+                aria-label={`Tipo: ${kindMeta.label}`}
+                className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded border bg-muted/60 ${kindMeta.cls}`}
+              >
+                {kindMeta.icon}
+              </span>
+            ) : (
+              <span className="w-5 shrink-0" aria-hidden />
+            )}
 
             {isEditingTitle ? (
               <Input
@@ -2362,6 +2534,30 @@ export const BacklogSection = ({
               stopPropagation: a faixa toda colapsa a fase, então sem isto
               clicar em "+ Tarefa" fecharia o grupo junto. */}
           <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
+            {/* ── Decisão 7 — a faixa carrega o subtotal ────────────────────
+                Planejar é somar. Saber as horas de uma fase exigia contar na
+                mão ou exportar. A faixa separa (o que a zebra faria) E informa
+                (o que a zebra não faz): contagem, horas e janela.
+
+                O número vem de `resumoDoGrupo`, que consome o agregado do
+                servidor — NÃO é uma soma nova. Somar aqui seria a quarta
+                fórmula viva, e para quem enxerga uma fatia o subtotal mostraria
+                menos do que a fase realmente tem. Nada disto é persistido. */}
+            {(() => {
+              const resumo = resumoDoGrupo(acts as never);
+              const horas = formatarHoras(resumo.horas);
+              const janela = resumo.inicio || resumo.fim
+                ? `${resumo.inicio ? formatarDataBR(resumo.inicio) : "?"} → ${resumo.fim ? formatarDataBR(resumo.fim) : "?"}`
+                : null;
+              if (resumo.itens === 0) return null;
+              return (
+                <span className="text-[11px] text-muted-foreground tabular-nums hidden sm:inline" title="Somado no servidor a partir das subatividades">
+                  {resumo.itens} {resumo.itens === 1 ? "item" : "itens"}
+                  {horas && <> · {horas}</>}
+                  {janela && <> · {janela}</>}
+                </span>
+              );
+            })()}
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
