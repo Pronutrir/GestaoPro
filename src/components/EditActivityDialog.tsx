@@ -1756,7 +1756,12 @@ export const EditActivityDialog = ({
                 <FileText className="w-3.5 h-3.5" /> Detalhes
               </TabsTrigger>
               <TabsTrigger value="team" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
-                <Users className="w-3.5 h-3.5" /> Equipe
+                {/* "Equipe" sugeria a equipe do PROJETO, que se configura em
+                    Editar projeto e vale para todas as atividades. Aqui são as
+                    pessoas desta atividade — e o conteúdo da aba já dizia
+                    "Participantes da atividade". O rótulo estava contradizendo
+                    o próprio conteúdo. */}
+                <Users className="w-3.5 h-3.5" /> Participantes
                 {formData.participants.filter(Boolean).length > 0 && (
                   <span className="text-[10px] px-1.5 py-0 rounded-full bg-primary/15 text-primary font-semibold">{formData.participants.filter(Boolean).length}</span>
                 )}
@@ -2824,7 +2829,10 @@ export const EditActivityDialog = ({
 
             </TabsContent>
 
-            {/* ===== ABA EQUIPE DO PROJETO ===== */}
+            {/* ===== ABA PARTICIPANTES DA ATIVIDADE =====
+                NAO e a equipe do projeto -- essa se configura em Editar projeto.
+                Aqui sao as pessoas que trabalham NESTA atividade, e o rotulo
+                da aba dizia "Equipe", que sugeria a outra coisa. */}
             <TabsContent value="team" className="pt-4 mt-0">
               <div className="space-y-2">
                 {/**
