@@ -164,6 +164,15 @@ const CASOS = [
     () => ehAtividadeDaPessoa(ATIV_DE_NINGUEM, P.carla), false],
   ["ehAtividadeDaPessoa NÃO olha can_edit_own (é 'meu trabalho', não 'posso editar')",
     () => ehAtividadeDaPessoa(ATIV_DA_ANA, Object.assign({}, P.ana, { canEditOwn: false })), true],
+  // --- ehAtividadeDaPessoa: agora consumida pela pagina (era codigo morto) ---
+  ["ehAtividadeDaPessoa: o CRIADOR conta como dela",
+    () => ehAtividadeDaPessoa({ created_by: "id-ana", assigned_to: null, participants: [] }, P.ana), true],
+  ["ehAtividadeDaPessoa: criador de outro nao conta",
+    () => ehAtividadeDaPessoa({ created_by: "id-bru", assigned_to: null, participants: [] }, P.ana), false],
+  ["ehAtividadeDaPessoa espelha is_activity_actor_v2 (criador OU resp OU particip)",
+    () => ehAtividadeDaPessoa({ created_by: "id-ana" }, P.ana)
+       && ehAtividadeDaPessoa({ assigned_to: "Ana Souza" }, P.ana)
+       && ehAtividadeDaPessoa({ participants: ["Ana Souza"] }, P.ana), true],
 ];
 
 // ── execução ───────────────────────────────────────────────────────────────

@@ -57,7 +57,7 @@ import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
-import { podeMutarAtividade } from "@/lib/activityAccess";
+import { ehAtividadeDaPessoa, podeMutarAtividade } from "@/lib/activityAccess";
 import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
@@ -305,6 +305,33 @@ export default function ProjectDetailsPage() {
       canEditOwn: userPerms?.can_edit_own ?? true,
     });
   }, [canEdit, canMove, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own]);
+
+  /**
+   * "É MINHA?" — a mesma fonte de `canMutateActivity`, não uma cópia.
+   *
+   * Era uma closure montada inline no JSX (no `ehMinha` do BacklogSection),
+   * que reconstruía `buildUserCandidates` a cada chamada — dentro de um filtro
+   * que roda por linha da lista — e esquecia `created_by`: quem criou a
+   * atividade sem ser responsável nem participante não a via como sua.
+   *
+   * O inventário de 25/08 achou QUATRO implementações desta pergunta; esta
+   * passa a consumir `ehAtividadeDaPessoa`, que até então era código morto —
+   * escrito no commit `dd045f1` e sem nenhum chamador.
+   *
+   * Diferente de `canMutateActivity`: aquela responde "posso mexer?" e leva em
+   * conta equipe, líder e `can_edit_own`. Esta responde "é meu trabalho?", e
+   * por isso ignora tudo que é permissão.
+   */
+  const ehMinhaAtividade = useCallback(
+    (a: { created_by?: string | null; assigned_to?: string | null; participants?: string[] | null }) =>
+      ehAtividadeDaPessoa(a, {
+        id: currentUser?.id,
+        email: currentUser?.email || profile?.email,
+        fullName: profile?.full_name,
+        profileId: profile?.id,
+      }),
+    [currentUser?.id, currentUser?.email, profile?.email, profile?.full_name, profile?.id],
+  );
 
   // Helper que abre o EditActivityDialog respeitando bloqueios escopados
   const openEditActivity = useCallback((
@@ -2100,21 +2127,7 @@ export default function ProjectDetailsPage() {
                  * `undefined` para quem edita tudo — aí a distinção não existe
                  * e o filtro nem aparece.
                  */
-                ehMinha={
-                  canEdit || canMove || isRealAdmin
-                    ? undefined
-                    : (a: { assigned_to?: string | null; participants?: string[] | null }) => {
-                        const eu = buildUserCandidates([
-                          profile?.full_name,
-                          profile?.email,
-                          currentUser?.email,
-                          profile?.id,
-                          currentUser?.id,
-                        ]);
-                        return matchesIdentity(a.assigned_to, eu)
-                          || (Array.isArray(a.participants) && anyMatchesIdentity(a.participants, eu));
-                      }
-                }
+                ehMinha={canEdit || canMove || isRealAdmin ? undefined : ehMinhaAtividade}
                 statusFilter={listStatusFilter}
                 onStatusFilterChange={setListStatusFilter}
                 priorityFilter={listPriorityFilter}
