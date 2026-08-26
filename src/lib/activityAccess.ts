@@ -43,6 +43,41 @@ export interface AtividadeParaAcesso {
   created_by?: string | null;
   assigned_to?: string | null;
   participants?: string[] | null;
+
+  // ── Identificador, quando a conversão já respondeu ──────────────────────
+  // Migration 20260826200000. Quando presentes, MANDAM: são FK, e homônimo
+  // não os confunde. Quando ausentes (pendente, ou consulta que não pediu a
+  // coluna), a comparação por texto continua valendo — e ela já recusa nome
+  // ambíguo desde 20260826180000.
+  assigned_to_id?: string | null;
+  participant_ids?: string[] | null;
+}
+
+/**
+ * A pessoa é o responsável/participante POR IDENTIFICADOR?
+ *
+ * `null` quando a atividade não traz as colunas novas — e null aqui significa
+ * "não sei", não "não é". Quem chama cai na comparação por texto.
+ */
+function vinculoPorIdentificador(
+  atividade: AtividadeParaAcesso,
+  userId: string | null | undefined,
+): boolean | null {
+  if (!userId) return null;
+  const temColunas =
+    atividade.assigned_to_id !== undefined || atividade.participant_ids !== undefined;
+  if (!temColunas) return null;
+
+  if (atividade.assigned_to_id && atividade.assigned_to_id === userId) return true;
+  if (Array.isArray(atividade.participant_ids) && atividade.participant_ids.includes(userId)) {
+    return true;
+  }
+
+  // As colunas vieram e a pessoa não está nelas. Só é resposta definitiva se
+  // o registro FOI convertido: `assigned_to_id` nulo com `assigned_to`
+  // preenchido é um pendente (nome ambíguo), e aí o texto ainda decide.
+  const convertido = !!atividade.assigned_to_id || !atividade.assigned_to;
+  return convertido ? false : null;
 }
 
 /** O que precisamos saber do projeto — os dois campos de liderança. */
@@ -150,6 +185,11 @@ export function podeMutarAtividade(
   if (usuario.id && atividade.created_by && atividade.created_by === usuario.id) return true;
 
   // 4b. Responsável OU participante — a RLS reconhece os dois.
+  //     IDENTIFICADOR primeiro: quando a conversão já respondeu, homônimo não
+  //     confunde. Só cai no texto quando a resposta por id é "não sei".
+  const porId = vinculoPorIdentificador(atividade, usuario.id);
+  if (porId !== null) return porId;
+
   if (matchesIdentity(atividade.assigned_to, candidatos)) return true;
   return Array.isArray(atividade.participants)
     && anyMatchesIdentity(atividade.participants, candidatos);
@@ -175,6 +215,11 @@ export function ehAtividadeDaPessoa(
     usuario.id,
   ]);
   if (usuario.id && atividade.created_by && atividade.created_by === usuario.id) return true;
+
+  // Identificador primeiro — mesma precedência de `podeMutarAtividade`.
+  const porId = vinculoPorIdentificador(atividade, usuario.id);
+  if (porId !== null) return porId;
+
   if (matchesIdentity(atividade.assigned_to, candidatos)) return true;
   return Array.isArray(atividade.participants)
     && anyMatchesIdentity(atividade.participants, candidatos);

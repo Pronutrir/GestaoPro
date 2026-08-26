@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/integrations/supabase/server';
-import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from '@/lib/identityMatch';
+import { anyMatchesIdentity, buildUserCandidates, matchesIdentity, carregarNomesAmbiguos } from '@/lib/identityMatch';
 
 type NotificationRow = {
   id: string;
@@ -70,6 +70,11 @@ export async function POST(request: Request) {
   ]);
 
   const isAdmin = (roleRows || []).some((row) => row.role === 'admin');
+
+  // A trava do homônimo, também aqui — ver o comentário em
+  // `api/notifications/route.ts`. Sem ela, `matchesIdentity` roda no servidor
+  // com o conjunto vazio, e um homônimo marca como lida a notificação do outro.
+  await carregarNomesAmbiguos(adminClient as never);
 
   const userCandidates = buildUserCandidates([
     profile?.id,

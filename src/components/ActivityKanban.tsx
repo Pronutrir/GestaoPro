@@ -340,6 +340,22 @@ export const ActivityKanban = ({
   // Filtro "Apenas minhas tarefas" — persistido por projeto
   const myName = (profile?.full_name || "").trim().toLowerCase();
   const myId = user?.id || null;
+  /**
+   * O MEU nome pertence a mais de um perfil?
+   *
+   * Se pertence, a via do texto não pode dizer que uma atividade é minha — ela
+   * casaria com o homônimo do mesmo jeito. `profilesMap` é `id → nome`, então
+   * contar quantos ids levam ao meu nome responde a pergunta.
+   */
+  const meuNomeEhAmbiguo = useMemo(() => {
+    if (!myName) return false;
+    let quantos = 0;
+    for (const nome of Object.values(profilesMap)) {
+      if ((nome || "").trim().toLowerCase() === myName) quantos++;
+      if (quantos > 1) return true;
+    }
+    return false;
+  }, [profilesMap, myName]);
   const onlyMineKey = `kanban-only-mine:${projectId}`;
   const [onlyMine, setOnlyMine] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -922,12 +938,35 @@ export const ActivityKanban = ({
     return [];
   }, [groupBy, phases, assigneeOptions, activities, profileSectorMap, tagOptions, blockedStageIdSet, laneGroups]);
 
+  /**
+   * "É minha?" — a pergunta do filtro Minhas.
+   *
+   * IDENTIFICADOR PRIMEIRO. `assigned_to_id` e `participant_ids` são FK
+   * (migration 20260826200000): quando respondem, homônimo não confunde.
+   *
+   * O texto continua como via secundária, para os registros ainda pendentes —
+   * mas **nome ambíguo devolve `false`**: existem dois perfis "Williame
+   * Correia de Lima", e marcar o cartão do outro como "meu" é pior que não
+   * marcar nenhum. Quem tem nome único não perde nada.
+   */
   const isMineActivity = useCallback(
     (a: Activity) => {
       if (!myId && !myName) return false;
       if (myId && a.created_by === myId) return true;
-      if (myId && a.assigned_to === myId) return true;
+
+      // ── Via do identificador ──
+      if (myId) {
+        if (a.assigned_to_id && a.assigned_to_id === myId) return true;
+        if (Array.isArray(a.participant_ids) && a.participant_ids.includes(myId)) return true;
+        // Convertida e eu não estou nela: é resposta, não silêncio.
+        if (a.assigned_to_id && a.assigned_to_id !== myId) return false;
+        // `assigned_to` que já era uuid.
+        if (a.assigned_to === myId) return true;
+      }
+
+      // ── Via do texto, só para o que ainda não converteu ──
       if (myName) {
+        if (meuNomeEhAmbiguo) return false;
         if ((a.assigned_to || "").trim().toLowerCase() === myName) return true;
         // Resolve UUID → nome para comparação
         const resolvedName = a.assigned_to ? (profilesMap[a.assigned_to] || "").trim().toLowerCase() : "";
@@ -936,7 +975,7 @@ export const ActivityKanban = ({
       }
       return false;
     },
-    [myId, myName, profilesMap]
+    [myId, myName, profilesMap, meuNomeEhAmbiguo]
   );
 
   /**
