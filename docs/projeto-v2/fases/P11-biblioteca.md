@@ -46,6 +46,11 @@ atual. E quem não tem acesso ao projeto de origem não vê o resultado.
 
 ## Não faça
 
-- Não deixe a busca global furar a visibilidade. É o mesmo furo da P00, em outro lugar.
+- Não rode antes da P00. Sem a policy corrigida, esta busca nasce com o mesmo furo de
+  Pendências — e **pior**: ali a pessoa esbarra no que não devia ver; aqui ela procura de
+  propósito, e encontra.
+- **Não aplique filtro de visibilidade na consulta da busca.** Se precisar de filtro, é sinal
+  de que a policy não está fechada — volte para a P00. Filtro no cliente é cosmético: quem
+  chamar a API direto continua vendo tudo.
 - Não unifique a visibilidade de trabalho com a de documento. São duas funções diferentes de
   propósito, e o comentário de `can_view_project_work_v2` diz isso explicitamente.

@@ -68,6 +68,11 @@ ANTES de escrever a migration, sonde a base e responda:
      enxergar;
   c) alguma delas tem atividade cujo pai está em outro ramo — ou seja,
      perderia contexto que hoje usa?
+  d) DAS ATIVIDADES QUE CADA UMA DEIXARIA DE VER, quantas ela abriu nos
+     últimos noventa dias? Esta é a pergunta que decide. "Deixa de ver 40"
+     assusta e trava a decisão; "deixa de ver 40, e abriu zero em noventa
+     dias" é sinal verde. Sem (d), a sonda produz um número grande e nenhuma
+     conclusão.
 
 Se (a) for zero, a mudança não afeta ninguém hoje e passa a valer daqui pra
 frente. Se não for, a lista de (b) precisa ser lida antes de aplicar.
@@ -86,6 +91,23 @@ nenhuma dessas telas.
 - A sonda (a) foi lida e registrada no PR.
 - Um usuário que entra por atribuição não vê as irmãs em **nenhuma** das quatro telas.
 - Ele continua vendo a trilha do pai e as próprias subatividades.
+
+## Descendente não é ancestral
+
+`eh_descendente_de_atividade_do_ator` cobre a atividade e a **subárvore** dela. O caminho
+**para cima** é outra pergunta — e é a view `activity_breadcrumb` que a responde.
+
+Se a troca do braço do `OR` não preservar essa via, a pessoa perde a trilha junto com as
+irmãs, e o sintoma deixa de ser "sumiu um item da lista": vira **"a tela da atividade abriu
+sem cabeçalho"**, que ninguém relaciona a uma mudança de policy.
+
+As duas views já nascem com `security_invoker = false` justamente para sobreviver a este
+aperto (corrigido na migration `20260826120000` — ver `DIVERGENCIAS.md` item 5), e a
+verificação de lá **falha alto** se alguém as devolver a `invoker`. **Confirme na sonda:**
+depois de apertar a policy, a breadcrumb ainda responde para quem entra por atribuição?
+
+E ela **não carrega feed**. A fase 08 faz o feed do pai agregar eventos das filhas — um feed
+na trilha reabriria o mesmo vazamento por outra porta.
 
 ## Não faça
 

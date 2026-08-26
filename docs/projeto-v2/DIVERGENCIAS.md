@@ -96,3 +96,41 @@ O que sei do inventário anterior é que existem **três fórmulas de progresso 
 profundidades diferentes (`docs/atividade-v2/inventario.md`, item 4). Se a linha "0%" vier de
 uma dessas fórmulas e a "100%" de outra, a causa pode ser a mesma que a fase 09 corrige — e a
 P02 pode ficar menor do que parece. Vale conferir na P01 antes de reescrever a consulta.
+
+---
+
+## 5. `security_invoker` nas views — o kit achou um defeito meu
+
+A v2 do kit alertou: *"se a troca do braço do `OR` não preservar essa via, a pessoa perde o
+contexto junto com as irmãs, e a tela abre sem cabeçalho"*.
+
+**Conferido, e o alerta estava certo.** As duas views da fase 02 nasceram com
+`security_invoker = true`, o que as faz rodar sob a RLS de quem chama.
+
+Enquanto a policy for a atual, isso não aparece — ela já entrega o projeto inteiro. Mas no
+instante em que a P00 apertar a policy, **a trilha fecha junto**:
+
+| | com `invoker = true` | com `invoker = false` |
+|---|---|---|
+| Antes da P00 | funciona (a policy é ampla) | funciona |
+| **Depois da P00** | **trilha some** — tela sem cabeçalho | trilha sobrevive |
+
+O sintoma seria o pior tipo: não "sumiu um item da lista", mas "a tela da atividade abriu sem
+cabeçalho" — que ninguém relaciona a uma mudança de policy, e que só apareceria dias depois.
+
+**Corrigido na própria migration** (`20260826120000`), que ainda não foi aplicada — então não
+há remendo, há a versão certa. As duas views passaram a `security_invoker = false`, com o
+motivo escrito acima delas, e a verificação final agora **falha alto** se alguém as devolver a
+`invoker`.
+
+O que torna isso seguro continua sendo o que elas **não** carregam — sem contador, sem soma,
+sem pessoa, sem data, sem custo, sem feed —, e a lista exata de colunas já era travada por
+verificação. A segurança está no conteúdo, não em herdar a RLS da tabela.
+
+### O ponto sobre feed, também do kit
+
+*"A breadcrumb não carrega feed: a fase 08 faz o feed do pai agregar eventos das filhas, e um
+feed na trilha reabriria o mesmo vazamento por outra porta."*
+
+Correto, e já está garantido: a view tem seis colunas, travadas por verificação. Vale como
+aviso para quem for tentado a acrescentar — e o alerta ficou registrado no comentário da view.

@@ -255,9 +255,34 @@ COMMENT ON FUNCTION public.eh_descendente_de_atividade_do_ator(uuid, uuid) IS
 -- Nao da para esconder sem destruir a EAP. A numeracao revela a EXISTENCIA de
 -- irmas, nunca o conteudo delas.
 -- ───────────────────────────────────────────────────────────────────────────
+-- ATENCAO AO `security_invoker` -- e a diferenca entre a fresta funcionar e nao
+-- funcionar.
+--
+-- Estas views nasceram com `security_invoker = true`, o que faz cada uma rodar
+-- sob a RLS de quem chama. Enquanto a policy de SELECT for a atual (que entrega
+-- o projeto inteiro a quem tem qualquer atividade nele), isso nao aparece.
+--
+-- Mas a P00 vai APERTAR essa policy para o escopo real. No instante em que
+-- isso acontecer, uma view `invoker` fecha JUNTO -- e a trilha de ancestrais
+-- some com as irmas. O sintoma nao seria "sumiu um item da lista": seria "a
+-- tela da atividade abriu sem cabecalho", porque o chip "1.1 Planejamento"
+-- depende exatamente desta view.
+--
+-- DESCENDENTE NAO E ANCESTRAL. `eh_descendente_de_atividade_do_ator` cobre a
+-- atividade e a subarvore; o caminho PARA CIMA e outra pergunta, e e esta view
+-- que a responde. Por isso ela precisa enxergar o que a policy nao deixa --
+-- que e o proposito de uma fresta controlada.
+--
+-- O que torna isso seguro e o que ela NAO carrega: sem contador, sem soma, sem
+-- pessoa, sem data, sem custo, sem feed. Codigo, nome e tipo. A verificacao no
+-- fim desta migration trava a lista exata de colunas -- acrescentar uma por
+-- conveniencia anula a regra de visibilidade sem alarde.
+--
+-- Vazamento aceito e registrado: o proprio codigo 1.1.2 revela que existe um
+-- 1.1.1. Nao da para esconder sem destruir a EAP.
 DROP VIEW IF EXISTS public.activity_breadcrumb;
 CREATE VIEW public.activity_breadcrumb
-WITH (security_invoker = true)
+WITH (security_invoker = false)
 AS
   SELECT a.id, a.parent_id, a.wbs_code, a.title, a.item_type, a.is_milestone
     FROM public.activities a
@@ -266,9 +291,17 @@ AS
 COMMENT ON VIEW public.activity_breadcrumb IS
   'Trilha de ancestrais como CONTEXTO. Codigo, nome e tipo -- nada mais. NUNCA acrescentar contador, soma, pessoa, data ou custo: qualquer um deles entrega a existencia das irmas.';
 
+-- Mesma razao da view acima, e aqui o motivo e ainda mais direto: a
+-- dependencia que bloqueia costuma ser JUSTAMENTE uma irma invisivel. Uma view
+-- `invoker` devolveria vazio exatamente no caso que ela existe para atender --
+-- "estou parado por causa de quem?".
+--
+-- Carrega `status` alem de codigo/nome/tipo, porque quem esta bloqueado
+-- precisa saber SE ja terminou. Nada alem disso: sem responsavel, sem datas,
+-- sem horas.
 DROP VIEW IF EXISTS public.activity_dependency_card;
 CREATE VIEW public.activity_dependency_card
-WITH (security_invoker = true)
+WITH (security_invoker = false)
 AS
   SELECT a.id, a.wbs_code, a.title, a.item_type, a.status
     FROM public.activities a
@@ -372,5 +405,27 @@ BEGIN
    WHERE table_schema='public' AND table_name='activity_dependency_card';
   IF v_cols <> 'id,item_type,status,title,wbs_code' THEN
     RAISE EXCEPTION 'activity_dependency_card com colunas inesperadas: %', v_cols;
+  END IF;
+
+  /*
+   * As duas views NAO podem ser `security_invoker`.
+   *
+   * Com invoker elas rodam sob a RLS de quem chama -- e no dia em que a P00
+   * apertar a policy de SELECT, a trilha de ancestrais fecha junto com as
+   * irmas. O sintoma seria a tela da atividade abrindo sem cabecalho, o que
+   * ninguem relaciona a uma mudanca de policy.
+   *
+   * A seguranca destas views esta no que elas NAO carregam (travado acima),
+   * nao em herdar a RLS da tabela.
+   */
+  IF EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname IN ('activity_breadcrumb', 'activity_dependency_card')
+      AND c.reloptions::text LIKE '%security_invoker=true%'
+  ) THEN
+    RAISE EXCEPTION
+      'activity_breadcrumb/activity_dependency_card com security_invoker=true -- a trilha fecha junto com a policy da P00; ver o comentario acima das views';
   END IF;
 END $$;
