@@ -2813,9 +2813,22 @@ export const EditActivityDialog = ({
             {/* ===== ABA EQUIPE DO PROJETO ===== */}
             <TabsContent value="team" className="pt-4 mt-0">
               <div className="space-y-2">
+                {/**
+                 * O RÓTULO DIZ O QUE O CAMPO CONCEDE.
+                 *
+                 * Chamava-se "Equipe do Projeto" — um TERCEIRO nome para a
+                 * mesma coisa, e enganoso: a equipe do projeto é configurada em
+                 * Editar projeto › Equipe, e concede permissão em TODAS as
+                 * atividades. Este campo é de quem trabalha NESTA atividade.
+                 *
+                 * E faltava o essencial: participante EDITA a atividade (a RLS
+                 * reconhece por `is_activity_actor_v2`). Quem preenchia o campo
+                 * estava concedendo acesso sem que a tela dissesse isso em
+                 * lugar nenhum.
+                 */}
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" /> Equipe do Projeto
+                    <Users className="w-4 h-4 text-primary" /> Participantes da atividade
                   </Label>
                   {/* UM PAINEL, não uma linha por pessoa.
                       Antes cada clique criava uma linha VAZIA com um seletor
@@ -2832,6 +2845,10 @@ export const EditActivityDialog = ({
                     {painelParticipantes ? "Fechar" : "Incluir participantes"}
                   </Button>
                 </div>
+
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Trabalham junto nesta atividade e <strong className="font-medium text-foreground">também podem editá-la</strong> — mesmo sem permissão de edição na equipe do projeto.
+                </p>
 
                 {painelParticipantes && (
                   <SelecionarParticipantes
