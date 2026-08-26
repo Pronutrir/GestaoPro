@@ -106,13 +106,14 @@ Registrado para não se perder no meio das correções:
 
 | Passo | Estado |
 |---|---|
-| V1 · medir quem perde acesso | **pendente** — a API do banco não respondeu em 25/08 |
+| V1 · medir quem perde acesso | **FEITO** — 95 membros, 7 só-leitura, **0** com `can_edit_own=false`: ninguém perde acesso |
 | V2 · rótulos do diálogo | **feito** — commit `81494c1` |
 | V3 · front respeita `can_edit_own` | **feito** — commit `acb5307` |
-| V4 · RLS respeita `can_edit_own` | **escrito, não aplicado** — `20260825150000`, roda por `scripts/apply-visualizar-nao-edita.sh` |
+| V4 · RLS respeita `can_edit_own` | **escrito, não aplicado** (conferido: não consta em `schema_migrations`) — `20260825150000`, roda por `scripts/apply-visualizar-nao-edita.sh` |
 
-Há ainda uma migration anterior pendente na VM: `20260825140000` (o Gestor do Projeto passa a
-ser reconhecido pela via da equipe), por `scripts/apply-gestor-do-projeto-na-via-da-equipe.sh`.
+A migration `20260825140000` (Gestor do Projeto na via da equipe) **JÁ FOI APLICADA** — consta
+em `schema_migrations` e `can_member_action` responde. Não há prova empírica isolada do
+caminho do gestor: os 7 projetos com `manager` têm o gestor também como admin ou membro.
 
 ---
 

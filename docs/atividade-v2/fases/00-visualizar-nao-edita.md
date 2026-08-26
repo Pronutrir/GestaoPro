@@ -45,3 +45,36 @@ Duas protecoes ja existem:
   Conferido que a suite falha quando a regra e removida.
 
 O teste da fase 03 amplia isso para os 108 casos da matriz.
+
+---
+
+## V1 — MEDIDO EM 25/08/2026, com dados reais
+
+Sondado por `https://gestaopro.pronutrir.com.br` (o IP interno do `.env` não responde de fora
+da VM — ver a memória *banco-só-pelo-host-público*).
+
+| Medida | Valor |
+|---|---|
+| Membros de projeto no total | **95** |
+| Com as 4 colunas de escrita em `false` (só leitura) | **7** |
+| Com `can_edit_own = false` | **0** |
+
+**Ninguém perde acesso quando a migration `20260825150000` for aplicada.** Os 7 membros
+só-leitura estão todos com `can_edit_own = true`, ou seja, nenhum é "Visualizar e comentar"
+de verdade — todos são "Editar apenas as minhas".
+
+A regra passa a valer **daqui pra frente**: quando alguém escolher "Visualizar e comentar" no
+seletor, a escolha finalmente terá efeito.
+
+### Estado das migrations no banco
+
+| Migration | Registrada | Conferida |
+|---|---|---|
+| `20260825140000` — Gestor do Projeto na via da equipe | **sim** | `can_member_action` responde `true` para ação válida e `false` para inválida |
+| `20260825150000` — Visualizar não edita | **não** | pendente de aplicar |
+
+**Ressalva sobre a 140000:** não consegui isolar o caminho do gestor com dados reais. Os 7
+projetos com `manager` definido têm todos o gestor **também** como admin ou membro com
+`can_edit`, então qualquer sonda passa por outra via antes de chegar à do gestor. O corpo da
+função foi conferido na escrita, e a migration tem um bloco `DO $$` que falha alto se não
+citar `is_project_leader_v2` — mas a prova empírica de ponta a ponta não existe.

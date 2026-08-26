@@ -14,6 +14,11 @@ set -e
 # editar até as atividades em que é responsável — que é o que o nome do papel
 # sempre prometeu.
 #
+# MEDIDO EM 25/08/2026, no banco de producao:
+#   95 membros de projeto; 7 com as 4 colunas de escrita em false; ZERO com
+#   can_edit_own = false. Ou seja: NINGUEM perde acesso hoje. A regra passa a
+#   valer daqui pra frente, quando alguem escolher "Visualizar e comentar".
+#
 # ATENÇÃO: esta é a única migration recente que TIRA acesso de alguém. A sonda
 # "ANTES" abaixo mostra exatamente quem, e em quantas atividades. Leia antes de
 # confirmar.
