@@ -560,8 +560,7 @@ nome ambíguo, e uuid nunca vaza para a tela.
 
 ```bash
 # 1. Fecha o furo do homônimo. Independente das outras.
-#    Falta o script de apply — hoje depende de rodar o .sql à mão.
-#    supabase/migrations/20260826180000_homonimos_permissao_por_identificador.sql
+./scripts/apply-homonimos.sh                       # 20260826180000
 
 # 2. Sincronia dos responsáveis — ANTES de migrar mais leituras.
 ./scripts/apply-fase05-sincronia-responsaveis.sh   # 20260826160000
@@ -586,9 +585,9 @@ nome ambíguo, e uuid nunca vaza para a tela.
 >
 > **A migration vai primeiro.**
 
-Falta escrever `scripts/apply-homonimos.sh`. A migration e o rollback estão prontos; sem o
-script, ela depende de alguém rodar o `.sql` à mão — que é justamente o que os outros scripts
-existem para evitar.
+Todas as cinco têm script de apply com sonda antes, confirmação e sonda depois. O dos
+homônimos pergunta o que decide: **nesses projetos, os homônimos já são membros por
+`user_id`?** Se sim para todos, ninguém perde acesso — a via de membro já cobre os dois.
 
 ---
 
