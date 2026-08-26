@@ -129,3 +129,16 @@ Nenhuma tela recalcula agregado do pai — todas consomem o resultado.
 - Recalcular agregado do pai no cliente, nem "só para o preview".
 - Gatear `is_activity_actor_v2` por `can_edit_own` — aquele helper serve visibilidade e
   comentário; gatear ali tira a leitura de quem é "Visualizar e comentar".
+
+## Cor e referência visual
+
+- **Cor só onde significa.** Na tela do backlog sobram quatro: ponto de status, âmbar do GUT
+  alto, vermelho do atraso, azul da seleção. Status é ponto de 7px, não pílula. GUT só ganha
+  cor a partir de 60. Número em coluna alinha à direita com `tabular-nums`. Sem zebra.
+  Sem badge de tipo em atividade — a indentação e o código EAP já dizem.
+- **Referência visual:** os canvas de mockup (*Mesa de Planejamento* para o backlog e o Kanban,
+  *Atividade v2* para as demais telas). O **simulador não é referência** — seletor de pessoas,
+  painel "Por quê", barra de cenários e registro são instrumentos de teste, não do produto.
+- **Agregado (soma de horas, custo, contagem) nunca é recalculado na tela.** Consome o módulo
+  da fase 09 e nunca persiste. Hoje há três fórmulas de progresso vivas e duas escritas
+  implícitas que gravam o total do pai a partir do que o cliente carregou — ver `inventario.md`.

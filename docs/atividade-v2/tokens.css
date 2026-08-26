@@ -81,7 +81,12 @@
 
   /* ---- GUT [novo] ------------------------------------------------
    * O GUT e o diferencial do produto e hoje e uma bolinha cinza.
-   * Faixa por score (G x U x T, de 1 a 125):
+   * Faixa por score (G x U x T, de 1 a 125).
+   *
+   * ATENCAO -- SO COLORE A PARTIR DE 60 (decisao 3 da fase 06): abaixo disso
+   * o numero fica CINZA. --gut-medio e --gut-baixo existem para grafico e
+   * legenda, NAO para a coluna GUT da tabela: se todo GUT e colorido,
+   * nenhum chama atencao.
    */
   --gut-critico: 0 84% 60%;    /* 100-125 */
   --gut-alto:    32 95% 44%;   /* 60-99   */
