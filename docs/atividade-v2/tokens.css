@@ -1,0 +1,96 @@
+/* Gestao Pro - tokens
+ *
+ * Os valores marcados [atual] foram extraidos da aplicacao em producao
+ * (gestaopro.pronutrir.com.br, 25/08/2026) e NAO devem ser alterados -
+ * sao a identidade que ja esta no ar.
+ *
+ * Os valores marcados [novo] sao o que falta para a tela de atividade,
+ * o Kanban e o backlog pararem de reinventar tamanho e cor a cada
+ * componente.
+ *
+ * ATENCAO: este arquivo AINDA NAO E CONSUMIDO. O projeto ja tem tokens em
+ * src/index.css. Antes de adotar (fase 10), conferir quais nomes daqui ja
+ * existem la com outro valor - sobrepor em silencio muda a aplicacao inteira.
+ */
+
+:root {
+  /* ---- base [atual] --------------------------------------------- */
+  --background: 0 0% 100%;
+  --foreground: 0 0% 13%;          /* #212121 */
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 13%;
+  --primary: 221 83% 53%;          /* #2563EB */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96.5%;
+  --secondary-foreground: 0 0% 18%;
+  --muted: 0 0% 97.5%;
+  --muted-foreground: 0 0% 46%;    /* #757575 */
+  --accent: 0 0% 95%;
+  --accent-foreground: 0 0% 18%;
+  --destructive: 0 84% 60%;        /* #EF4444 */
+  --destructive-foreground: 0 0% 100%;
+  --band: 215 25% 40%;             /* #4C5B70 - cor da EAP */
+  --band-foreground: 0 0% 100%;
+  --band-soft: 215 30% 95%;        /* #EEF2F7 */
+  --border: 0 0% 91%;              /* #E8E8E8 */
+  --input: 0 0% 91%;
+  --ring: 221 83% 53%;
+  --radius: 0.5rem;                /* 8px */
+  --success: 160 84% 39%;
+  --warning: 38 92% 50%;
+  --info: 199 89% 48%;
+  --kanban-col-bg: 0 0% 96%;       /* #F5F5F5 */
+  --kanban-col-head: 0 0% 93%;     /* #EDEDED */
+  --card-shadow: 0 1px 2px 0 rgb(16 24 40 / 0.05), 0 1px 3px 0 rgb(16 24 40 / 0.09);
+
+  /* ---- status do quadro [atual, hoje espalhado no codigo] -------- */
+  --status-nao-iniciado: 38 93% 50%;   /* #F59F0A */
+  --status-em-andamento: 220 90% 56%;  /* #2A6DF4 */
+  --status-pendencia:    24 95% 53%;   /* #F97415 */
+  --status-concluida:    145 76% 36%;  /* #16A249 */
+  --status-bar: 3px;                   /* faixa no topo da coluna */
+
+  /* ---- tipografia [novo] ---------------------------------------- */
+  --font-sans: Roboto, system-ui, -apple-system, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-label: 11px;      /* rotulo de campo, CAIXA ALTA */
+  --ls-label: 0.06em;
+  --fs-value: 13px;      /* valor de campo */
+  --fs-cell: 12.5px;     /* celula de tabela */
+  --fs-body: 13.5px;     /* texto corrido, comentario */
+  --fs-card: 13.5px;     /* titulo do card do Kanban */
+  --fs-title: 22px;      /* titulo da atividade */
+  --fs-page: 17px;       /* titulo da pagina */
+
+  --lh-tight: 1.35;
+  --lh-body: 1.6;
+
+  /* Todo numero que entra em coluna usa isto. Sem excecao. */
+  --numeric: tabular-nums;
+
+  /* ---- densidade [novo] ----------------------------------------- */
+  --row-h: 34px;         /* linha de tabela (EAP, subatividades) */
+  --row-head-h: 32px;    /* cabecalho de tabela */
+  --control-h: 30px;     /* botao e campo do topo das paginas */
+  --col-head-h: 38px;    /* cabecalho de coluna do Kanban */
+  --radius-control: 6px; /* botao, campo, chip */
+  --radius-card: 8px;    /* card, painel, tabela */
+
+  /* ---- GUT [novo] ------------------------------------------------
+   * O GUT e o diferencial do produto e hoje e uma bolinha cinza.
+   * Faixa por score (G x U x T, de 1 a 125).
+   *
+   * ATENCAO -- SO COLORE A PARTIR DE 60 (decisao 3 da fase 06): abaixo disso
+   * o numero fica CINZA. --gut-medio e --gut-baixo existem para grafico e
+   * legenda, NAO para a coluna GUT da tabela: se todo GUT e colorido,
+   * nenhum chama atencao.
+   */
+  --gut-critico: 0 84% 60%;    /* 100-125 */
+  --gut-alto:    32 95% 44%;   /* 60-99   */
+  --gut-medio:   215 25% 40%;  /* 25-59   */
+  --gut-baixo:   0 0% 46%;     /* 1-24    */
+  --gut-vazio:   0 0% 62%;     /* nao avaliado - rotular "Prioridade nao avaliada" */
+}

@@ -421,7 +421,7 @@ export const EditActivityDialog = ({
   canEditProject = true,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
-  const { user: authUser, profile: authProfile } = useAuth();
+  const { user: authUser, profile: authProfile, canManage: podeGerenciarProjetos } = useAuth();
   const ensureProjectUnlocked = () => {
     if (!projectLocked) return true;
     toast({
@@ -587,35 +587,32 @@ export const EditActivityDialog = ({
   const subHoursTotal = ownSubActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
   const parentHoursNum = hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours);
 
-  // Rollup no banco: sempre que a soma das subs mudar (add/remover/editar horas
-  // de uma sub, concluir), persiste o total no pai se estiver defasado. Cobre
-  // todos os caminhos de edição de sub deste diálogo num único ponto.
-  useEffect(() => {
-    if (createMode || !effectiveActivity || !hasSubActivities) return;
-    const current = Number((effectiveActivity as any).hours) || 0;
-    if (Math.abs(current - subHoursTotal) <= 0.01) return;
-    void supabase
-      .from("activities")
-      .update({ hours: subHoursTotal } as any)
-      .eq("id", effectiveActivity.id)
-      .then(() => onActivityUpdated());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subHoursTotal, hasSubActivities, effectiveActivity?.id, createMode]);
+  /**
+   * O ROLLUP DEIXOU DE SER PERSISTIDO PELO CLIENTE (25/08/2026).
+   *
+   * Havia aqui um `useEffect` que gravava `hours` do pai com a soma de
+   * `ownSubActivities` — sem clique, ao abrir o diálogo.
+   *
+   * `ownSubActivities` vem de `fetchSubActivities`, um `select` comum que
+   * PASSA PELA RLS. Quem enxerga 1 de 8 subatividades recebia 1, e o efeito
+   * gravava no banco o total daquela única filha. As outras 7 sumiam da conta
+   * — sem interação, sem aviso, sem rastro de quem causou. Aparecia semanas
+   * depois no relatório, e não havia como rastrear.
+   *
+   * A regra em si (pai com filhas = soma das filhas) continua valendo e
+   * continua exibida abaixo, como LEITURA. O que sai é a gravação: agregado
+   * derivado tem de ser calculado sobre a árvore INTEIRA, o que só o servidor
+   * pode fazer — é a fase 09 do plano (`docs/atividade-v2/fases/09-*`).
+   *
+   * Até a fase 09 existir, o valor exibido segue correto para quem enxerga
+   * tudo, e para quem enxerga uma fatia continua sendo uma leitura parcial —
+   * mas não contamina mais o banco.
+   */
 
-  // Custo: mesma regra dos 100% — com subs, o custo do pai é a soma das subs
-  // (rollup somente-leitura + persistência no banco).
+  // Custo: mesma regra dos 100% — com subs, o custo do pai é a soma das subs.
+  // SOMENTE LEITURA: a gravação saiu junto com a de horas, pela mesma razão
+  // (ver o bloco acima). Derivar sobre uma fatia e persistir encolhia o pai.
   const subCostTotal = ownSubActivities.reduce((sum, s) => sum + (Number((s as any).cost) || 0), 0);
-  useEffect(() => {
-    if (createMode || !effectiveActivity || !hasSubActivities) return;
-    const current = Number((effectiveActivity as any).cost) || 0;
-    if (Math.abs(current - subCostTotal) <= 0.01) return;
-    void supabase
-      .from("activities")
-      .update({ cost: subCostTotal } as any)
-      .eq("id", effectiveActivity.id)
-      .then(() => onActivityUpdated());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subCostTotal, hasSubActivities, effectiveActivity?.id, createMode]);
 
   // Horas: Consumidas (automático por conclusão) e Planejadas
   const subsComputed = subActivities.reduce((sum, s) => {
@@ -1285,9 +1282,26 @@ export const EditActivityDialog = ({
         actual_start_date: formData.actual_start_date || null,
         actual_end_date: formData.actual_end_date || null,
         end_date: formData.end_date || null,
-        cost: hasSubActivities ? subCostTotal : (parseFloat(formData.cost) || 0),
-        // Rollup: com subatividades, o planejado do pai é a soma dos filhos.
-        hours: hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours),
+        /**
+         * COM SUBATIVIDADES, `hours` E `cost` NÃO SÃO ESCRITOS.
+         *
+         * Eram `hasSubActivities ? subCostTotal : ...` — mas `subCostTotal` e
+         * `subHoursTotal` derivam de `ownSubActivities`, que vem de um `select`
+         * que PASSA PELA RLS. Um usuário que enxerga 1 de 8 filhas salvava
+         * qualquer campo do pai (o título, uma etiqueta) e levava junto o total
+         * das 8 substituído pelo total de 1.
+         *
+         * O `useEffect` que gravava isso sozinho saiu (ver o bloco perto de
+         * `subHoursTotal`); este era o segundo caminho, e sai pela mesma razão.
+         *
+         * `undefined` não vira coluna no payload do PostgREST, então o valor no
+         * banco fica como está — que é o certo enquanto quem deriva é a tela.
+         * A derivação de verdade é a fase 09, no servidor, sobre a árvore toda.
+         *
+         * Sem filhas o comportamento não muda: o valor é do próprio formulário.
+         */
+        cost: hasSubActivities ? undefined : (parseFloat(formData.cost) || 0),
+        hours: hasSubActivities ? undefined : parseHoursInput(formData.hours),
         phase_id: formData.phase_id || null,
         gravity: formData.gravity,
         urgency: formData.urgency,
@@ -1742,7 +1756,12 @@ export const EditActivityDialog = ({
                 <FileText className="w-3.5 h-3.5" /> Detalhes
               </TabsTrigger>
               <TabsTrigger value="team" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
-                <Users className="w-3.5 h-3.5" /> Equipe
+                {/* "Equipe" sugeria a equipe do PROJETO, que se configura em
+                    Editar projeto e vale para todas as atividades. Aqui são as
+                    pessoas desta atividade — e o conteúdo da aba já dizia
+                    "Participantes da atividade". O rótulo estava contradizendo
+                    o próprio conteúdo. */}
+                <Users className="w-3.5 h-3.5" /> Participantes
                 {formData.participants.filter(Boolean).length > 0 && (
                   <span className="text-[10px] px-1.5 py-0 rounded-full bg-primary/15 text-primary font-semibold">{formData.participants.filter(Boolean).length}</span>
                 )}
@@ -2810,12 +2829,28 @@ export const EditActivityDialog = ({
 
             </TabsContent>
 
-            {/* ===== ABA EQUIPE DO PROJETO ===== */}
+            {/* ===== ABA PARTICIPANTES DA ATIVIDADE =====
+                NAO e a equipe do projeto -- essa se configura em Editar projeto.
+                Aqui sao as pessoas que trabalham NESTA atividade, e o rotulo
+                da aba dizia "Equipe", que sugeria a outra coisa. */}
             <TabsContent value="team" className="pt-4 mt-0">
               <div className="space-y-2">
+                {/**
+                 * O RÓTULO DIZ O QUE O CAMPO CONCEDE.
+                 *
+                 * Chamava-se "Equipe do Projeto" — um TERCEIRO nome para a
+                 * mesma coisa, e enganoso: a equipe do projeto é configurada em
+                 * Editar projeto › Equipe, e concede permissão em TODAS as
+                 * atividades. Este campo é de quem trabalha NESTA atividade.
+                 *
+                 * E faltava o essencial: participante EDITA a atividade (a RLS
+                 * reconhece por `is_activity_actor_v2`). Quem preenchia o campo
+                 * estava concedendo acesso sem que a tela dissesse isso em
+                 * lugar nenhum.
+                 */}
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" /> Equipe do Projeto
+                    <Users className="w-4 h-4 text-primary" /> Participantes da atividade
                   </Label>
                   {/* UM PAINEL, não uma linha por pessoa.
                       Antes cada clique criava uma linha VAZIA com um seletor
@@ -2833,6 +2868,10 @@ export const EditActivityDialog = ({
                   </Button>
                 </div>
 
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Trabalham junto nesta atividade e <strong className="font-medium text-foreground">também podem editá-la</strong> — mesmo sem permissão de edição na equipe do projeto.
+                </p>
+
                 {painelParticipantes && (
                   <SelecionarParticipantes
                     pessoas={allProfiles}
@@ -2842,6 +2881,27 @@ export const EditActivityDialog = ({
                        uma em cada um. */
                     equipeDoPai={equipeDoPai.nomes}
                     rotuloDoPai={equipeDoPai.rotulo}
+                    /**
+                     * Quem NÃO está na equipe aparece desabilitado, com o
+                     * motivo — em vez de sumir da lista.
+                     *
+                     * `members` é a equipe deste projeto; `allProfiles` são
+                     * todos os perfis ativos. A diferença entre as duas é
+                     * exatamente quem não pode ser atribuído.
+                     *
+                     * A checagem que vale está no banco desde a fase 02
+                     * (`trg_assignee_exige_equipe`). Aqui a tela só explica —
+                     * esconder não protegeria nada, e some sem dizer por quê é
+                     * o que faz a pessoa procurar o colega três vezes.
+                     */
+                    foraDaEquipe={
+                      members.length > 0
+                        ? allProfiles
+                            .filter((p) => p.full_name && !members.some((m) => m.id === p.id))
+                            .map((p) => p.full_name as string)
+                        : []
+                    }
+                    podeGerenciarEquipe={podeGerenciarProjetos}
                     onCancelar={() => setPainelParticipantes(false)}
                     onIncluir={(nomes) => {
                       const atuais = formData.participants.filter(Boolean);

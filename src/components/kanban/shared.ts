@@ -436,6 +436,12 @@ export interface ActivityKanbanProps {
   /** `project_members.can_edit` / `can_move` — permissão do membro no projeto. */
   canEdit?: boolean;
   canMove?: boolean;
+  /**
+   * `project_members.can_edit_own` — edita as atividades em que ATUA.
+   * `false` só no papel "Visualizar e comentar", que é o único que diz
+   * "não edita nem as dela". Omitido conta como `true`.
+   */
+  canEditOwn?: boolean;
   projectLocked?: boolean;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;

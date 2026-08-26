@@ -15,6 +15,7 @@ import { CheckCircle2, Circle, Pencil, Flag, Hourglass, Diamond, Layers } from "
 import { ActivityRegistro } from "@/components/ActivityRegistro";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { normalizeGut, GUT_META } from "@/lib/gutPriority";
+import { ROTULO_GUT_VAZIO } from "@/lib/mesaDePlanejamento";
 import { resolveEapKind } from "@/lib/eapModel";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { getStageDisplayTitle, type Activity, type WorkflowStage, type Phase } from "./shared";
@@ -147,7 +148,10 @@ export function ActivityDetailPanel({
             <div>
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">Prioridade</p>
               {normalizeGut(activity.priority) === "pendente" ? (
-                <p className="text-sm text-muted-foreground">Sem avaliação GUT</p>
+                /* "Sem avaliação GUT" descrevia o CAMPO; "Prioridade não
+                   avaliada" descreve a SITUAÇÃO — e é o que a pessoa precisa
+                   resolver. Fonte do rótulo: lib/mesaDePlanejamento. */
+                <p className="text-sm text-muted-foreground">{ROTULO_GUT_VAZIO}</p>
               ) : (
                 <p className="text-sm flex items-center gap-1.5">
                   <span className={cn("w-2 h-2 rounded-full", gut.dotClass)} />

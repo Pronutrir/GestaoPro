@@ -79,6 +79,53 @@
 
     --card-shadow: 0 1px 2px 0 rgb(16 24 40 / 0.05), 0 1px 3px 0 rgb(16 24 40 / 0.09);
     --card-shadow-hover: 0 4px 8px -2px rgb(16 24 40 / 0.10), 0 2px 4px -2px rgb(16 24 40 / 0.07);
+
+    /* ---- FASE 10 — tokens de tipografia, densidade, status e GUT ----------
+     * Vieram de docs/atividade-v2/tokens.css. O diff contra este arquivo deu
+     * ZERO conflito: 29 nomes iguais com o MESMO valor, 29 novos, e nenhum
+     * com valor divergente. Por isso foi adição, não substituição — nenhum
+     * token existente mudou.
+     *
+     * Os de STATUS já existiam espalhados como hex no código; passam a ter
+     * nome. Os de GUT são novos: o campo é o diferencial do produto e hoje é
+     * uma bolinha cinza. */
+    --status-nao-iniciado: 38 93% 50%;
+    --status-em-andamento: 220 90% 56%;
+    --status-pendencia:    24 95% 53%;
+    --status-concluida:    145 76% 36%;
+    --status-bar: 3px;
+
+    --font-sans: Roboto, system-ui, -apple-system, sans-serif;
+    --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --fs-label: 11px;
+    --ls-label: 0.06em;
+    --fs-value: 13px;
+    --fs-cell: 12.5px;
+    --fs-body: 13.5px;
+    --fs-card: 13.5px;
+    --fs-title: 22px;
+    --fs-page: 17px;
+    --lh-tight: 1.35;
+    --lh-body: 1.6;
+    --numeric: tabular-nums;
+
+    --row-h: 34px;
+    --row-head-h: 32px;
+    --control-h: 30px;
+    --col-head-h: 38px;
+    --radius-control: 6px;
+    --radius-card: 8px;
+
+    /* GUT — SÓ COLORE A PARTIR DE 60 (decisão 3 da fase 06). Abaixo disso o
+     * número fica cinza: se todo GUT é colorido, nenhum chama atenção.
+     * --gut-medio e --gut-baixo existem para gráfico e legenda, NÃO para a
+     * coluna GUT da tabela. */
+    --gut-critico: 0 84% 60%;    /* 100–125 */
+    --gut-alto:    32 95% 44%;   /* 60–99   */
+    --gut-medio:   215 25% 40%;  /* 25–59   */
+    --gut-baixo:   0 0% 46%;     /* 1–24    */
+    --gut-vazio:   0 0% 62%;     /* não avaliado */
   }
 
   .dark {
@@ -140,6 +187,26 @@
 
     --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
     --card-shadow-hover: 0 4px 6px -1px rgb(0 0 0 / 0.25), 0 2px 4px -2px rgb(0 0 0 / 0.15);
+
+    /* ---- FASE 10 — a variante ESCURA dos tokens novos --------------------
+     * Sem este bloco, os tokens acima ficariam com o valor claro no tema
+     * escuro — e isso não aparece para quem desenvolve no claro.
+     *
+     * Só as CORES mudam. Tipografia, densidade e raio são iguais nos dois
+     * temas: 34px de linha é 34px em qualquer fundo.
+     *
+     * As cores ganham luminosidade: o mesmo matiz que lê bem sobre branco
+     * some sobre #0B0F19. */
+    --status-nao-iniciado: 38 93% 62%;
+    --status-em-andamento: 220 90% 68%;
+    --status-pendencia:    24 95% 65%;
+    --status-concluida:    145 63% 52%;
+
+    --gut-critico: 0 84% 70%;
+    --gut-alto:    32 95% 60%;
+    --gut-medio:   215 25% 65%;
+    --gut-baixo:   0 0% 62%;
+    --gut-vazio:   0 0% 48%;
   }
 }
 

@@ -14,6 +14,9 @@ set -e
 #
 # Idempotente: CREATE OR REPLACE. Rodar duas vezes não faz nada na segunda.
 #
+# JA APLICADA EM PRODUCAO (conferido em 25/08/2026: consta em schema_migrations
+#   e can_member_action responde). Idempotente -- rodar de novo nao faz nada.
+#
 # RODAR NA VM:  PGPASSWORD=... ./scripts/apply-gestor-do-projeto-na-via-da-equipe.sh
 # ============================================================================
 

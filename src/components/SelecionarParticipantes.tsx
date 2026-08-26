@@ -39,6 +39,21 @@ interface Props {
   equipeDoPai?: string[];
   /** Código e título do pai, só para a faixa dizer de onde vem. */
   rotuloDoPai?: string;
+  /**
+   * Nomes que NÃO estão na equipe do projeto.
+   *
+   * Aparecem DESABILITADOS com o motivo, em vez de sumirem da lista. Sumir
+   * sem explicação é o que faz a pessoa procurar o colega três vezes antes de
+   * desistir — e a checagem de verdade está no banco (trigger
+   * `trg_assignee_exige_equipe`, fase 02), então esconder aqui não protege
+   * nada: protege a trigger, e a tela só explica.
+   *
+   * A regra por trás: atribuir alguém a uma atividade NUNCA dá a essa pessoa
+   * acesso que ela não tinha ao projeto. Quem entra, entra pela equipe.
+   */
+  foraDaEquipe?: string[];
+  /** Quem gerencia a equipe pode resolver ali mesmo; quem não, precisa saber a quem pedir. */
+  podeGerenciarEquipe?: boolean;
   onIncluir: (nomes: string[]) => void;
   onCancelar: () => void;
 }
@@ -58,6 +73,8 @@ const SEM_SETOR = "Sem setor";
 export const SelecionarParticipantes = ({
   pessoas,
   jaIncluidos,
+  foraDaEquipe,
+  podeGerenciarEquipe = false,
   equipeDoPai = [],
   rotuloDoPai,
   onIncluir,
@@ -67,6 +84,10 @@ export const SelecionarParticipantes = ({
   const [setor, setSetor] = useState<string | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
 
+  const foraSet = useMemo(
+    () => new Set((foraDaEquipe || []).map(norm)),
+    [foraDaEquipe],
+  );
   const incluidos = useMemo(
     () => new Set(jaIncluidos.map(norm)),
     [jaIncluidos],
@@ -139,15 +160,23 @@ export const SelecionarParticipantes = ({
     const nome = p.full_name!;
     const ja = incluidos.has(norm(nome));
     const marcado = sel.has(nome);
+    // Fora da equipe: aparece, mas não seleciona — e diz por quê.
+    const fora = foraSet.has(norm(nome));
+    const bloqueado = ja || fora;
     return (
       <button
         key={p.id}
         type="button"
-        disabled={ja}
-        onClick={() => alternar(nome)}
+        disabled={bloqueado}
+        onClick={() => { if (!bloqueado) alternar(nome); }}
+        title={fora
+          ? (podeGerenciarEquipe
+              ? "Não está na equipe do projeto. Adicione em Editar projeto › Equipe."
+              : "Não está na equipe do projeto. Peça a quem gerencia o projeto para incluir.")
+          : undefined}
         className={cn(
           "w-full flex items-center gap-2.5 px-3 py-2 text-left border-b border-border last:border-b-0 transition-colors",
-          ja ? "opacity-50 cursor-default" : "hover:bg-muted/50",
+          bloqueado ? "opacity-50 cursor-default" : "hover:bg-muted/50",
           marcado && "bg-primary/5",
         )}
       >
@@ -171,6 +200,11 @@ export const SelecionarParticipantes = ({
         {ja && (
           <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-success bg-success/10 px-1.5 py-0.5 rounded">
             já participa
+          </span>
+        )}
+        {!ja && fora && (
+          <span className="shrink-0 text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+            fora da equipe
           </span>
         )}
       </button>

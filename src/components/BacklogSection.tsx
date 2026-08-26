@@ -114,7 +114,7 @@ interface BacklogSectionProps {
   deleteBlockedReason?: string;
   hasActiveFilters?: boolean;
   /**
-   * A atividade é da pessoa (responsável ou participante)?
+   * A atividade é da pessoa (responsável, participante ou criador)?
    *
    * `undefined` quando ela edita tudo — aí não há distinção a fazer, e nem o
    * filtro nem a marca aparecem. Vem da página, que é onde vivem as
@@ -1147,7 +1147,7 @@ export const BacklogSection = ({
       setIsMoving(false);
       toast({
         title: "Você não pode mover essas tarefas",
-        description: "Só é possível mover as atividades em que você é responsável ou participante.",
+        description: "Só é possível mover as atividades em que você é responsável, participante ou criador.",
         variant: "destructive",
       });
       return;
@@ -3239,7 +3239,7 @@ export const BacklogSection = ({
                 aria-pressed={soMinhas}
                 title={soMinhas
                   ? "Mostrando só as atividades que você pode editar"
-                  : "Ver só as atividades em que você é responsável ou participante"}
+                  : "Ver só as atividades em que você é responsável, participante ou criador"}
               >
                 <UserCheck className="w-3.5 h-3.5" /> Minhas
               </Button>

@@ -4,8 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 
 const ACCESS_CACHE_TTL_MS = 60_000;
-const memberIdsCacheByUser = new Map<string, { ids: Set<string>; ts: number }>();
-const inflightByUser = new Map<string, Promise<Set<string>>>();
+const memberIdsCacheByUser = new Map<string, { ids: Set<string>; soPorAtividade: Set<string>; ts: number }>();
+const inflightByUser = new Map<string, Promise<{ ids: Set<string>; soPorAtividade: Set<string> }>>();
 
 /**
  * Retorna os projetos visíveis para o usuário atual conforme o modelo v2.
@@ -29,6 +29,7 @@ export const useProjectAccess = () => {
 
     if (isAdmin || !user?.id) {
       setMemberProjectIds(new Set());
+      setProjetosSoPorAtividade(new Set());
       setMembershipsLoading(false);
       return;
     }
@@ -36,6 +37,7 @@ export const useProjectAccess = () => {
     const cached = memberIdsCacheByUser.get(user.id);
     if (cached && Date.now() - cached.ts < ACCESS_CACHE_TTL_MS) {
       setMemberProjectIds(new Set(cached.ids));
+      setProjetosSoPorAtividade(new Set(cached.soPorAtividade));
       setMembershipsLoading(false);
       return;
     }
@@ -123,7 +125,20 @@ export const useProjectAccess = () => {
             });
           }
 
-          return ids;
+          /**
+           * `amplos` era montado e DESCARTADO.
+           *
+           * A função devolvia só `ids`, então `setProjetosSoPorAtividade` nunca
+           * era chamado e o hook sempre entregava um Set vazio — o recorte de
+           * KPI que o comentário acima descreve não acontecia. Achado no
+           * inventário de 25/08/2026.
+           *
+           * "Só por atividade" é o que sobra: quem está em `ids` (alcança o
+           * projeto) e NÃO em `amplos` (não é membro, dono, líder nem gestor).
+           */
+          const soPorAtividade = new Set<string>();
+          ids.forEach((id) => { if (!amplos.has(id)) soPorAtividade.add(id); });
+          return { ids, soPorAtividade };
         })().finally(() => {
           inflightByUser.delete(user.id);
         });
@@ -131,12 +146,14 @@ export const useProjectAccess = () => {
         inflightByUser.set(user.id, inflight);
       }
 
-      const ids = await inflight;
-      memberIdsCacheByUser.set(user.id, { ids: new Set(ids), ts: Date.now() });
+      const { ids, soPorAtividade } = await inflight;
+      memberIdsCacheByUser.set(user.id, { ids: new Set(ids), soPorAtividade: new Set(soPorAtividade), ts: Date.now() });
       setMemberProjectIds(new Set(ids));
+      setProjetosSoPorAtividade(new Set(soPorAtividade));
     } catch (error) {
       console.error("[useProjectAccess] loadMemberships failed", error);
       setMemberProjectIds(new Set());
+      setProjetosSoPorAtividade(new Set());
     } finally {
       setMembershipsLoading(false);
     }

@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { contarNovos, lerUltimaVisita, marcarVisita } from "@/lib/ultimaLeitura";
 
 /**
  * REGISTRO DA ATIVIDADE — Conversa + Histórico.
@@ -68,17 +69,53 @@ type Tab = "chat" | "history";
  */
 const REACOES = ["👍", "👀", "✅"] as const;
 
-const FIELD_LABELS: Record<string, string> = {
+export const FIELD_LABELS: Record<string, string> = {
   title: "Título", description: "Descrição", status: "Status",
   start_date: "Início", end_date: "Prazo", workflow_stage_id: "Etapa",
   assigned_to: "Responsável", priority: "Prioridade", progress: "Progresso",
   planned_hours: "Horas planejadas", actual_hours: "Horas realizadas", cost: "Custo",
 };
-const fmtVal = (v: any) => {
+/**
+ * O HISTÓRICO PARA DE MOSTRAR UUID E ENUM EM INGLÊS.
+ *
+ * Mostrava, literalmente, `Etapa: <uuid> → <uuid>` e `Status: pending →
+ * completed`. `FIELD_LABELS` traduzia a CHAVE do campo, e o VALOR saía por
+ * `String(v)`.
+ *
+ * A causa está na origem: `audit_log.old_data`/`new_data` são o `row_to_json`
+ * cru da linha, então `workflow_stage_id` é gravado como UUID. Resolver na
+ * origem exigiria reescrever a trigger de auditoria e **não corrigiria o
+ * histórico já gravado** — que é justamente o que as pessoas leem.
+ *
+ * Então a resolução acontece na leitura, mas num ponto só: este arquivo e o
+ * `AuditLogPanel` consomem o mesmo `fmtValor`. Um de-para por componente é
+ * como o defeito sobreviveu — o segundo consumidor sempre volta a mostrar UUID.
+ */
+const STATUS_LABELS: Record<string, string> = {
+  pending: "Pendente",
+  in_progress: "Em andamento",
+  completed: "Concluída",
+  cancelled: "Cancelada",
+  blocked: "Bloqueada",
+};
+
+const EH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `nomes` resolve UUID → rótulo (colunas do quadro, perfis). O que não estiver
+ * no mapa cai num traço curto em vez do UUID: mostrar o identificador não
+ * ajuda ninguém, e vazar id de uma coluna que a pessoa não enxerga é pior.
+ */
+export const fmtValor = (v: any, campo?: string, nomes?: Record<string, string>): string => {
   if (v === null || v === undefined || v === "") return "—";
-  if (Array.isArray(v)) return v.length === 0 ? "—" : v.join(", ");
+  if (Array.isArray(v)) return v.length === 0 ? "—" : v.map((x) => fmtValor(x, campo, nomes)).join(", ");
   if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
+
+  const s = String(v);
+
+  if (campo === "status") return STATUS_LABELS[s] ?? s;
+  if (EH_UUID.test(s)) return nomes?.[s] ?? "—";
+  return s;
 };
 
 interface Props {
@@ -100,6 +137,17 @@ export const ActivityRegistro = ({
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [subMap, setSubMap] = useState<Record<string, string>>({});
   const [people, setPeople] = useState<Person[]>([]);
+  /** UUID -> rotulo legivel, para o historico. Ver fmtValor. */
+  const [nomesPorId, setNomesPorId] = useState<Record<string, string>>({});
+  /**
+   * O SINO — quantos eventos chegaram desde a última visita.
+   *
+   * Fixado na montagem, de propósito: se acompanhasse o estado, zeraria no
+   * instante em que a aba fosse aberta e a pessoa nunca veria o número que
+   * a fez clicar. Ele conta o que havia AO CHEGAR, e some quando ela lê.
+   */
+  const [visitaAnterior] = useState<string | null>(() => lerUltimaVisita(user?.id, activityId));
+  const [lido, setLido] = useState<{ chat: boolean; history: boolean }>({ chat: false, history: false });
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Comment | null>(null);
@@ -131,6 +179,46 @@ export const ActivityRegistro = ({
 
   const avatarMap = useAssigneeAvatarLookup([authorName, ...comments.map((c) => c.author)]);
 
+  /**
+   * NOVOS DESDE A ÚLTIMA VISITA, por aba.
+   *
+   * O que a própria pessoa escreveu não conta: ela acabou de causar o evento,
+   * e um sino que acende com o próprio clique vira ruído em duas horas.
+   */
+  const novosNaConversa = useMemo(
+    () => (lido.chat ? 0 : contarNovos(
+      comments.map((c) => c.created_at),
+      visitaAnterior,
+      (i) => isOwn(comments[i]?.author ?? null),
+    )),
+    // `isOwn` deriva de authorName, que já está nas deps por comments.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [comments, visitaAnterior, lido.chat, authorName],
+  );
+
+  const novosNoHistorico = useMemo(
+    () => (lido.history ? 0 : contarNovos(
+      audit.map((a) => a.created_at),
+      visitaAnterior,
+      (i) => {
+        const email = audit[i]?.changed_by_email;
+        return !!email && !!user?.email && email.toLowerCase() === user.email.toLowerCase();
+      },
+    )),
+    [audit, visitaAnterior, lido.history, user?.email],
+  );
+
+  /**
+   * Marca a visita ao SAIR, não ao entrar.
+   *
+   * Marcar na entrada apagaria a referência antes de a pessoa ler — ela abre,
+   * é interrompida, fecha, e o que chegou some do contador sem ter sido visto.
+   * A limpeza do efeito roda na desmontagem e na troca de atividade.
+   */
+  useEffect(() => {
+    return () => { marcarVisita(user?.id, activityId); };
+  }, [activityId, user?.id]);
+
   const fetchComments = useCallback(async () => {
     let ids: string[] = [activityId];
     let map: Record<string, string> = {};
@@ -157,12 +245,43 @@ export const ActivityRegistro = ({
     setAudit((data as AuditEntry[]) || []);
   }, [activityId]);
 
+  /**
+   * UUID → nome, para o histórico. Sem isto ele mostra o identificador cru.
+   *
+   * Só as colunas DESTE projeto: são ~7 por projeto, contra 304 na base. E a
+   * RLS já recorta — se a pessoa não enxerga o projeto, o mapa vem vazio e o
+   * valor cai no traço, que é o comportamento certo.
+   */
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelado = false;
+    void supabase
+      .from("workflow_stages").select("id, title")
+      .eq("project_id", projectId)
+      .then(({ data }) => {
+        if (cancelado || !data) return;
+        const m: Record<string, string> = {};
+        (data as { id: string; title: string | null }[]).forEach((s) => {
+          if (s.title) m[s.id] = s.title;
+        });
+        setNomesPorId((atual) => ({ ...atual, ...m }));
+      });
+    return () => { cancelado = true; };
+  }, [projectId]);
+
   useEffect(() => { fetchComments(); fetchAudit(); }, [fetchComments, fetchAudit]);
 
   // Pessoas para @menção.
   useEffect(() => {
     supabase.from("profiles").select("id, full_name, avatar_url").eq("is_active", true)
-      .then(({ data }) => setPeople(((data as Person[]) || []).filter((p) => p.full_name)));
+      .then(({ data }) => {
+        const lista = ((data as Person[]) || []).filter((p) => p.full_name);
+        setPeople(lista);
+        // Parte da base guarda UUID em  -- o mapa cobre os dois.
+        const m: Record<string, string> = {};
+        lista.forEach((p) => { if (p.full_name) m[p.id] = p.full_name; });
+        setNomesPorId((atual) => ({ ...atual, ...m }));
+      });
   }, []);
 
   // Rola a conversa para o fim quando chegam mensagens.
@@ -537,7 +656,7 @@ export const ActivityRegistro = ({
       {/* Abas Conversa / Histórico */}
       <div className="flex items-center gap-1 mb-3">
         <button
-          type="button" onClick={() => setTab("chat")}
+          type="button" onClick={() => { setTab("chat"); setLido((l) => ({ ...l, chat: true })); }}
           className={cn(
             "inline-flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded-lg font-medium transition-colors",
             tab === "chat" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -545,15 +664,31 @@ export const ActivityRegistro = ({
         >
           <MessageSquare className="w-4 h-4" /> Conversa
           {comments.length > 0 && <span className="text-[11px] tabular-nums opacity-70">{comments.length}</span>}
+          {novosNaConversa > 0 && (
+            <span
+              title={novosNaConversa + " desde a sua última visita"}
+              className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums grid place-items-center"
+            >
+              {novosNaConversa}
+            </span>
+          )}
         </button>
         <button
-          type="button" onClick={() => setTab("history")}
+          type="button" onClick={() => { setTab("history"); setLido((l) => ({ ...l, history: true })); }}
           className={cn(
             "inline-flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded-lg font-medium transition-colors",
             tab === "history" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
           )}
         >
           <Cog className="w-4 h-4" /> Histórico
+          {novosNoHistorico > 0 && (
+            <span
+              title={novosNoHistorico + " desde a sua última visita"}
+              className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums grid place-items-center"
+            >
+              {novosNoHistorico}
+            </span>
+          )}
         </button>
       </div>
 
@@ -882,8 +1017,8 @@ export const ActivityRegistro = ({
                     {changes.map((f) => (
                       <div key={f} className="text-[11.5px] text-foreground/80">
                         <span className="font-medium">{FIELD_LABELS[f]}:</span>{" "}
-                        <span className="line-through text-muted-foreground">{fmtVal(a.old_data?.[f])}</span>
-                        {" → "}<span className="text-foreground">{fmtVal(a.new_data?.[f])}</span>
+                        <span className="line-through text-muted-foreground">{fmtValor(a.old_data?.[f], f, nomesPorId)}</span>
+                        {" → "}<span className="text-foreground">{fmtValor(a.new_data?.[f], f, nomesPorId)}</span>
                       </div>
                     ))}
                   </div>
