@@ -587,35 +587,32 @@ export const EditActivityDialog = ({
   const subHoursTotal = ownSubActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
   const parentHoursNum = hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours);
 
-  // Rollup no banco: sempre que a soma das subs mudar (add/remover/editar horas
-  // de uma sub, concluir), persiste o total no pai se estiver defasado. Cobre
-  // todos os caminhos de edição de sub deste diálogo num único ponto.
-  useEffect(() => {
-    if (createMode || !effectiveActivity || !hasSubActivities) return;
-    const current = Number((effectiveActivity as any).hours) || 0;
-    if (Math.abs(current - subHoursTotal) <= 0.01) return;
-    void supabase
-      .from("activities")
-      .update({ hours: subHoursTotal } as any)
-      .eq("id", effectiveActivity.id)
-      .then(() => onActivityUpdated());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subHoursTotal, hasSubActivities, effectiveActivity?.id, createMode]);
+  /**
+   * O ROLLUP DEIXOU DE SER PERSISTIDO PELO CLIENTE (25/08/2026).
+   *
+   * Havia aqui um `useEffect` que gravava `hours` do pai com a soma de
+   * `ownSubActivities` — sem clique, ao abrir o diálogo.
+   *
+   * `ownSubActivities` vem de `fetchSubActivities`, um `select` comum que
+   * PASSA PELA RLS. Quem enxerga 1 de 8 subatividades recebia 1, e o efeito
+   * gravava no banco o total daquela única filha. As outras 7 sumiam da conta
+   * — sem interação, sem aviso, sem rastro de quem causou. Aparecia semanas
+   * depois no relatório, e não havia como rastrear.
+   *
+   * A regra em si (pai com filhas = soma das filhas) continua valendo e
+   * continua exibida abaixo, como LEITURA. O que sai é a gravação: agregado
+   * derivado tem de ser calculado sobre a árvore INTEIRA, o que só o servidor
+   * pode fazer — é a fase 09 do plano (`docs/atividade-v2/fases/09-*`).
+   *
+   * Até a fase 09 existir, o valor exibido segue correto para quem enxerga
+   * tudo, e para quem enxerga uma fatia continua sendo uma leitura parcial —
+   * mas não contamina mais o banco.
+   */
 
-  // Custo: mesma regra dos 100% — com subs, o custo do pai é a soma das subs
-  // (rollup somente-leitura + persistência no banco).
+  // Custo: mesma regra dos 100% — com subs, o custo do pai é a soma das subs.
+  // SOMENTE LEITURA: a gravação saiu junto com a de horas, pela mesma razão
+  // (ver o bloco acima). Derivar sobre uma fatia e persistir encolhia o pai.
   const subCostTotal = ownSubActivities.reduce((sum, s) => sum + (Number((s as any).cost) || 0), 0);
-  useEffect(() => {
-    if (createMode || !effectiveActivity || !hasSubActivities) return;
-    const current = Number((effectiveActivity as any).cost) || 0;
-    if (Math.abs(current - subCostTotal) <= 0.01) return;
-    void supabase
-      .from("activities")
-      .update({ cost: subCostTotal } as any)
-      .eq("id", effectiveActivity.id)
-      .then(() => onActivityUpdated());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subCostTotal, hasSubActivities, effectiveActivity?.id, createMode]);
 
   // Horas: Consumidas (automático por conclusão) e Planejadas
   const subsComputed = subActivities.reduce((sum, s) => {
@@ -1285,9 +1282,26 @@ export const EditActivityDialog = ({
         actual_start_date: formData.actual_start_date || null,
         actual_end_date: formData.actual_end_date || null,
         end_date: formData.end_date || null,
-        cost: hasSubActivities ? subCostTotal : (parseFloat(formData.cost) || 0),
-        // Rollup: com subatividades, o planejado do pai é a soma dos filhos.
-        hours: hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours),
+        /**
+         * COM SUBATIVIDADES, `hours` E `cost` NÃO SÃO ESCRITOS.
+         *
+         * Eram `hasSubActivities ? subCostTotal : ...` — mas `subCostTotal` e
+         * `subHoursTotal` derivam de `ownSubActivities`, que vem de um `select`
+         * que PASSA PELA RLS. Um usuário que enxerga 1 de 8 filhas salvava
+         * qualquer campo do pai (o título, uma etiqueta) e levava junto o total
+         * das 8 substituído pelo total de 1.
+         *
+         * O `useEffect` que gravava isso sozinho saiu (ver o bloco perto de
+         * `subHoursTotal`); este era o segundo caminho, e sai pela mesma razão.
+         *
+         * `undefined` não vira coluna no payload do PostgREST, então o valor no
+         * banco fica como está — que é o certo enquanto quem deriva é a tela.
+         * A derivação de verdade é a fase 09, no servidor, sobre a árvore toda.
+         *
+         * Sem filhas o comportamento não muda: o valor é do próprio formulário.
+         */
+        cost: hasSubActivities ? undefined : (parseFloat(formData.cost) || 0),
+        hours: hasSubActivities ? undefined : parseHoursInput(formData.hours),
         phase_id: formData.phase_id || null,
         gravity: formData.gravity,
         urgency: formData.urgency,
