@@ -1,0 +1,2041 @@
+{
+  "descricao": "Matriz de acesso a uma atividade no Gestao Pro v2. Fixture para os testes da Fase 03 (camada de acesso) e para conferir a RLS.",
+  "ordemDeDecisao": [
+    "1. E administrador do sistema?",
+    "2. O perfil e Visualizador? (canWrite=false anula o papel de projeto; encerra aqui)",
+    "3. E dono ou gestor deste projeto?",
+    "4. Qual o papel na equipe do projeto?",
+    "5. E responsavel ou participante desta atividade?",
+    "6. Sem acesso."
+  ],
+  "capacidades": {
+    "canView": "abrir e listar a atividade",
+    "canComment": "comentar e mencionar",
+    "canEditExecucao": "status, datas reais, horas apontadas, anexos",
+    "canEditPlanejamento": "previsto, GUT, custo, posicao na EAP",
+    "canAssign": "definir responsaveis e participantes",
+    "canPromover": "mover do backlog para o quadro",
+    "canAssumir": "pegar para si atividade sem responsavel ja no quadro",
+    "canDelete": "excluir",
+    "canManageTeam": "adicionar pessoas a equipe do projeto"
+  },
+  "totalDeCasos": 108,
+  "casos": [
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "admin",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "1-admin",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "6-sem-acesso",
+      "escopoDeLeitura": "nenhum",
+      "esperado": {
+        "canView": false,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "gestor",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "6-sem-acesso",
+      "escopoDeLeitura": "nenhum",
+      "esperado": {
+        "canView": false,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "coordenador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "6-sem-acesso",
+      "escopoDeLeitura": "nenhum",
+      "esperado": {
+        "canView": false,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "colaborador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "6-sem-acesso",
+      "escopoDeLeitura": "nenhum",
+      "esperado": {
+        "canView": false,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "visualizador",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "2-perfil-visualizador",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "dono_gestor",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "3-dono-gestor-do-projeto",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": true
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_excluir",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-e-excluir",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": true,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_tudo",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-tudo",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": true,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "editar_minhas",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-editar-apenas-as-minhas",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": true,
+        "canAssign": true,
+        "canPromover": false,
+        "canAssumir": true,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "ver_comentar",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "4-equipe-visualizar-e-comentar",
+      "escopoDeLeitura": "projeto",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "nenhum",
+      "passoQueDecidiu": "6-sem-acesso",
+      "escopoDeLeitura": "nenhum",
+      "esperado": {
+        "canView": false,
+        "canComment": false,
+        "canEditExecucao": false,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "participante",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    },
+    {
+      "perfil": "externo",
+      "papelNoProjeto": "fora_da_equipe",
+      "vinculoComAtividade": "responsavel",
+      "passoQueDecidiu": "5-ator-da-atividade",
+      "escopoDeLeitura": "atividade_e_trilha",
+      "esperado": {
+        "canView": true,
+        "canComment": true,
+        "canEditExecucao": true,
+        "canEditPlanejamento": false,
+        "canAssign": false,
+        "canPromover": false,
+        "canAssumir": false,
+        "canDelete": false,
+        "canManageTeam": false
+      },
+      "restricoes": {
+        "podeSerResponsavel": false,
+        "veCusto": false
+      }
+    }
+  ]
+}
