@@ -173,3 +173,38 @@ As duas leituras são defensáveis:
 **Não resolvi.** É decisão de produto, e as duas são coerentes. Está anotada na fase 09 como
 pendência explícita — o importante é que **as duas regras que o kit acrescenta**
 (marco estende o término do pai, e marco conta como filha aberta) valem **nas duas leituras**.
+
+---
+
+## 7. "Agrupador nunca vira card" contradiz a decisão de 13/08  ·  fase 04
+
+O `CLAUDE.md` do kit diz: *"Fase, Entrega e Pacote **nunca** viram card no Kanban — viram chip
+na filha e, opcionalmente, raia. Só itens do tipo Atividade viram card."*
+
+**O repositório decidiu o contrário, e registrou o porquê** (`BacklogSection.tsx:1102-1114`):
+
+> *"O AGRUPADOR VAI JUNTO (13/08/2026). Era `idsFolhaSelecionados()`: a fase/entrega ficava de
+> fora, sob o argumento de que 'agrupador não vive numa coluna do Kanban'. Só que a decisão de
+> produto mudou — o que é mandado para o quadro aparece no quadro, agrupador inclusive — e o
+> efeito era o relatado: você move uma fase inteira, as tarefas vão e a fase fica para trás no
+> Backlog."*
+
+O medo que sustentava a regra antiga já foi endereçado: o percentual do agrupador é a média
+dos filhos e **ignora a própria coluna** (`isGrouper` em `activityProgress`). Mover a caixa não
+move o conteúdo, e o número não mente.
+
+**Resolução: mantido o que o código faz.** Agrupador continua indo ao quadro quando alguém o
+manda. Reverter isso traria de volta um defeito relatado por usuário — a fase que fica para
+trás — para satisfazer uma regra escrita antes daquela decisão.
+
+**O que da fase 04 continua valendo, e foi feito:**
+
+- **Marco nunca vira card** — já era regra e já está implementado (dois filtros, commit `0c96834`).
+- **Promover move só a atividade escolhida**, nunca ancestrais nem subárvore.
+- O campo `estagio` como espelho (migration `20260826140000`).
+
+**O que NÃO foi feito, e por quê:** o item 3 do prompt (chip da fase no card, "Agrupar por"
+com raia) é reescrita de interface no `ActivityKanban.tsx`, que tem 4.000+ linhas. Sem poder
+executar a aplicação, uma mudança dessa natureza é escrita às cegas — e o agrupamento por
+responsável já existe hoje (`ActivityKanban.tsx:831-836`). Fica para quando houver como testar
+as duas pontas.

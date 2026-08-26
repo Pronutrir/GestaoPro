@@ -421,7 +421,7 @@ export const EditActivityDialog = ({
   canEditProject = true,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
-  const { user: authUser, profile: authProfile } = useAuth();
+  const { user: authUser, profile: authProfile, canManage: podeGerenciarProjetos } = useAuth();
   const ensureProjectUnlocked = () => {
     if (!projectLocked) return true;
     toast({
@@ -2873,6 +2873,27 @@ export const EditActivityDialog = ({
                        uma em cada um. */
                     equipeDoPai={equipeDoPai.nomes}
                     rotuloDoPai={equipeDoPai.rotulo}
+                    /**
+                     * Quem NÃO está na equipe aparece desabilitado, com o
+                     * motivo — em vez de sumir da lista.
+                     *
+                     * `members` é a equipe deste projeto; `allProfiles` são
+                     * todos os perfis ativos. A diferença entre as duas é
+                     * exatamente quem não pode ser atribuído.
+                     *
+                     * A checagem que vale está no banco desde a fase 02
+                     * (`trg_assignee_exige_equipe`). Aqui a tela só explica —
+                     * esconder não protegeria nada, e some sem dizer por quê é
+                     * o que faz a pessoa procurar o colega três vezes.
+                     */
+                    foraDaEquipe={
+                      members.length > 0
+                        ? allProfiles
+                            .filter((p) => p.full_name && !members.some((m) => m.id === p.id))
+                            .map((p) => p.full_name as string)
+                        : []
+                    }
+                    podeGerenciarEquipe={podeGerenciarProjetos}
                     onCancelar={() => setPainelParticipantes(false)}
                     onIncluir={(nomes) => {
                       const atuais = formData.participants.filter(Boolean);
