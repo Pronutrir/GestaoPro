@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { contarNovos, lerUltimaVisita, marcarVisita } from "@/lib/ultimaLeitura";
 
 /**
  * REGISTRO DA ATIVIDADE — Conversa + Histórico.
@@ -138,6 +139,15 @@ export const ActivityRegistro = ({
   const [people, setPeople] = useState<Person[]>([]);
   /** UUID -> rotulo legivel, para o historico. Ver fmtValor. */
   const [nomesPorId, setNomesPorId] = useState<Record<string, string>>({});
+  /**
+   * O SINO — quantos eventos chegaram desde a última visita.
+   *
+   * Fixado na montagem, de propósito: se acompanhasse o estado, zeraria no
+   * instante em que a aba fosse aberta e a pessoa nunca veria o número que
+   * a fez clicar. Ele conta o que havia AO CHEGAR, e some quando ela lê.
+   */
+  const [visitaAnterior] = useState<string | null>(() => lerUltimaVisita(user?.id, activityId));
+  const [lido, setLido] = useState<{ chat: boolean; history: boolean }>({ chat: false, history: false });
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Comment | null>(null);
@@ -168,6 +178,46 @@ export const ActivityRegistro = ({
   const isMe = (a: string | null) => isOwn(a);
 
   const avatarMap = useAssigneeAvatarLookup([authorName, ...comments.map((c) => c.author)]);
+
+  /**
+   * NOVOS DESDE A ÚLTIMA VISITA, por aba.
+   *
+   * O que a própria pessoa escreveu não conta: ela acabou de causar o evento,
+   * e um sino que acende com o próprio clique vira ruído em duas horas.
+   */
+  const novosNaConversa = useMemo(
+    () => (lido.chat ? 0 : contarNovos(
+      comments.map((c) => c.created_at),
+      visitaAnterior,
+      (i) => isOwn(comments[i]?.author ?? null),
+    )),
+    // `isOwn` deriva de authorName, que já está nas deps por comments.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [comments, visitaAnterior, lido.chat, authorName],
+  );
+
+  const novosNoHistorico = useMemo(
+    () => (lido.history ? 0 : contarNovos(
+      audit.map((a) => a.created_at),
+      visitaAnterior,
+      (i) => {
+        const email = audit[i]?.changed_by_email;
+        return !!email && !!user?.email && email.toLowerCase() === user.email.toLowerCase();
+      },
+    )),
+    [audit, visitaAnterior, lido.history, user?.email],
+  );
+
+  /**
+   * Marca a visita ao SAIR, não ao entrar.
+   *
+   * Marcar na entrada apagaria a referência antes de a pessoa ler — ela abre,
+   * é interrompida, fecha, e o que chegou some do contador sem ter sido visto.
+   * A limpeza do efeito roda na desmontagem e na troca de atividade.
+   */
+  useEffect(() => {
+    return () => { marcarVisita(user?.id, activityId); };
+  }, [activityId, user?.id]);
 
   const fetchComments = useCallback(async () => {
     let ids: string[] = [activityId];
@@ -606,7 +656,7 @@ export const ActivityRegistro = ({
       {/* Abas Conversa / Histórico */}
       <div className="flex items-center gap-1 mb-3">
         <button
-          type="button" onClick={() => setTab("chat")}
+          type="button" onClick={() => { setTab("chat"); setLido((l) => ({ ...l, chat: true })); }}
           className={cn(
             "inline-flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded-lg font-medium transition-colors",
             tab === "chat" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -614,15 +664,31 @@ export const ActivityRegistro = ({
         >
           <MessageSquare className="w-4 h-4" /> Conversa
           {comments.length > 0 && <span className="text-[11px] tabular-nums opacity-70">{comments.length}</span>}
+          {novosNaConversa > 0 && (
+            <span
+              title={novosNaConversa + " desde a sua última visita"}
+              className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums grid place-items-center"
+            >
+              {novosNaConversa}
+            </span>
+          )}
         </button>
         <button
-          type="button" onClick={() => setTab("history")}
+          type="button" onClick={() => { setTab("history"); setLido((l) => ({ ...l, history: true })); }}
           className={cn(
             "inline-flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded-lg font-medium transition-colors",
             tab === "history" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
           )}
         >
           <Cog className="w-4 h-4" /> Histórico
+          {novosNoHistorico > 0 && (
+            <span
+              title={novosNoHistorico + " desde a sua última visita"}
+              className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums grid place-items-center"
+            >
+              {novosNoHistorico}
+            </span>
+          )}
         </button>
       </div>
 
