@@ -96,6 +96,15 @@ SELECT DISTINCT ON (a.id) a.id, pr.id, 'responsavel', a.created_by
  WHERE a.assigned_to IS NOT NULL
    AND trim(a.assigned_to) <> ''
    AND a.is_trashed = false
+   -- Idempotencia: nao insere responsavel se a atividade ja tem um. Sem isto,
+   -- como DISTINCT ON e nao-deterministico, um 2o run poderia escolher outro
+   -- perfil para a mesma atividade e violar activity_assignees_um_responsavel
+   -- (que o ON CONFLICT por (activity_id,user_id) nao cobre).
+   AND NOT EXISTS (
+     SELECT 1 FROM public.activity_assignees aa
+      WHERE aa.activity_id = a.id AND aa.papel = 'responsavel'
+   )
+ ORDER BY a.id, pr.id
 ON CONFLICT (activity_id, user_id) DO NOTHING;
 
 INSERT INTO public.activity_assignees (activity_id, user_id, papel, created_by)
