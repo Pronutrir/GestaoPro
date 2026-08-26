@@ -38,3 +38,6 @@ scripts/vps-supabase-compose.yml
 scripts/reset-password.sh
 scripts/configure-azure-supabase.sh
 backup-*.json
+
+# Recortes temporarios das medicoes contra o banco (nunca versionados)
+_*.json
