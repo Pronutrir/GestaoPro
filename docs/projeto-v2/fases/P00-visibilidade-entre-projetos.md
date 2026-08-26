@@ -3,6 +3,12 @@
 **Onda 1 · antes de tudo** · exige migration · **a única desta onda que pode tirar leitura de
 alguém se sair errada**
 
+> **JÁ ESCRITA.** A migration é `20260826150000`, o rollback é `20260826150001`, e o script
+> é `scripts/apply-p00-escopo-de-leitura.sh` — com a sonda de cinco perguntas, incluindo a
+> que decide (quantas dessas atividades a pessoa mexeu nos últimos 90 dias).
+>
+> **Pendente de aplicar na VM**, depois de `apply-fase02-assignees.sh`.
+
 ## O que foi confirmado no código
 
 O kit acrescentou à fase 03 do Atividade v2 um item sobre as listas globais. Ao conferir,
