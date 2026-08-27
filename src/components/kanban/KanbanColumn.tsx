@@ -50,6 +50,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import { computeActivityProgress, type ActivityProgress } from "@/lib/activityProgress";
+import { faixaDoCartao } from "@/lib/quadroDeExecucao";
 
 import { compararData } from "@/lib/dataLocal";
 import { normalizeGut, type GutLevel } from "@/lib/gutPriority";
@@ -494,6 +495,28 @@ export function SortableColumn({
     return map;
   }, [activities]);
 
+  // ── O que `faixaDoCartao` consulta ────────────────────────────────────────
+  // `childrenByParent` acima já serve como "filhas por pai"; faltam o índice
+  // por id (para subir a cadeia) e as colunas (para saber se o agrupador já
+  // foi promovido — pacote na fila não desenha faixa).
+  const itemPorIdParaFaixa = useMemo(
+    () => new Map(activities.map((a) => [a.id, a as never])),
+    [activities],
+  );
+  const filhasPorPaiParaFaixa = childrenByParent as unknown as Map<string, never[]>;
+  /**
+   * TODAS as colunas do projeto, por id.
+   *
+   * `faixaDoCartao` precisa saber se o agrupador já foi promovido — e isso
+   * depende da CATEGORIA da coluna dele, que pode ser a de backlog. Derivar
+   * das atividades visíveis daria a resposta errada: um pacote ainda na fila
+   * desenharia faixa, anunciando no quadro uma caixa que ninguém promoveu.
+   */
+  const colunaPorIdParaFaixa = useMemo(
+    () => new Map(allStages.map((s) => [s.id, s as never])),
+    [allStages],
+  );
+
   const descendantSummaryById = useMemo(() => {
     const memo = new Map<string, { completed: number; pending: number }>();
 
@@ -729,8 +752,32 @@ export function SortableColumn({
     // Mesma condição de `ehEspelho`, calculada acima — o resumo do cartão
     // depende dela, e duplicar o teste é como as duas metades divergem.
     const isMirrorParent = ehEspelho;
-    const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
-    const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
+    /**
+     * A FAIXA DO CARTÃO — o agrupador ao qual ele pertence.
+     *
+     * Antes só aparecia quando o pai estava em OUTRA coluna, porque o pai
+     * também era cartão e ver os dois lado a lado era redundante.
+     *
+     * Agora agrupador não é cartão em coluna nenhuma (ver `activitiesByStage`
+     * em ActivityKanban), então a faixa é a ÚNICA pista de a que pacote o
+     * cartão pertence — e ela vale sempre, em qualquer coluna. É o que mantém
+     * "a faixa continua inteira" quando as filhas se espalham: cada cartão
+     * carrega o nome do pacote consigo.
+     *
+     * `faixaDoCartao` sobe até o agrupador mais próximo, então uma atividade
+     * dentro de um pacote dentro de uma fase mostra o PACOTE — o contexto mais
+     * imediato, não a raiz.
+     */
+    const faixaId = faixaDoCartao(
+      activity as never,
+      itemPorIdParaFaixa,
+      filhasPorPaiParaFaixa,
+      colunaPorIdParaFaixa,
+    );
+    const parentAct = faixaId
+      ? activities.find((p) => p.id === faixaId)
+      : (activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null);
+    const parentBreadcrumb = parentAct
       ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
       : null;
     // Subatividades impedidas: agora pela flag da própria atividade, não por
