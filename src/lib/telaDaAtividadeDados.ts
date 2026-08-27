@@ -241,3 +241,143 @@ export function resumoDasSubatividades(
   if (t.termino) partes.push(`término ${formatarData(t.termino)}`);
   return partes.length > 0 ? partes.join(" · ") : null;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * O FEED — o que ACONTECEU, agrupado por dia
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export interface EventoDoBanco {
+  id: string;
+  tipo: string;
+  texto: string;
+  autor_nome: string | null;
+  created_at: string;
+  activity_id: string;
+  feed_de: string;
+}
+
+/**
+ * Os eventos de uma atividade, incluindo os que subiram das filhas.
+ *
+ * `feed_de` é o filtro: a trigger `trg_feed_evento_sobe` já duplicou para o pai
+ * o que nasceu numa filha, então uma consulta só traz os dois. Sem ela, a tela
+ * teria de carregar a subárvore inteira para montar o feed — e a subárvore
+ * passa pela RLS, o que devolveria um feed diferente para cada pessoa pelo
+ * motivo errado.
+ */
+export async function carregarFeed(
+  activityId: string,
+  limite = 60,
+): Promise<EventoDoBanco[]> {
+  const { data, error } = await tabela("activity_feed_eventos")
+    .select("id, tipo, texto, autor_nome, created_at, activity_id, feed_de")
+    .eq("feed_de", activityId)
+    .order("created_at", { ascending: false })
+    .limit(limite);
+
+  if (error) throw new Error(`não foi possível ler o feed: ${error.message}`);
+  return (data ?? []) as unknown as EventoDoBanco[];
+}
+
+/**
+ * Quantos eventos entraram desde a última visita desta pessoa.
+ *
+ * Sem visita registrada, o não-lido é ZERO — não "tudo". Quem abre uma
+ * atividade pela primeira vez não tem 40 pendências para ler; tem um histórico
+ * para consultar se quiser. Marcar tudo como novo faria o sino gritar em toda
+ * atividade que a pessoa nunca abriu.
+ */
+export async function contarNaoLidos(
+  activityId: string,
+  userId: string,
+): Promise<number> {
+  const { data: visita } = await tabela("activity_feed_visitas")
+    .select("visto_em")
+    .eq("user_id", userId)
+    .eq("activity_id", activityId)
+    .maybeSingle();
+
+  const desde = (visita as { visto_em?: string } | null)?.visto_em;
+  if (!desde) return 0;
+
+  const { count, error } = await tabela("activity_feed_eventos")
+    .select("id", { count: "exact", head: true })
+    .eq("feed_de", activityId)
+    .gt("created_at", desde);
+
+  if (error) throw new Error(`não foi possível contar os não lidos: ${error.message}`);
+  return count ?? 0;
+}
+
+/** Marca o feed como visto agora. */
+export async function marcarFeedVisto(activityId: string, userId: string): Promise<void> {
+  const { error } = await tabela("activity_feed_visitas")
+    .upsert(
+      { user_id: userId, activity_id: activityId, visto_em: new Date().toISOString() } as never,
+      { onConflict: "user_id,activity_id" } as never,
+    );
+  if (error) throw new Error(`não foi possível marcar como lido: ${error.message}`);
+}
+
+/**
+ * Registra um evento. **O texto vem pronto de quem chama.**
+ *
+ * A frase é montada na ORIGEM, onde se sabe o que aconteceu — nunca na leitura.
+ * É a regra do CLAUDE.md: *"Resolver o rótulo na origem, não com um de-para no
+ * componente."* Um de-para na leitura garante que o primeiro tipo novo apareça
+ * como enum em inglês na tela de alguém.
+ */
+export async function registrarEvento(evento: {
+  activityId: string;
+  tipo: string;
+  texto: string;
+  dados?: Record<string, unknown>;
+  autorId?: string | null;
+  autorNome?: string | null;
+}): Promise<void> {
+  const { error } = await tabela("activity_feed_eventos").insert({
+    activity_id: evento.activityId,
+    // Nasce apontando para si mesmo; a trigger sobe a cópia para o pai.
+    feed_de: evento.activityId,
+    tipo: evento.tipo,
+    texto: evento.texto,
+    dados: evento.dados ?? null,
+    autor_id: evento.autorId ?? null,
+    autor_nome: evento.autorNome ?? null,
+  } as never);
+  if (error) throw new Error(`não foi possível registrar o evento: ${error.message}`);
+}
+
+/**
+ * Agrupa por dia, com os rótulos que uma pessoa usa: "Hoje", "Ontem", data.
+ *
+ * `hojeISO` entra por parâmetro para o agrupamento ser testável — e porque
+ * `new Date()` dentro de uma função de formatação torna impossível provar o que
+ * ela faz na virada do dia.
+ */
+export function agruparPorDia(
+  eventos: EventoDoBanco[],
+  hojeISO: string,
+): { rotulo: string; eventos: EventoDoBanco[] }[] {
+  const dia = (iso: string) => iso.slice(0, 10);
+  const hoje = dia(hojeISO);
+  const ontem = (() => {
+    const d = new Date(`${hoje}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const porDia = new Map<string, EventoDoBanco[]>();
+  for (const e of eventos) {
+    const k = dia(e.created_at);
+    if (!porDia.has(k)) porDia.set(k, []);
+    porDia.get(k)!.push(e);
+  }
+
+  return [...porDia.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([k, evs]) => ({
+      rotulo: k === hoje ? "Hoje" : k === ontem ? "Ontem" : k.split("-").reverse().join("/"),
+      eventos: evs,
+    }));
+}
