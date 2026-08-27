@@ -43,6 +43,7 @@ import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { EAP_FASE_LEVEL, eapCanGroup, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { podePromover, motivoNaoPromove } from "@/lib/quadroDeExecucao";
+import { traduzirErroDoBanco } from "@/lib/erroDoBanco";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import { ehBacklog } from "@/components/kanban/shared";
@@ -1686,7 +1687,26 @@ export const BacklogSection = ({
     setOpenAssigneeFor(null);
 
     if (error) {
-      toast({ title: "Não foi possível atribuir", description: error.message, variant: "destructive" });
+      /**
+       * O ERRO DO BANCO, DITO PARA GENTE.
+       *
+       * Este é o ponto exato do relato: definir responsável dispara a sincronia
+       * para `activity_assignees`, que dispara a validação de equipe. Quando a
+       * pessoa não está na equipe, o que chegava à tela era:
+       *
+       *   "usuario 0eb3047e-… nao esta na equipe do projeto dcf977e9-… | P0001"
+       *
+       * Dois UUIDs, um código do Postgres, e nenhum passo seguinte. O tradutor
+       * resolve os ids pelos nomes que a tela já tem em mãos.
+       */
+      const nomes = {
+        pessoas: Object.fromEntries(
+          Object.entries(profileNameMap).map(([k, v]) => [k, String(v)]),
+        ),
+        projetos: projectId && projectTitle ? { [projectId]: projectTitle } : {},
+      };
+      const { titulo, detalhe } = traduzirErroDoBanco(error, nomes);
+      toast({ title: titulo, description: detalhe, variant: "destructive" });
       return;
     }
     if (!count) {
