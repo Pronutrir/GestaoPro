@@ -71,18 +71,45 @@ const decodificar = (etag) => {
     console.log(`  ${l.data.toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })}  ${String(l.tamanho).padStart(7)} B  ${l.a.replace("/_next/static/", "")}`);
   }
 
-  const instantes = [...new Set(lidos.map((l) => l.data.getTime()))];
+  /**
+   * A DATA É A MAIOR ENTRE OS CHUNKS. Nunca a de um chunk específico.
+   *
+   * ============================================================================
+   * POR QUE NÃO SE OLHA O WEBPACK — ele mente quando o conteúdo não muda
+   *
+   * O chunk do webpack é praticamente estável entre builds: mudanças em telas
+   * não alteram o runtime. Se o conteúdo não muda, o arquivo pode conservar o
+   * mtime do build ANTERIOR — e quem olhasse só para ele concluiria que nada
+   * subiu, num deploy que subiu.
+   *
+   * A maior data entre todos os assets responde a pergunta certa: *"quando foi
+   * o build mais recente que produziu algum destes arquivos?"*
+   *
+   * A versão anterior desta função tratava datas divergentes como anomalia e
+   * apenas LISTAVA os instantes, sem decidir. Isso deixava justamente o caso
+   * comum — alguns chunks reaproveitados, outros novos — sem resposta.
+   * ============================================================================
+   */
+  const instantes = [...new Set(lidos.map((l) => l.data.getTime()))].sort((a, b) => a - b);
+  const maior = new Date(Math.max(...instantes));
+
   console.log("");
-  if (instantes.length === 1) {
-    const d = new Date(instantes[0]);
-    console.log(`  BUILD NO AR: ${d.toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })} (Fortaleza)`);
-    console.log(`               ${d.toISOString()} (UTC)`);
-  } else {
-    // Assets de builds diferentes no mesmo deploy é sinal de cache do proxy
-    // servindo arquivo velho — vale saber, não vale esconder numa média.
-    console.log("  ⚠ assets com instantes DIFERENTES — pode ser cache do proxy:");
-    instantes.sort().forEach((t) =>
-      console.log(`      ${new Date(t).toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })}`));
+  console.log(`  BUILD NO AR: ${maior.toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })} (Fortaleza)`);
+  console.log(`               ${maior.toISOString()} (UTC)`);
+  console.log(`               (maior entre ${lidos.length} assets)`);
+
+  if (instantes.length > 1) {
+    // Chunk reaproveitado é normal; chunk de OUTRO DIA sugere cache do proxy
+    // servindo arquivo velho — e isso vale um aviso, não um silêncio.
+    const menor = new Date(Math.min(...instantes));
+    const horas = (maior.getTime() - menor.getTime()) / 3600000;
+    console.log("");
+    console.log(`  ${instantes.length} instantes distintos; o mais antigo é ${menor.toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })}.`);
+    if (horas > 24) {
+      console.log("  ⚠ mais de 24h de diferença — pode ser cache do proxy servindo asset velho.");
+    } else {
+      console.log("  (normal: chunks sem alteração conservam o mtime do build anterior)");
+    }
   }
   console.log("");
   console.log("  (a data é do build; o COMMIT só se souber pela versão carimbada)");

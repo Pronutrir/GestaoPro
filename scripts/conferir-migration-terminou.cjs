@@ -56,45 +56,25 @@ const existe = async (tabela) => {
  */
 const VERIFICACOES = {
   feed: {
-    titulo: "Feed da atividade (20260827150000)",
+    titulo: "Nao-lido do feed (20260827150000)",
     passos: [
       {
-        o_que: "a tabela de eventos responde",
-        conferir: async () => {
-          const ok = await existe("activity_feed_eventos");
-          return { ok, detalhe: ok ? "responde" : "não existe" };
-        },
-      },
-      {
+        /**
+         * A tabela de EVENTOS nao esta aqui de proposito: ela ja existia (a
+         * view activity_feed_events, da fase 08). Esta migration entrega so o
+         * nao-lido, que precisa de um sujeito.
+         */
         o_que: "a tabela de visitas responde",
         conferir: async () => {
           const ok = await existe("activity_feed_visitas");
-          return { ok, detalhe: ok ? "responde" : "não existe" };
+          return { ok, detalhe: ok ? "responde" : "nao existe" };
         },
       },
       {
-        /**
-         * A trigger é o coração da fase, e a única forma honesta de conferir se
-         * ela FUNCIONA é escrever — o que esta conferência não faz, porque é
-         * conferência e não teste. Aqui se verifica o efeito acumulado: se já
-         * houve evento em filha, tem de haver a cópia no pai.
-         *
-         * Base nova, sem eventos: passa com aviso. É o único caso em que
-         * "ainda não dá para saber" é resposta legítima, e ela é dita em voz
-         * alta em vez de virar um ✓ falso.
-         */
-        o_que: "eventos de filha aparecem no feed do pai",
+        o_que: "o feed da fase 08 continua respondendo",
         conferir: async () => {
-          const total = await contar("activity_feed_eventos?select=id");
-          if (total.erro) return { ok: false, detalhe: total.erro };
-          if (total.n === 0) {
-            return { ok: true, aviso: true, detalhe: "nenhum evento ainda — a trigger só se prova no uso" };
-          }
-          const subidos = await contar("activity_feed_eventos?select=id&activity_id=not.eq.feed_de");
-          return {
-            ok: true,
-            detalhe: `${total.n} eventos, ${subidos.n ?? 0} vindos de filhas`,
-          };
+          const ok = await existe("activity_feed_events");
+          return { ok, detalhe: ok ? "a view da fase 08 responde" : "a view sumiu" };
         },
       },
     ],
