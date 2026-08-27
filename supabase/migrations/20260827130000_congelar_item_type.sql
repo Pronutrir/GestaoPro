@@ -357,18 +357,112 @@ END $ponto_fixo$;
 --
 -- 'projeto' entra na lista pelo mesmo motivo que 'fase': e a raiz da EAP, e a
 -- raiz tem filhas por definicao.
--- ---------------------------------------------------------------------------
+--
+-- ============================================================================
+-- E 'ATIVIDADE' TAMBEM ENTRA — SO MARCO E FOLHA (decisao de 27/08/2026)
+--
+-- A regra deixa de ser uma LISTA de quem agrupa e passa a ser uma EXCECAO: todo
+-- item pode ter filha, menos marco.
+--
+-- POR QUE: o desenho inteiro depende de subatividade sob atividade — e o corpo
+-- da tela nova, o botao "+ Subatividade", o total derivado das filhas. Foi o
+-- primeiro pedido do Raphael. Hoje o banco proibe, e por isso existem ZERO.
+--
+-- ISSO SO DEIXOU DE SER ARRISCADO COM O CONGELAMENTO. Enquanto o papel era
+-- deduzido de `hasChildren`, deixar uma atividade ter filha a transformava em
+-- agrupador no mesmo instante: ela sumia do quadro, virava faixa e deixava de
+-- ser arrastavel, sem ninguem ter decidido. Agora o tipo e gravado — uma
+-- Atividade com filhas continua Atividade, continua no quadro, continua com
+-- responsavel e horas. So passa a ter os numeros vindos das filhas.
+--
+-- MEDIDO ANTES DE MUDAR:
+--   atividades que sao pai HOJE .................    0  (o trigger impedia)
+--   atividades que GANHAM a capacidade .......... 5.382
+--   linhas alteradas por esta mudanca ...........    0
+--
+-- E permissao futura, nao migracao de dado. Nenhuma linha muda.
+--
+-- Auditado no codigo, nao so no banco: `activityProgress` ja usa a media das
+-- filhas para qualquer pai (so `is_milestone` e excecao); a derivacao da fase
+-- 09 filtra por `is_milestone`, nunca por `item_type`; o Backlog ja tinha o
+-- caso previsto e comentado (selecao nao cascateia em atividade). A unica
+-- regra que dependia de "atividade nunca tem filha" era
+-- `ehAgrupadorDoQuadro`, que decidia por estrutura e passou a ler o tipo.
+-- ============================================================================
 CREATE OR REPLACE FUNCTION public.eap_is_group(_item_type text, _is_milestone boolean)
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 AS $grp$
-  SELECT (NOT COALESCE(_is_milestone, false))
-     AND _item_type IN ('projeto', 'fase', 'entrega', 'pacote', 'historia_usuario');
+  -- Marco e o unico que nunca tem filha. `_item_type` fica na assinatura
+  -- porque ha chamadas existentes que o passam, e porque a pergunta "este tipo
+  -- agrupa?" continua fazendo sentido — a resposta e que hoje todos agrupam.
+  SELECT NOT COALESCE(_is_milestone, false);
 $grp$;
 
 COMMENT ON FUNCTION public.eap_is_group(text, boolean) IS
-  'Quem pode ter filhos. Ganhou projeto e entrega em 27/08/2026, quando o congelamento de item_type passou a gravar esses valores — sem isso, 1.272 pais existentes viravam invalidos.';
+  'Quem pode ter filhos. Desde 27/08/2026 e uma excecao, nao uma lista: todo item agrupa, menos marco. Antes era IN (fase, pacote, historia_usuario), o que proibia subatividade sob atividade — e por isso existiam zero.';
+
+-- As MENSAGENS do trigger tambem mudam: as duas diziam "so Pacote ou Fase
+-- agrupam", e isso passou a ser falso. Mensagem de erro que descreve uma regra
+-- que nao existe mais e pior que nenhuma — manda o usuario "marcar como Fase"
+-- para resolver um problema que nao e esse.
+CREATE OR REPLACE FUNCTION public.validate_activity_hierarchy()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $vah$
+DECLARE
+  parent_row public.activities%ROWTYPE;
+  cursor_id uuid;
+  hops int := 0;
+BEGIN
+  -- Regra 1: folha nao tem filhas. Desde 27/08/2026 a unica folha e o marco.
+  IF NOT public.eap_is_group(NEW.item_type, NEW.is_milestone) AND EXISTS (
+    SELECT 1 FROM public.activities WHERE parent_id = NEW.id
+  ) THEN
+    RAISE EXCEPTION 'Este item tem subitens, e marco e um ponto no tempo: nao agrupa. Desmarque Marco ou mova os subitens.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.parent_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.parent_id = NEW.id THEN
+    RAISE EXCEPTION 'Uma atividade nao pode ser pai de si mesma.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT * INTO parent_row FROM public.activities WHERE id = NEW.parent_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Atividade pai (%) nao encontrada.', NEW.parent_id
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  -- Regra 2: o pai precisa poder agrupar — ou seja, nao pode ser marco.
+  IF NOT public.eap_is_group(parent_row.item_type, parent_row.is_milestone) THEN
+    RAISE EXCEPTION 'Marco nao agrupa: escolha uma fase, entrega ou atividade como destino.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF parent_row.project_id IS DISTINCT FROM NEW.project_id THEN
+    RAISE EXCEPTION 'A atividade pai pertence a outro projeto.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  cursor_id := NEW.parent_id;
+  WHILE cursor_id IS NOT NULL AND hops < 1000 LOOP
+    IF cursor_id = NEW.id THEN
+      RAISE EXCEPTION 'parent_id criaria um ciclo na hierarquia.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    SELECT parent_id INTO cursor_id FROM public.activities WHERE id = cursor_id;
+    hops := hops + 1;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$vah$;
 
 DO $conf_grp$
 DECLARE v_ruins int;

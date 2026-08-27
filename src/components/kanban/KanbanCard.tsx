@@ -56,6 +56,7 @@ import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import { formatarDataBR, formatarDiaMes, estaAtrasado } from "@/lib/dataLocal";
 import { type ActivityProgress } from "@/lib/activityProgress";
+import { ehAgrupadorDoQuadro } from "@/lib/quadroDeExecucao";
 
 import { normalizeGut, GUT_META } from "@/lib/gutPriority";
 import { faixaDoGut } from "@/lib/mesaDePlanejamento";
@@ -345,10 +346,16 @@ function KanbanCardBase({
 
   const isMilestone = !!activity.is_milestone;
   const eapType = activity.item_type ?? undefined;
-  // Modelo unificado (lib/eapModel): agrupador = Fase/Entrega. Cobre 'fase',
-  // 'pacote' legado e qualquer item com filhos. Exibido sempre como Fase.
-  const isPhase =
-    !isMilestone && (eapType === "fase" || eapType === "pacote" || (subActivityCount ?? 0) > 0);
+  // AGRUPADOR = o TIPO diz que agrupa. Fonte única: `ehAgrupadorDoQuadro`.
+  //
+  // Tinha `|| (subActivityCount ?? 0) > 0` até 27/08/2026 — a mesma regra
+  // estrutural que saiu do módulo do quadro, e pelo mesmo motivo: ela fazia o
+  // cartão VIRAR CAIXA no instante em que ganhava a primeira subatividade.
+  //
+  // Uma atividade com filhas continua atividade: continua cartão, continua com
+  // responsável e horas. O que ela ganha é o CONTADOR de subatividades logo
+  // abaixo — os números vêm das filhas, a identidade não.
+  const isPhase = ehAgrupadorDoQuadro(activity as never);
   /** Está aninhado sob outro card? A faixa lateral colorida é dele. */
   const ehFilho = !!activity.parent_id;
   // Bloqueio vem ANTES de marco: é o estado que exige ação, e um marco

@@ -58,6 +58,67 @@ AS $grp$
      AND _item_type IN ('fase', 'pacote', 'historia_usuario');
 $grp$;
 
+-- E as MENSAGENS do trigger voltam a descrever a regra antiga. Reverter a
+-- funcao sem reverter o texto deixaria o usuario lendo "escolha uma fase,
+-- entrega ou atividade" enquanto o banco recusa atividade.
+CREATE OR REPLACE FUNCTION public.validate_activity_hierarchy()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $vah$
+DECLARE
+  parent_row public.activities%ROWTYPE;
+  cursor_id uuid;
+  hops int := 0;
+BEGIN
+  IF NOT public.eap_is_group(NEW.item_type, NEW.is_milestone) AND EXISTS (
+    SELECT 1 FROM public.activities WHERE parent_id = NEW.id
+  ) THEN
+    RAISE EXCEPTION 'Este item tem subitens; so Pacote ou Fase podem agrupar. Marque-o como Pacote ou Fase.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.parent_id IS NULL THEN RETURN NEW; END IF;
+
+  IF NEW.parent_id = NEW.id THEN
+    RAISE EXCEPTION 'Uma atividade nao pode ser pai de si mesma.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT * INTO parent_row FROM public.activities WHERE id = NEW.parent_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Atividade pai (%) nao encontrada.', NEW.parent_id
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  IF NOT public.eap_is_group(parent_row.item_type, parent_row.is_milestone) THEN
+    RAISE EXCEPTION 'Aninhamento EAP invalido: uma % nao pode conter subitens. So Pacote ou Fase agrupam.',
+      CASE WHEN parent_row.is_milestone THEN 'marco (atividade)' ELSE COALESCE(parent_row.item_type, 'atividade') END
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF parent_row.project_id IS DISTINCT FROM NEW.project_id THEN
+    RAISE EXCEPTION 'A atividade pai pertence a outro projeto.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  cursor_id := NEW.parent_id;
+  WHILE cursor_id IS NOT NULL AND hops < 1000 LOOP
+    IF cursor_id = NEW.id THEN
+      RAISE EXCEPTION 'parent_id criaria um ciclo na hierarquia.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    SELECT parent_id INTO cursor_id FROM public.activities WHERE id = cursor_id;
+    hops := hops + 1;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$vah$;
+
+-- ATENCAO: se ja existirem subatividades sob atividades (criadas depois desta
+-- migration), a checagem abaixo VAI FALHAR — e deve. Reverter com elas no lugar
+-- deixaria a arvore num estado que o trigger recusa manter.
+
 DO $conf_grp$
 DECLARE v_ruins int;
 BEGIN

@@ -329,6 +329,38 @@ export function eapCanGroup(kind: EapKind): boolean {
   return kind === "fase" || kind === "entrega";
 }
 
+/**
+ * PODE TER FILHAS? — o espelho exato de `eap_is_group()` no Postgres.
+ *
+ * ============================================================================
+ * NÃO CONFUNDIR COM `eapCanGroup`. São perguntas diferentes:
+ *
+ *   eapCanGroup(kind)    "este item é uma CAIXA?" — decide faixa × cartão no
+ *                        quadro, ícone no backlog, seleção em cascata.
+ *   eapPodeSerPai(item)  "o banco aceita pendurar algo aqui?" — decide destino
+ *                        de movimentação e criação de subitem.
+ *
+ * Uma Atividade responde **não** à primeira e **sim** à segunda: ela é
+ * trabalho, não caixa, mas pode ter subatividades. Foi exatamente essa
+ * distinção que faltava até 27/08/2026 — havia uma pergunta só, e ela
+ * respondia errado a uma das duas.
+ *
+ * DESDE 27/08 A REGRA É UMA EXCEÇÃO, NÃO UMA LISTA: todo item pode ser pai,
+ * menos marco. Antes era `IN (fase, pacote, historia_usuario)`, o que proibia
+ * subatividade sob atividade — e por isso existiam zero na base inteira.
+ *
+ * O desenho depende disso: o "+ Subatividade" da tela nova, o contador no
+ * cartão, o total derivado das filhas. Deixou de ser arriscado quando o tipo
+ * passou a ser gravado — uma Atividade com filhas continua Atividade.
+ *
+ * `verificar-agrupador-aceito-no-banco.cjs` compara esta função com a lista da
+ * migration e falha se divergirem.
+ * ============================================================================
+ */
+export function eapPodeSerPai(item: Pick<EapItemLike, "is_milestone">): boolean {
+  return !item.is_milestone;
+}
+
 /** Folhas (não agrupam). */
 export function eapIsLeaf(kind: EapKind): boolean {
   return !eapCanGroup(kind);
@@ -702,9 +734,19 @@ export function eapCanMoveInto(
     };
   }
 
-  // Marco é folha de controle por definição — nunca agrupa. O trigger do banco
-  // também recusa (eap_is_group exige não-milestone).
-  if (target.is_milestone) {
+  // ── A MESMA REGRA DO BANCO, e a mesma frase ──────────────────────────────
+  //
+  // `eapPodeSerPai` espelha `eap_is_group()` do Postgres, e a mensagem é
+  // literalmente a que o trigger devolve. As duas listas divergiram uma vez e
+  // ninguém percebeu: a tela dizia "escolha uma fase, entrega ou ATIVIDADE" e
+  // o banco recusava atividade, porque `eap_is_group` era
+  // `IN (fase, pacote, historia_usuario)`. Ninguém esbarrou nisso porque não
+  // havia como criar a situação — mas era divergência latente, e o usuário
+  // teria descoberto no clique, com um erro cru.
+  //
+  // Se as duas voltarem a divergir, `verificar-agrupador-aceito-no-banco.cjs`
+  // falha antes de chegar à VM.
+  if (!eapPodeSerPai(target)) {
     return {
       ok: false,
       reason: "milestone-parent",
