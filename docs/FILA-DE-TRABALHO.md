@@ -286,6 +286,54 @@ são a mesma família — **o sistema deixou de mostrar onde as coisas estão**.
 
 ---
 
+## 6 · A tela da atividade — BLOQUEADA pelo desenho, não por código
+
+**Pedida em 27/08. Não foi construída, e o motivo é verificável.**
+
+A instrução era: *"Referência: docs/design/GESTAO-PRO-DESENHO.html. Seção 02 é a
+principal."* Fui ler a seção 02 e ela **não tem conteúdo**:
+
+| seção | conteúdo |
+|---|---|
+| 01 · Atividade — como é hoje | 28 caracteres |
+| **02 · Atividade — editar** | **23 caracteres** |
+| 03 · Atividade — criar | 22 caracteres |
+| 04 · Atividade — visualizar | 8.846 (é a única com corpo) |
+| 07 · Tipo e hierarquia da EAP | 2.514 |
+
+A 02 termina em `Proposto · tela inteira rota própria ·
+/project/[id]/atividade/[id] <div style="display` — HTML cru, cortado no meio.
+
+**O próprio documento registra isso**, na última seção:
+
+> *"O envio integral foi cortado no meio da seção 04, nas duas tentativas.
+> Estas seis ainda não chegaram, e nada foi inventado no lugar delas."*
+
+### O que existe e serve
+
+- os **tokens de produção** (cores, raios, fonte) — completos;
+- as **regras não negociáveis** — completas;
+- a seção **07**, pré-requisito da 03 — completa.
+
+### O que falta, e por que não dá para suprir
+
+O **layout**: onde cada bloco fica, a proporção das colunas, o comportamento dos
+quatro estados de um campo (seção 06), os três estados lado a lado (seção 05), e
+de onde se cria (seção 08). São exatamente as seções que não chegaram.
+
+Construir sem elas seria inventar o desenho e chamar de implementação — e a
+instrução do dia em que o desenho foi entregue era explícita: *"Se algum valor do
+desenho conflitar com o que já existe, PARE e me pergunte em vez de escolher
+sozinho."* Inventar o layout inteiro é mais que escolher um valor.
+
+### Para destravar
+
+Reenviar as seções **02, 05, 06 e 08**. A observação do próprio pedido continua
+valendo: *"arrastar o arquivo direto para a pasta docs/design/ no VS Code evita
+o corte por completo."*
+
+---
+
 ## Esperando gente, não código
 
 - **Quem publicou** em 26/08 18:01 e em 27/08 12:08 — e qual `APP_VERSION`.
