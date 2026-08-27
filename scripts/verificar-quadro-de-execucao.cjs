@@ -324,5 +324,82 @@ const fotoCompleta = (ctx) =>
   );
 }
 
+// ── 8. A PORTA FECHADA: agrupador não se promove (27/08/2026) ────────────
+//
+// O arraste do Kanban já recusava; a promoção do Backlog aceitava em silêncio.
+// Mesmo gesto, dois comportamentos — e o item sumia no quadro, porque agrupador
+// não vira cartão. O incidente de 27/08 mediu: 68 folhas promovidas invisíveis,
+// em 17 projetos.
+{
+  const c = cenario();
+  const fase = c.porId.get("F1");        // tem filhas, item_type fase
+  const pacote = c.porId.get("PA");      // tem filhas, item_type pacote
+  const atividade = c.porId.get("A1");   // folha
+  const marco = c.porId.get("M");
+
+  check("fase NÃO pode ser promovida", !Q.podePromover(fase));
+  check("pacote NÃO pode ser promovido", !Q.podePromover(pacote));
+  check("marco NÃO pode ser promovido", !Q.podePromover(marco));
+  check("atividade PODE ser promovida", Q.podePromover(atividade));
+
+  // Uma atividade COM filhas continua promovível: ela é trabalho, e o cartão
+  // dela mostra o contador. É a regra do item 4, e o teste existe para que
+  // "fechar a porta" não feche a porta errada.
+  check("atividade com filhas continua promovível",
+    Q.podePromover({ id: "AP", item_type: "atividade" }));
+
+  // A recusa precisa EXPLICAR, não só barrar.
+  const mFase = Q.motivoNaoPromove(fase);
+  const mMarco = Q.motivoNaoPromove(marco);
+  check("a recusa da fase traz título e descrição",
+    !!mFase && !!mFase.titulo && !!mFase.descricao);
+  check("e a do marco é diferente — motivos diferentes, frases diferentes",
+    !!mMarco && mMarco.titulo !== mFase.titulo);
+  check("quem pode promover não recebe motivo",
+    Q.motivoNaoPromove(atividade) === null);
+}
+
+// ── 9. O CONTADOR NÃO PASSA PELA PREFERÊNCIA (código real) ───────────────
+//
+// Ler o código é o único jeito de travar isto: a regra pode estar certa em lib/
+// e a tela continuar gateando o contador atrás de uma preferência desligada —
+// que foi exatamente o defeito relatado.
+{
+  /*
+   * SEM OS COMENTÁRIOS. As duas regras removidas são CITADAS nos comentários
+   * que explicam por que saíram — e devem continuar sendo: elas documentam uma
+   * decisão. Um teste que lesse o arquivo cru acusaria a própria explicação
+   * como se fosse o código, e a única forma de fazê-lo passar seria apagar a
+   * documentação. Já aconteceu aqui: as duas asserções abaixo falharam na
+   * primeira execução exatamente assim.
+   */
+  const BLOCO = new RegExp("/\\*[\\s\\S]*?\\*/", "g");  // /* ... */ e {/* ... */}
+  const LINHA = new RegExp("^\\s*//.*$", "gm");         // // linha
+  const semComentarios = (t) => t.replace(BLOCO, "").replace(LINHA, "");
+
+  const card = semComentarios(
+    fs.readFileSync(path.join(raiz, "src/components/kanban/KanbanCard.tsx"), "utf8"));
+  const shared = semComentarios(
+    fs.readFileSync(path.join(raiz, "src/components/kanban/shared.ts"), "utf8"));
+
+  check(
+    "o contador não é mais gateado por isPhase nem por cardFields.subCount",
+    !/\(isPhase \|\| cardFields\.subCount\)/.test(card),
+  );
+  check(
+    "e aparece sempre que há subatividades",
+    /\{subActivityCount && subActivityCount > 0 \?/.test(card),
+  );
+  check(
+    "a opção órfã saiu do menu de campos do card",
+    !/\{ key: "subCount", label:/.test(shared),
+  );
+  check(
+    "mas a chave continua no tipo — preferências já gravadas não viram lixo",
+    /subCount: boolean;/.test(shared),
+  );
+}
+
+
 console.log(`\n  ${ok} passaram, ${falhou} falharam\n`);
 process.exit(falhou > 0 ? 1 : 0);

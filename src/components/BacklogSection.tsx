@@ -42,6 +42,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { EAP_FASE_LEVEL, eapCanGroup, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { podePromover, motivoNaoPromove } from "@/lib/quadroDeExecucao";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import { ehBacklog } from "@/components/kanban/shared";
@@ -1318,7 +1319,47 @@ export const BacklogSection = ({
           return a ? !ehMinha(a) : false;
         })
       : [];
-    const ids = idsBrutos.filter((id) => !semPermissao.includes(id));
+
+    /**
+     * AGRUPADOR NÃO VAI PARA O QUADRO — a porta fechada (27/08/2026).
+     *
+     * Promover um agrupador punha no quadro algo que o quadro não desenha como
+     * cartão: o item sumia — estava lá, ocupando coluna, e não aparecia. O
+     * incidente de 27/08 mediu o estrago: 68 folhas promovidas que ninguém via,
+     * em 17 projetos.
+     *
+     * O arraste do Kanban já recusava; aqui aceitava em silêncio. Mesmo gesto,
+     * dois comportamentos — e o usuário descobria pela ausência.
+     *
+     * Segue o padrão desta função: MOVE O QUE PODE e nomeia o resto. Recusar a
+     * seleção inteira por causa de uma fase marcada junto obrigaria a refazer a
+     * seleção.
+     *
+     * A versão boa — promover o pacote e trazer as atividades dele — está na
+     * fila. Até lá, recusar explica; aceitar esconde.
+     */
+    const naoPromoviveis = idsBrutos.filter((id) => {
+      const a = activities.find((x) => x.id === id);
+      return a ? !podePromover(a as never) : false;
+    });
+
+    const ids = idsBrutos.filter(
+      (id) => !semPermissao.includes(id) && !naoPromoviveis.includes(id),
+    );
+
+    // Só agrupador/marco selecionado: não há o que mover, e o motivo vem da
+    // fonte única — a mesma frase que o arraste do Kanban usa.
+    if (ids.length === 0 && naoPromoviveis.length > 0 && semPermissao.length === 0) {
+      const a = activities.find((x) => x.id === naoPromoviveis[0]);
+      const motivo = a ? motivoNaoPromove(a as never) : null;
+      setIsMoving(false);
+      toast({
+        title: motivo?.titulo ?? "Este item não vai para o quadro",
+        description: motivo?.descricao,
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (ids.length === 0) {
       setIsMoving(false);
@@ -1523,6 +1564,12 @@ export const BacklogSection = ({
         // antes — a tela anunciando um movimento que não aconteceu.
         semPermissao.length > 0
           ? `${semPermissao.length} não ${semPermissao.length === 1 ? "foi" : "foram"}: você não é responsável nem participante.`
+          : null,
+        // E o que ficou de fora por ser caixa. Mesmo motivo do anterior:
+        // silenciar faria a tela anunciar um movimento que não aconteceu — foi
+        // assim que 68 itens foram parar no quadro sem ninguém ver.
+        naoPromoviveis.length > 0
+          ? `${naoPromoviveis.length} não ${naoPromoviveis.length === 1 ? "foi" : "foram"}: fase, pacote e marco não vão para o quadro.`
           : null,
       ].filter(Boolean).join(" ") || undefined,
     });

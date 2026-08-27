@@ -104,6 +104,8 @@ export type CardFields = {
   participants: boolean;
   dueDate: boolean;
   hours: boolean;
+  /** @deprecated Desde 27/08/2026 não decide nada: o contador é sempre exibido
+   *  quando há filhas. Mantido para não invalidar preferências já gravadas. */
   subCount: boolean;
   description: boolean;
   breadcrumb: boolean;
@@ -162,7 +164,16 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
     { key: "dependencies", label: "Dependências" },
   ]},
   { group: "Subatividades", items: [
-    { key: "subCount", label: "Contador de subatividades" },
+    // "Contador de subatividades" SAIU do menu em 27/08/2026.
+    //
+    // O contador deixou de passar por preferência: um cartão com filhas SEMPRE
+    // diz quantas (ver KanbanCard). Deixar a opção aqui seria pior que
+    // removê-la — um interruptor que não acende nada, e o usuário concluindo
+    // que o contador está desligado quando ele está sempre ligado.
+    //
+    // É o mesmo defeito do `can_edit_own`: campo gravado pela tela e lido por
+    // ninguém. A chave continua no tipo por compatibilidade com as preferências
+    // já salvas — removê-la faria as gravadas virarem lixo silencioso.
     { key: "subSummary", label: "Resumo (feitas / abertas)" },
   ]},
 ];
