@@ -28,7 +28,7 @@
   .indice a{font-size:12.5px;color:#2563EB;text-decoration:none;border:1px solid #D8E2FB;background:#F5F8FE;border-radius:20px;padding:5px 13px;}
   .indice a:hover{background:#E7EEFD;}
   .indice span.ausente{font-size:12.5px;color:#B6BBC3;border:1px dashed #DDE1E6;border-radius:20px;padding:5px 13px;}
-  .bloco{display:flex;flex-direction:column;gap:13px;}
+  .bloco{display:flex;flex-direction:column;gap:13px;scroll-margin-top:20px;}
   .cab{display:flex;align-items:flex-start;gap:15px;}
   .cab .num{font-family:"Roboto Mono",monospace;font-size:12px;color:#2563EB;background:#FFFFFF;border:1px solid #D8E2FB;border-radius:7px;width:34px;height:34px;display:grid;place-items:center;flex:none;}
   .cab h2{margin:0;font-size:19px;font-weight:500;letter-spacing:-.2px;}
@@ -77,6 +77,24 @@
 #sec4 .campo .v{font-size:14px;color:#3A3A3A;}
 #sec4 .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:9.5px;font-weight:500;color:#FFFFFF;flex:none;}
 #sec4 .lin{display:grid;grid-template-columns:76px 1fr 120px 22px 52px;gap:12px;align-items:center;padding:9px 12px;border-bottom:1px solid #F1F2F4;font-size:13.5px;}
+
+/* ===================================================================
+   #sec7 — Tipo e hierarquia da EAP.
+   O CSS chegou no segundo envio; o CONTEÚDO da seção não. Fica aqui
+   pronto, para quando a 07 for reenviada não precisar vir junto.
+   =================================================================== */
+#sec7{margin:0;font-family:Roboto,"Helvetica Neue",Arial,sans-serif;color:#212121;background:#FFFFFF;-webkit-font-smoothing:antialiased;}
+#sec7 a{color:#2563EB;text-decoration:none;}
+#sec7 a:hover{color:#1D4ED8;}
+#sec7 .mono{font-family:"Roboto Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+#sec7 .rot{font-size:9.5px;font-weight:500;letter-spacing:.11em;text-transform:uppercase;color:#8A8A8A;}
+#sec7 .tp{font-size:12px;color:#5F6570;border:1px solid #E8E8E8;border-radius:5px;padding:6px 12px;background:#FFFFFF;}
+#sec7 .tp.on{color:#2563EB;border-color:#2563EB;background:#F5F8FE;font-weight:500;}
+#sec7 .tp.no{color:#C9CDD4;border-style:dashed;background:#FAFBFC;}
+#sec7 table{border-collapse:collapse;width:100%;font-size:13px;}
+#sec7 th{text-align:left;font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:#8A8A8A;font-weight:500;padding:0 12px 8px;border-bottom:1px solid #E8E8E8;}
+#sec7 td{padding:11px 12px;border-bottom:1px solid #F1F2F4;vertical-align:middle;}
+#sec7 tr:last-child td{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -84,23 +102,24 @@
 
   <div class="capa">
     <h1>Gestão Pro — o desenho aprovado</h1>
-    <p class="lede">Dez telas, num arquivo só. Cada uma é HTML de verdade: os valores estão em <code>style=</code> inline de propósito, para serem lidos e copiados direto. Este arquivo é a referência para construir — não um esboço para se inspirar.</p>
+    <p class="lede">Onze telas, num arquivo só. Cada uma é HTML de verdade: os valores estão em <code>style=</code> inline de propósito, para serem lidos e copiados direto. Este arquivo é a referência para construir — não um esboço para se inspirar.</p>
 
-    <div class="aviso"><b>Copie os valores exatos.</b> Cor, tamanho de fonte, peso, espaçamento, gap, raio de borda, largura de coluna, altura de controle. Não arredonde para múltiplos de 4 ou 8, não substitua por padrão de framework, não “melhore” o espaçamento. Se algum valor conflitar com o que já existe no sistema, pare e pergunte em vez de escolher sozinho.</div>
+    <div class="aviso"><b>Copie os valores exatos.</b> Cor, tamanho de fonte, peso, espaçamento, gap, raio de borda, largura de coluna, altura de controle. Não arredonde para múltiplos de 4 ou 8, não substitua por padrão de framework, não “melhore” o espaçamento. Se algum valor conflitar com o que já existe no sistema, pare e pergunte em vez de escolher sozinho.<br><br><b>A seção 07 é pré-requisito da 03.</b> A criação depende da regra de tipo e hierarquia — leia antes.</div>
 
-    <div class="falta"><b>ARQUIVO INCOMPLETO — seções 05 a 10 não chegaram.</b> O conteúdo original excedeu o limite de uma mensagem e foi cortado no meio da seção 04. O que está aqui é <b>fiel ao original, sem invenção</b>: as seções 01, 02 e 03 estão íntegras, e a 04 vai até onde o texto chegou. <b>A seção 02 — a referência principal — está completa</b>, assim como os tokens e as oito regras abaixo. As seções 05–10 precisam ser reenviadas em partes.</div>
+    <div class="falta"><b>ARQUIVO INCOMPLETO — seções 05 a 11 não chegaram.</b> O conteúdo original excedeu o limite de uma mensagem e foi cortado no meio da seção 04 — nas duas tentativas de envio, no mesmo ponto. O que está aqui é <b>fiel ao original, sem invenção</b>: as seções 01, 02 e 03 estão íntegras, e a 04 vai até onde o texto chegou. <b>A seção 02 — a referência principal — está completa</b>, assim como os tokens e as nove regras abaixo.<br><br><b>A seção 07 (Tipo e hierarquia da EAP) é a que mais falta.</b> Ela é pré-requisito declarado da 03, e a nona regra aponta para ela. Sem a 07, a regra “o tipo é gravado, nunca deduzido” está enunciada mas não especificada.</div>
 
     <div class="indice">
-      <a href="#sec1">01 · Atividade — como é hoje</a>
-      <a href="#sec2">02 · Atividade — editar</a>
-      <a href="#sec3">03 · Atividade — criar</a>
-      <a href="#sec4">04 · Atividade — visualizar (parcial)</a>
+      <a href="#sec1-anc">01 · Atividade — como é hoje</a>
+      <a href="#sec2-anc">02 · Atividade — editar</a>
+      <a href="#sec3-anc">03 · Atividade — criar</a>
+      <a href="#sec4-anc">04 · Atividade — visualizar (parcial)</a>
       <span class="ausente">05 · Os três estados lado a lado</span>
       <span class="ausente">06 · Os quatro estados de um campo</span>
-      <span class="ausente">07 · De onde se cria, e a lição aprendida</span>
-      <span class="ausente">08 · Quadro — como é hoje</span>
-      <span class="ausente">09 · Quadro — proposto</span>
-      <span class="ausente">10 · Quadro — cor de coluna e tema escuro</span>
+      <span class="ausente">07 · Tipo e hierarquia da EAP</span>
+      <span class="ausente">08 · De onde se cria, e a lição aprendida</span>
+      <span class="ausente">09 · Quadro — como é hoje</span>
+      <span class="ausente">10 · Quadro — proposto</span>
+      <span class="ausente">11 · Quadro — cor de coluna e tema escuro</span>
     </div>
 
     <div class="cols">
@@ -132,13 +151,14 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
           <li>sem zebra: o que separa é a <b>faixa de grupo</b></li>
           <li>campo sem permissão vira <b>texto</b>; botão sem permissão <b>não aparece</b> — nunca apagado</li>
           <li>agrupador não é trabalho: <b>só Atividade vira cartão</b> no quadro</li>
+          <li>o <b>tipo é gravado</b>, nunca deduzido de “tem filhas?” — ver seção 07</li>
           <li><b>quatro cores no total</b> na tela inteira, contando tudo</li>
         </ul>
       </div>
     </div>
   </div>
 
-<section class="bloco">
+<section class="bloco" id="sec1-anc">
   <div class="cab">
     <span class="num">01</span>
     <div class="tx"><h2>Atividade — como é hoje</h2><p>O painel lateral atual. É o ponto de partida, não a referência.</p></div>
@@ -206,7 +226,7 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
 </div></div></div>
 </section>
 
-<section class="bloco">
+<section class="bloco" id="sec2-anc">
   <div class="cab">
     <span class="num">02</span>
     <div class="tx"><h2>Atividade — editar</h2><p>A REFERÊNCIA PRINCIPAL. Estado normal, com conteúdo.</p></div>
@@ -365,7 +385,7 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
 </div></div></div>
 </section>
 
-<section class="bloco">
+<section class="bloco" id="sec3-anc">
   <div class="cab">
     <span class="num">03</span>
     <div class="tx"><h2>Atividade — criar</h2><p>A mesma tela, vazia. Só o nome é obrigatório.</p></div>
@@ -404,8 +424,7 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
         <span class="rot">Tipo</span>
         <span class="tp on">Atividade</span>
         <span class="tp">Marco</span>
-        <span class="tp">Pacote</span>
-        <span style="font-size:11px;color:#B45309;background:#FEFAF3;padding:4px 10px;border-radius:4px;">os tipos oferecidos dependem do nível — a confirmar na auditoria da EAP</span>
+        <span style="font-size:11px;color:#5F6570;background:#F5F6F8;padding:4px 10px;border-radius:4px;">criando dentro de uma Entrega — Fase e Entrega não são oferecidas aqui</span>
       </div>
     </div>
 
@@ -468,7 +487,7 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
 </div></div></div>
 </section>
 
-<section class="bloco">
+<section class="bloco" id="sec4-anc">
   <div class="cab">
     <span class="num">04</span>
     <div class="tx"><h2>Atividade — visualizar</h2><p>A mesma tela, para quem só acompanha. Campos viram texto. <b style="color:#C0392F;font-weight:500;">Seção parcial — o original foi cortado aqui.</b></p></div>
@@ -567,31 +586,34 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
 
 <section class="bloco">
   <div class="cab">
-    <span class="num" style="color:#C0392F;border-color:#F3D2CE;">05<br>10</span>
+    <span class="num" style="color:#C0392F;border-color:#F3D2CE;">05<br>11</span>
     <div class="tx">
-      <h2>Seções 05 a 10 — não chegaram</h2>
+      <h2>Seções 05 a 11 — não chegaram</h2>
       <p>Precisam ser reenviadas para o desenho ficar completo.</p>
     </div>
   </div>
   <div class="palco">
     <div style="padding:26px 30px;display:flex;flex-direction:column;gap:16px;max-width:900px;">
       <div style="font-size:13.5px;line-height:1.7;color:#3A3A3A;">
-        O envio original excedeu o limite de uma mensagem e foi cortado no meio da seção 04.
-        Estas seis seções não chegaram, e <b style="font-weight:500;">nada foi inventado no lugar delas</b>:
+        O envio original excedeu o limite de uma mensagem e foi cortado no meio da seção 04 —
+        nas <b style="font-weight:500;">duas tentativas</b>, no mesmo ponto. Estas sete seções não
+        chegaram, e <b style="font-weight:500;">nada foi inventado no lugar delas</b>:
       </div>
       <div style="display:flex;flex-direction:column;gap:9px;">
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">05</span><span>Os três estados lado a lado</span></div>
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">06</span><span>Os quatro estados de um campo</span></div>
-        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">07</span><span>De onde se cria, e a lição aprendida</span></div>
-        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">08</span><span>Quadro — como é hoje</span></div>
-        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">09</span><span>Quadro — proposto</span></div>
-        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">10</span><span>Quadro — cor de coluna e tema escuro</span></div>
+        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;background:#FDF3F2;padding:7px 10px;border-radius:5px;"><span class="mono" style="color:#C0392F;font-size:12px;">07</span><span><b style="font-weight:500;">Tipo e hierarquia da EAP</b> — pré-requisito declarado da seção 03, e destino da nona regra</span></div>
+        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">08</span><span>De onde se cria, e a lição aprendida</span></div>
+        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">09</span><span>Quadro — como é hoje</span></div>
+        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">10</span><span>Quadro — proposto</span></div>
+        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">11</span><span>Quadro — cor de coluna e tema escuro</span></div>
       </div>
       <div style="font-size:12.5px;line-height:1.7;color:#5F6570;background:#F5F8FE;border-left:3px solid #2563EB;padding:14px 16px;border-radius:0 6px 6px 0;">
         <b style="font-weight:500;">O que já dá para construir com o que chegou:</b> a seção 02 — a referência
-        principal — está íntegra, e com ela os tokens e as oito regras. A tela da atividade
-        (fase 07) pode ser construída a partir daqui. As seções do quadro (08–10) são
-        necessárias antes de mexer no Kanban.
+        principal — está íntegra, e com ela os tokens e as nove regras. A tela da atividade
+        no estado <b style="font-weight:500;">editar</b> e <b style="font-weight:500;">visualizar</b> pode ser construída a partir daqui.
+        A <b style="font-weight:500;">criação</b> depende da 07, por dependência declarada na capa.
+        As seções do quadro (09–11) são necessárias antes de mexer no Kanban.
       </div>
     </div>
   </div>
