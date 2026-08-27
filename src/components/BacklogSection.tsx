@@ -4227,13 +4227,39 @@ export const BacklogSection = ({
          * propriedade que o desenho pede, e ela sai de graça por o rodapé
          * consumir a mesma fonte que a tabela.
          *
-         * `total.itens` conta as RAÍZES visíveis, não a árvore inteira: as
-         * horas já sobem por `derived_hours`, e contar tudo faria "141 itens ·
-         * 24h" para um projeto onde só 6 estão no primeiro nível.
+         * A CONTAGEM E OS AGREGADOS VÊM DE FONTES DIFERENTES, de propósito
+         * (corrigido em 27/08/2026).
+         *
+         * Era `total.itens` para os dois, e o rótulo dizia "Total do projeto"
+         * enquanto o número contava só as RAÍZES — "6 no backlog" num projeto
+         * com 141 itens. Quem lia via um total que não era total.
+         *
+         * Mas somar horas sobre a árvore inteira DUPLICARIA: `derived_hours`
+         * do pai já contém as das filhas. As duas coisas não saem da mesma
+         * lista, e é por isso que agora são duas:
+         *
+         *   contagem  → toda a lista visível (`itensVisiveis`)
+         *   horas/custo → só as raízes, via `derived_*` do servidor
+         *
+         * O rótulo de cada número diz de onde ele vem, no `title`.
          *
          * Não some mais quando não há horas: com filtro ligado e zero horas, um
          * rodapé ausente parece tela quebrada. Some só quando não há nada.
          */
+        /**
+         * Todos os itens à vista, não só as raízes — e sem contar agrupador:
+         * faixa não é trabalho, e somá-la ao número faria a mesma inflação que
+         * o Kanban evita ao não desenhá-la como cartão.
+         */
+        const folhasVisiveis = (() => {
+          const comFilho = new Set(
+            activities.filter((a) => a.parent_id).map((a) => a.parent_id as string),
+          );
+          const vivas = activities.filter((a) => !a.is_trashed);
+          const naLista = mostrarTudo ? vivas : soAFila(vivas);
+          return naLista.filter((a) => !comFilho.has(a.id));
+        })();
+
         const recorteLigado = recortesAtivos.size > 0 || prontidaoFilter !== "all";
         return (
           <div className="sticky bottom-0 z-10 flex items-center gap-4 px-3 py-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -4241,8 +4267,10 @@ export const BacklogSection = ({
               {recorteLigado ? "Total do recorte" : "Total do projeto"}
             </span>
             <span className="ml-auto flex items-center gap-4 text-[12px] tabular-nums text-foreground/80">
-              <span title="Itens de primeiro nível na lista atual">
-                {total.itens} no backlog
+              <span title="Itens de trabalho na lista atual (agrupadores não contam: faixa não é trabalho)">
+                {/* Os dois números saem da MESMA lista: contar o total numa e
+                    a fila noutra faria "4 de 6" com 6 que não é o 6 exibido. */}
+                {textoDaFaixa(folhasVisiveis.length, contarNaFila(folhasVisiveis))}
               </span>
               {horas && <span title="Somado no servidor a partir das subatividades">{horas}</span>}
               {custo && <span title="Somado no servidor a partir das subatividades">{custo}</span>}
