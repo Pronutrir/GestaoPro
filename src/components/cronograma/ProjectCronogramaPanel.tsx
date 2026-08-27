@@ -288,7 +288,7 @@ export function ProjectCronogramaPanel({
   const [deps, setDeps] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
   /** A mesma gente, em lista — é o formato que `PersonCombobox` consome. */
-  const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
+  const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
@@ -516,7 +516,7 @@ export function ProjectCronogramaPanel({
     const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }, { data: resps }] = await Promise.all([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
-      supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url"),
+      supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url, email"),
       stagesQ,
       respQ,
     ]);
@@ -539,13 +539,17 @@ export function ProjectCronogramaPanel({
     // mapa por id, montado para a busca por responsável nas linhas.
     setPessoas((profs || []).map((p: {
       id: string; full_name: string; sector?: string | null;
-      role_title?: string | null; avatar_url?: unknown;
+      role_title?: string | null; avatar_url?: unknown; email?: string | null;
     }) => ({
       id: p.id,
       full_name: p.full_name,
       sector: p.sector ?? null,
       role_title: p.role_title ?? null,
       avatar_url: typeof p.avatar_url === "string" ? p.avatar_url : null,
+      // O e-mail é o que distingue dois homônimos — e os dois "Williame
+      // Correia de Lima" são do MESMO setor, então sem ele o diferenciador
+      // cairia em "TI" nos dois e a lista continuaria ambígua.
+      email: p.email ?? null,
     })));
     const pm: Record<string, string> = {};
     const pdl: Record<string, string | null> = {};

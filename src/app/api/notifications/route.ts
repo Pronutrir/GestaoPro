@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/integrations/supabase/server';
 import { getSupabaseServerUrl } from '@/integrations/supabase/config';
-import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from '@/lib/identityMatch';
+import { anyMatchesIdentity, buildUserCandidates, matchesIdentity, carregarNomesAmbiguos } from '@/lib/identityMatch';
 
 type NotificationRow = {
   id: string;
@@ -77,6 +77,15 @@ export async function GET(request: Request) {
   ]);
 
   const isAdmin = (roleRows || []).some((row) => row.role === 'admin');
+
+  // A TRAVA DO HOMÔNIMO TAMBÉM AQUI.
+  //
+  // `matchesIdentity` recusa nome que pertence a mais de um perfil — mas só
+  // sabe quais são depois que alguém carrega a lista. No browser é a página do
+  // projeto; no servidor, ninguém carregava, e esta rota decide QUEM ENXERGA
+  // O QUÊ. Sem isto, os dois "Williame Correia de Lima" recebiam as
+  // notificações um do outro.
+  await carregarNomesAmbiguos(adminClient as never);
 
   const userCandidates = buildUserCandidates([
     profile?.id,

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DateChip } from "@/components/DateChip";
 import { PersonCombobox } from "@/components/PersonCombobox";
+import { nomesRepetidos } from "@/lib/homonimos";
 import { SelecionarParticipantes } from "@/components/SelecionarParticipantes";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -170,7 +171,11 @@ interface PersonOption {
   avatar_url?: string | null;
 }
 
-function normalizePersonOptions(options: Array<Partial<PersonOption> | null | undefined>): PersonOption[] {
+function normalizePersonOptions(
+  options: Array<Partial<PersonOption> | null | undefined>,
+  /** Ver o bloco no fim da função: só para componente que usa o NOME como value. */
+  dedupPorNome = false,
+): PersonOption[] {
   const normalized = options
     .filter((option): option is Partial<PersonOption> & { full_name: string } => Boolean(option?.full_name?.trim()))
     .map((option, index) => ({
@@ -184,9 +189,21 @@ function normalizePersonOptions(options: Array<Partial<PersonOption> | null | un
       avatar_url: option.avatar_url ?? null,
     }));
 
-  // Dedup por full_name: o nome é o valor selecionável (assigned_to/owner são
-  // strings de nome), então perfis distintos com o mesmo nome são o mesmo valor
-  // — manter os dois quebra o Radix Select (value duplicado). Mantém o 1º.
+  // ── DEDUP POR NOME: só onde o componente exige, e NÃO é o padrão ────────
+  //
+  // Isto existia para o `Radix Select`, cujo `value` é o NOME — dois perfis
+  // homônimos viravam dois itens com o mesmo `value`, e o componente quebra.
+  //
+  // O efeito colateral era grave e silencioso: dos dois perfis ativos chamados
+  // "Williame Correia de Lima", **um simplesmente não aparecia na lista**.
+  // Ninguém podia escolhê-lo, e nada dizia por quê.
+  //
+  // `PersonCombobox` — o seletor destas telas — indexa por `id`, então mostra
+  // os dois sem problema, e agora os marca com o e-mail ao lado. Por isso o
+  // padrão passou a ser MOSTRAR TODOS; quem ainda usa Select por nome pede o
+  // dedup explicitamente.
+  if (!dedupPorNome) return normalized;
+
   const seenNames = new Set<string>();
   return normalized.filter((option) => {
     const key = option.full_name.toLowerCase();
@@ -516,6 +533,8 @@ export const EditActivityDialog = ({
   const [addFieldOpen, setAddFieldOpen] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
+  /** Nomes que se repetem na equipe — marcam o homonimo nas listas simples. */
+  const membrosHomonimos = useMemo(() => nomesRepetidos(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
   /** O painel de inclusão está aberto? Ver `SelecionarParticipantes`. */
   const [painelParticipantes, setPainelParticipantes] = useState(false);
@@ -3239,7 +3258,15 @@ export const EditActivityDialog = ({
                                         onClick={() => { setOpenAssigneeSubId(null); updateField(m.full_name); }}
                                       >
                                         {m.full_name}
-                                        {m.sector && <span className="text-muted-foreground"> — {m.sector}</span>}
+                                        {/* HOMÔNIMO: com dois perfis de mesmo
+                                            nome, a lista mostrava duas linhas
+                                            idênticas. O e-mail diz qual é qual
+                                            — e é o que a pessoa reconhece. */}
+                                        {membrosHomonimos.has(m.full_name.trim().toLowerCase()) && m.email ? (
+                                          <span className="text-amber-700 dark:text-amber-400"> — {m.email}</span>
+                                        ) : m.sector ? (
+                                          <span className="text-muted-foreground"> — {m.sector}</span>
+                                        ) : null}
                                       </button>
                                     ))}
                                   </div>

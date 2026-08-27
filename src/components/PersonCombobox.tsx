@@ -6,8 +6,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ChevronsUpDown, Check, UserPlus, X } from "lucide-react";
+import { ChevronsUpDown, Check, UserPlus, X, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { nomesRepetidos, ehHomonimo as ehHomonimoRegra, diferenciador, AVISO_HOMONIMO } from "@/lib/homonimos";
 
 export interface Person {
   id: string;
@@ -15,6 +16,12 @@ export interface Person {
   sector?: string | null;
   role_title?: string | null;
   avatar_url?: string | null;
+  /**
+   * O e-mail é o diferenciador quando duas pessoas têm o mesmo nome — e é o
+   * que a própria pessoa reconhece. Opcional: quem não passa continua
+   * funcionando, e a desambiguação cai no setor/cargo.
+   */
+  email?: string | null;
 }
 
 interface PersonComboboxProps {
@@ -70,12 +77,19 @@ export function PersonCombobox({
 
   const selected = variant === "single" ? people.find((p) => p.id === value) : undefined;
 
-  // Filtro combinado: nome + setor + função.
+  /** Os nomes que aparecem em mais de uma pessoa desta lista. */
+  const repetidos = useMemo(() => nomesRepetidos(people), [people]);
+  const ehHomonimo = (p: Person) => ehHomonimoRegra(p, repetidos);
+
+  // Filtro combinado: nome + setor + função + e-mail.
+  // O e-mail entra na busca porque, com homônimos, é a única coisa que
+  // distingue um do outro — sem ele, buscar pelo nome traz os dois e a busca
+  // deixa de ajudar exatamente onde mais precisaria.
   const filtered = useMemo(() => {
     const q = norm(query.trim());
     if (!q) return people;
     return people.filter((p) =>
-      norm([p.full_name, p.sector || "", p.role_title || ""].join(" ")).includes(q),
+      norm([p.full_name, p.sector || "", p.role_title || "", p.email || ""].join(" ")).includes(q),
     );
   }, [people, query]);
 
@@ -95,7 +109,15 @@ export function PersonCombobox({
               {selected.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
               <AvatarFallback className="text-[9px]">{initials(selected.full_name)}</AvatarFallback>
             </Avatar>
-            <span className="truncate">{selected.full_name}{selected.sector ? ` — ${selected.sector}` : ""}</span>
+            {/* Escolhida uma pessoa de nome repetido, o campo mostra QUAL
+                delas — senão a tela exibe o nome ambíguo e ninguém sabe se a
+                atribuição foi para a pessoa certa. */}
+            <span className="truncate">
+              {selected.full_name}
+              {ehHomonimo(selected) && diferenciador(selected)
+                ? ` — ${diferenciador(selected)}`
+                : selected.sector ? ` — ${selected.sector}` : ""}
+            </span>
           </span>
         ) : (
           <span className="text-muted-foreground">{placeholder}</span>
@@ -148,6 +170,17 @@ export function PersonCombobox({
             onWheel={(e) => e.stopPropagation()}
           >
             <CommandEmpty>Ninguém encontrado.</CommandEmpty>
+            {/* O AVISO, uma vez só no topo — não repetido em cada linha.
+                Aparece só quando há homônimo NA LISTA VISÍVEL: avisar sobre
+                uma ambiguidade que a pessoa não está vendo é ruído. */}
+            {filtered.some(ehHomonimo) && (
+              <div className="flex items-start gap-1.5 px-2 py-1.5 mx-1 mt-1 rounded bg-amber-500/10 border border-amber-500/25">
+                <Users className="w-3 h-3 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
+                <span className="text-[11px] leading-snug text-amber-800 dark:text-amber-300">
+                  {AVISO_HOMONIMO}
+                </span>
+              </div>
+            )}
             {variant === "single" && selected && (
               <CommandItem
                 value="__clear__"
@@ -169,16 +202,34 @@ export function PersonCombobox({
                   <AvatarFallback className="text-[9px]">{initials(p.full_name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-sm truncate leading-tight">
+                  <span className="text-sm truncate leading-tight flex items-center gap-1.5">
                     <Highlight text={p.full_name} query={query.trim()} />
+                    {/* HOMÔNIMO: a marca fica no NOME, que é onde a confusão
+                        acontece. Sem ela, as duas linhas são idênticas e a
+                        escolha vira sorteio. */}
+                    {ehHomonimo(p) && (
+                      <span
+                        className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400"
+                        title="Há mais de uma pessoa com este nome. Confira o e-mail antes de escolher."
+                      >
+                        <Users className="w-2.5 h-2.5" />2 perfis
+                      </span>
+                    )}
                   </span>
-                  {(p.role_title || p.sector) && (
+                  {/* A linha de baixo: com homônimo, o E-MAIL vem primeiro —
+                      é o que a pessoa reconhece como seu. Sem homônimo, segue
+                      cargo · setor, como sempre foi. */}
+                  {ehHomonimo(p) && diferenciador(p) ? (
+                    <span className="text-[11px] text-amber-700 dark:text-amber-400 truncate leading-tight">
+                      <Highlight text={diferenciador(p)!} query={query.trim()} />
+                    </span>
+                  ) : (p.role_title || p.sector) ? (
                     <span className="text-[11px] text-muted-foreground truncate leading-tight">
                       {p.role_title ? <Highlight text={p.role_title} query={query.trim()} /> : null}
                       {p.role_title && p.sector ? " · " : null}
                       {p.sector ? <Highlight text={p.sector} query={query.trim()} /> : null}
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 {variant === "single" && selected?.id === p.id && (
                   <Check className="w-4 h-4 text-primary shrink-0" />

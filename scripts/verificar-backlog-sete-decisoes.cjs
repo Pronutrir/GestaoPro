@@ -96,6 +96,48 @@ check(
   /resumoDoGrupo\(acts/.test(backlog),
 );
 
+// ── 7b. O total do projeto, fixo no rodapé ────────────────────────────────
+check(
+  "decisão 7 — o total do projeto consome totalDoProjeto",
+  /totalDoProjeto\(raizes/.test(backlog),
+);
+check(
+  "e fica FIXO no rodapé (sticky), não no fim da rolagem",
+  /sticky bottom-0/.test(backlog),
+);
+
+// ── Densidade: guardada por usuário, no caminho que já existe ─────────────
+check(
+  "a densidade usa useKanbanPrefs, sem inventar um segundo armazenamento",
+  /useKanbanPrefs\(projectId/.test(backlog),
+);
+check(
+  "e a altura da linha vem de ALTURA_DA_LINHA",
+  /minHeight: alturaDaLinha/.test(backlog),
+);
+
+// ── PROMOVER ≠ ASSUMIR: a pergunta que nao pode ser automatica ───────────
+check(
+  "levar as subatividades e PERGUNTADO (existe o controle)",
+  /setLevarSubatividades/.test(backlog),
+);
+check(
+  "e nasce DESMARCADO — levar junto é decisão, não padrão",
+  /\[levarSubatividades, setLevarSubatividades\] = useState\(false\)/.test(backlog),
+);
+check(
+  "sem a marca, o movimento alcança só o que está selecionado",
+  /levarSubatividades[\s\S]{0,400}: Array\.from\(selectedIds\)/.test(backlog),
+);
+check(
+  "marco nunca entra no lote da promoção",
+  /a \? !a\.is_milestone : false/.test(backlog),
+);
+check(
+  "a pergunta volta desmarcada depois de mover",
+  /setLevarSubatividades\(false\)/.test(backlog),
+);
+
 // ── A regra que atravessa tudo: agregado NÃO se recalcula na tela ─────────
 check(
   "o esforço do pai lê derived_hours (não soma no cliente)",
@@ -108,6 +150,55 @@ check(
 check(
   "pai sem derivação mostra ausência, não as horas próprias dele",
   /ehPai && h === null/.test(backlog) && /ehPai && c === null/.test(backlog),
+);
+
+// ── A TABELA DO DESENHO: colunas, ordem e o que saiu ─────────────────────
+check(
+  "a coluna STATUS saiu — backlog e planejamento, nao execucao",
+  !/id: "status", label: "Status"/.test(backlog),
+);
+check(
+  "EAP e TIPO tem coluna propria no grid",
+  /68px 58px minmax/.test(backlog),
+);
+// O selo do código na FAIXA DE GRUPO continua — ali ele é o rótulo do grupo
+// ("1.1 Formalização"), e some-lo tiraria a posição da fase na EAP. O que saiu
+// é o selo dentro da linha de ATIVIDADE, que virou coluna própria.
+check(
+  "o código EAP saiu de dentro do título da ATIVIDADE",
+  !/\{\(activity as any\)\.wbs_code\}/.test(backlog),
+);
+check(
+  "o código passa por codigoParaExibir (marco mostra a âncora do pai)",
+  /codigoParaExibir\(/.test(backlog),
+);
+check(
+  "PREVISTO mostra a JANELA, não só o prazo",
+  /derived_start \?\? activity\.start_date/.test(backlog),
+);
+check(
+  "o vazio do responsavel e um BOTAO, nao o texto a definir",
+  /Sem responsavel|Sem responsável/.test(backlog) && /definirResponsavelDaLinha/.test(backlog),
+);
+check(
+  "e a escrita da linha LE o resultado (count exact)",
+  /count: "exact"/.test(backlog),
+);
+check(
+  "a faixa diz N no backlog, e continua dizendo quando recolhida",
+  /no backlog/.test(backlog) && /isCollapsed && <span/.test(backlog),
+);
+check(
+  "a barra de progresso saiu da faixa",
+  !/bg-success transition-all/.test(backlog),
+);
+check(
+  "os chips de recorte substituiram Todas/Incompletas",
+  /RecorteRapido/.test(backlog) && /alternarRecorte/.test(backlog),
+);
+check(
+  "e o rodape acompanha o recorte",
+  /recorteLigado/.test(backlog),
 );
 
 // ── Data sem fuso ─────────────────────────────────────────────────────────

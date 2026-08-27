@@ -52,6 +52,26 @@ export type KanbanPrefs = {
    * `false` e ignorado na leitura; depois dela, a escolha do usuario manda.
    */
   subSummaryVisto?: boolean;
+  /**
+   * DENSIDADE DA LISTA DO BACKLOG — "compacto" (30px) ou "confortavel" (36px).
+   *
+   * Vive aqui, e nao num armazenamento proprio, porque a fase 06 e explicita:
+   * "as preferencias de exibicao ja vivem no banco (useKanbanPrefs) — siga o
+   * mesmo caminho, nao invente um segundo". Duas fontes de preferencia e o
+   * comeco de duas telas discordando sobre o que a pessoa escolheu.
+   *
+   * Ausente = "confortavel", que e o comportamento de sempre.
+   */
+  densidadeBacklog?: DensidadeBacklog;
+};
+
+/** As duas densidades da fase 06. Numeros em `ALTURA_DA_LINHA`. */
+export type DensidadeBacklog = "compacto" | "confortavel";
+
+/** A altura da linha, em px, de cada densidade. */
+export const ALTURA_DA_LINHA: Record<DensidadeBacklog, number> = {
+  compacto: 30,
+  confortavel: 36,
 };
 
 export const DEFAULT_PREFS: KanbanPrefs = {
@@ -140,9 +160,18 @@ export function sanearPrefs(raw: unknown): KanbanPrefs {
 
   // `subSummaryVisto` viaja de volta: sem isso a marca se perderia a cada
   // saneamento, e o `false` do usuário nunca chegaria a valer.
+  //
+  // `densidadeBacklog` idem — e só os dois valores conhecidos passam: um valor
+  // estranho vindo do banco viraria uma altura de linha inexistente.
+  const densidadeBacklog =
+    o.densidadeBacklog === "compacto" || o.densidadeBacklog === "confortavel"
+      ? (o.densidadeBacklog as DensidadeBacklog)
+      : undefined;
+
   return {
     cardFields, groupBy, columnWidths, collapsedStages, columnSorts,
     ...(o.subSummaryVisto === true ? { subSummaryVisto: true } : {}),
+    ...(densidadeBacklog ? { densidadeBacklog } : {}),
   };
 }
 

@@ -410,6 +410,14 @@ export interface Activity {
   derived_progress?: number | string | null;
   /** Filhas diretas VIVAS. 0/ausente = é folha. */
   derived_children?: number | null;
+
+  // ── Identificador de pessoa (migration 20260826200000) ──────────────────
+  // `assigned_to`/`participants` guardam NOME, e dois perfis homônimos são
+  // indistinguíveis no texto. Quando estas respondem, elas mandam.
+  // `null` num registro com `assigned_to` preenchido = pendente de decisão
+  // (ver docs/medicoes/ambiguos-*.md), e aí o texto ainda decide.
+  assigned_to_id?: string | null;
+  participant_ids?: string[] | null;
 }
 
 // Filtro por coluna (Frente B): mesmos campos do filtro geral, exceto

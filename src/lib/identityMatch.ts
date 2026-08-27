@@ -138,6 +138,31 @@ export const definirNomesAmbiguos = (nomes: Array<string | null | undefined>): v
 export const obterNomesAmbiguos = (): string[] => Array.from(nomesAmbiguos);
 
 /**
+ * A MESMA TRAVA, NO SERVIDOR.
+ *
+ * `nomesAmbiguos` é módulo-global, e no browser a página do projeto o preenche
+ * uma vez. **No servidor ninguém preenchia** — cada rota de API é um contexto
+ * próprio, e `matchesIdentity` rodava lá com o conjunto vazio, ou seja, sem a
+ * trava. As rotas de notificação decidem quem enxerga o quê, então era o furo
+ * do homônimo de volta pela porta do servidor.
+ *
+ * Recebe o cliente já autenticado (evita import de supabase aqui, que
+ * arrastaria dependência de browser para dentro de uma função pura).
+ * Falha em silêncio: sem a trava, a comparação volta a ser tolerante — e o
+ * banco continua barrando, que é onde a decisão final vive.
+ */
+export const carregarNomesAmbiguos = async (
+  cliente: { from: (t: string) => { select: (c: string) => Promise<{ data: Array<{ full_name: string | null }> | null }> } },
+): Promise<void> => {
+  try {
+    const { data } = await cliente.from("profiles").select("full_name");
+    if (data) definirNomesAmbiguos(nomesRepetidosEm(data));
+  } catch {
+    // Ver o comentário acima: o banco é a última linha de defesa, não isto.
+  }
+};
+
+/**
  * Deriva os nomes ambíguos de uma lista de perfis: os `full_name` que
  * aparecem mais de uma vez. É a mesma pergunta que `nome_e_ambiguo` faz no
  * banco, feita sobre a lista que a página já carregou.

@@ -603,3 +603,203 @@ homônimos pergunta o que decide: **nesses projetos, os homônimos já são memb
 E o aviso de sempre, para quando publicar: **42 pais mudam de percentual no Cronograma** sem
 que nada tenha mudado no trabalho (commit `982ba60`, da primeira rodada). O número novo está
 certo; o antigo diluía as filhas nos netos.
+
+---
+---
+
+# Terceira rodada — 26/08/2026 · homônimos marcados, nome vira identificador
+
+Decisões do Raphael: **(1) não unificar os perfis — apenas marcar**; **(2) converter
+`assigned_to` de nome para identificador agora**, antes de construir as telas.
+
+| Item | Estado | Commit |
+|---|---|---|
+| 1 — marcação de homônimos | **feito** | `948905f` |
+| 2a — migration da conversão | **escrita, não aplicada** | `e8934a7` |
+| 2b — ambíguos listados + script de desempate | **feito, script não rodado** | `e8934a7` |
+| 2c — auditoria dos 301 usos + conversão dos perigosos | **feito** | `f732e6b` |
+| 3 — tela do backlog (fase 06) | *em seguida* | — |
+
+---
+
+## 1 · MARCAR, NÃO UNIFICAR
+
+Onde o sistema mostra ou oferece pessoas, nome repetido aparece com um diferenciador.
+
+**O e-mail é o diferenciador**, e não é preferência: os dois "Williame Correia de Lima" são
+do **mesmo setor** (TI), então setor não separa nada; cargo separa, mas ninguém decora o
+cargo do colega. O e-mail é o que a própria pessoa reconhece como seu.
+
+Onde aparece: seletor de responsável (`PersonCombobox`), participantes, equipe, e o campo
+depois de escolhido — porque de nada adianta escolher certo e a tela mostrar o nome ambíguo.
+
+### Dois defeitos que só apareceram ao implementar
+
+**Um dos perfis não aparecia na lista.** `normalizePersonOptions` deduplicava por nome e
+ficava com o primeiro — herança do `Radix Select`, cujo `value` é o nome. Ninguém podia
+escolher o segundo Williame, e nada dizia por quê. `PersonCombobox` indexa por `id`, então o
+padrão passou a ser mostrar todos.
+
+**A tela de Equipe somava os dois como uma pessoa.** Agrupava por `full_name`, então as duas
+viravam uma linha com a **união** dos projetos. São membros de **1** e de **18** projetos; a
+tela mostrava uma pessoa só, com 18. Agora agrupa por `user_id` — que sempre esteve
+disponível em `project_members`.
+
+Onde os números vêm de `assigned_to` (texto), a linha continua somada — não há como saber
+qual das duas fez qual tarefa — mas **se anuncia** como dois perfis. Duas linhas com números
+repartidos por um critério que não existe seriam piores que uma linha honesta.
+
+A regra vive em `lib/homonimos.ts` e é consumida por quatro telas. **18 verificações.**
+
+---
+
+## 2 · A CONVERSÃO nome → identificador
+
+### 2a · A migration — `20260826200000`, **escrita e não aplicada**
+
+Colunas de identificador **ao lado** das de texto, coluna **sombra** com o nome original, e
+conversão só do que resolve para **um perfil ativo**.
+
+| tabela | coluna nova | sombra |
+|---|---|---|
+| `activities` | `assigned_to_id` | `assigned_to_nome_original` |
+| `activities` | `participant_ids` | `participants_nome_original` |
+| `projects` | `owner_id`, `manager_id` | `owner_nome_original`, `manager_nome_original` |
+
+**Nada de nome é apagado.** As colunas de texto continuam intactas, e a sombra é uma segunda
+cópia. A verificação **falha alto** se alguma linha ficar sem sombra, ou se o texto divergir
+dela.
+
+#### A sonda, medida antes
+
+| | preenchidos | convertem | **pendentes** | sem perfil |
+|---|---|---|---|---|
+| `assigned_to` | 1.877 | **344** | **1.533** | 0 |
+| `participants` | 155 | 149 | 6 | 0 |
+| `owner` / `manager` | 60 | 50 | 10 | 0 |
+
+Os 1.533 são **450 vivas + 1.083 na lixeira**, e **todos** vêm de um único texto: *"Williame
+Correia de Lima"*. Nenhum outro nome da base é ambíguo.
+
+> **"Um perfil ATIVO", não "um perfil".** Homônimo desativado não disputa — ele não recebe
+> atribuição nova — então o estado ativo desempata e converte mais. Se um dos dois Williames
+> for desativado, o desempate resolve os 1.533 de uma vez.
+
+### 2b · Os ambíguos — listados, não chutados
+
+**`docs/medicoes/ambiguos-26-08-2026.md`**: atividade, projeto, data e os dois perfis
+candidatos, com a lista completa das 450 vivas e a distribuição por projeto.
+
+| projeto | atividades vivas |
+|---|---|
+| Guia Jornada do Paciente — Onboard — Desenvolvimento | 226 |
+| Guia Jornada do Paciente — Onboard | 91 |
+| Construção Ferramenta DC-e | 56 |
+| Farmácia Oncologia · ProVet | 18 cada |
+| …e mais 7 projetos | 41 |
+
+**`scripts/desempatar-homonimo.sh` — escrito e NÃO rodado.** Converte todos de uma vez assim
+que alguém disser qual perfil é o certo:
+
+```bash
+PERFIL=<uuid-do-perfil-correto> ./scripts/desempatar-homonimo.sh
+```
+
+Mostra números antes, pede confirmação, converte, confere depois. Não toca no texto nem na
+sombra, e desfazer é um `UPDATE ... SET assigned_to_id = NULL`.
+
+### 2c · Os usos no código — auditados um a um
+
+`scripts/medicoes/auditar-usos-assigned-to.cjs`: **305 linhas** com `assigned_to` em `src/`,
+sendo **283 de código** em **42 arquivos**.
+
+| | |
+|---|---|
+| **Comparam identidade** (perigosos) | **31** |
+| Escrevem a coluna | 5 |
+| **Só exibem** (seguros) | **247** |
+
+> **A primeira versão desta auditoria estava errada, e o número era plausível.** O `\r` do
+> CRLF quebrava o `$` do regex e ela contou **106 de 305** linhas, em 14 arquivos de 42 —
+> subestimando pela metade sem nenhum sinal. O script agora conta o que ignorou e **falha**
+> se ignorar qualquer coisa.
+
+#### Tela por tela
+
+| arquivo | usos | **comparam identidade** | escrevem | só exibem | situação |
+|---|---|---|---|---|---|
+| `app/(dashboard)/team/page.tsx` | 18 | **6** | — | 12 | **convertido** (agrupa por `user_id`) |
+| `components/ProjectFlatList.tsx` | 10 | **4** | — | 6 | já usava `matchesIdentity` — protegido |
+| `components/ActivityKanban.tsx` | 17 | **3** | — | 14 | **convertido** (`isMineActivity`) |
+| `lib/activityAccess.ts` | 8 | **3** | — | 5 | **convertido** (id primeiro) |
+| `components/EditActivityDialog.tsx` | 20 | **2** | 4 | 14 | marcado; escrita segue por nome |
+| `app/(dashboard)/project/[id]/page.tsx` | 9 | **2** | — | 7 | `matchesIdentity` + trava |
+| `app/api/notifications/mark-read/route.ts` | 4 | **2** | — | 2 | **convertido** (trava no servidor) |
+| `app/api/notifications/route.ts` | 4 | **2** | — | 2 | **convertido** (trava no servidor) |
+| `components/MeetingsManager.tsx` | 23 | **1** | — | 22 | exibição + 1 comparação de nome |
+| `app/(dashboard)/indicadores-lab/page.tsx` | 14 | **1** | — | 13 | indicador; erra por agregação |
+| `app/api/ai/agent/route.ts` | 10 | **1** | — | 9 | `matchesIdentity` — protegido |
+| `components/OverviewPage.tsx` | 10 | **1** | — | 9 | `matchesIdentity` — protegido |
+| `components/cronograma/ProjectCronogramaPanel.tsx` | 10 | **1** | — | 9 | lê `activity_assignees` |
+| `app/api/meetings/notify-actions/route.ts` | 3 | **1** | — | 2 | **pendente** — ver abaixo |
+| `hooks/useProjectAccess.ts` | 2 | **1** | — | 1 | `matchesIdentity` — protegido |
+| `app/(dashboard)/csc/page.tsx` | 20 | — | — | 20 | **só exibe** — pode esperar |
+| `components/BacklogSection.tsx` | 16 | — | — | 16 | **só exibe** — pode esperar |
+| `components/PhaseManager.tsx` | 12 | — | — | 12 | **só exibe** — pode esperar |
+| `components/TimelineView.tsx` | 8 | — | — | 8 | **só exibe** — pode esperar |
+| `lib/pendencias.ts` | 8 | — | — | 8 | já lê `activity_assignees` |
+| `components/DailyPendencies.tsx` | 7 | — | — | 7 | **só exibe** — pode esperar |
+| …e mais 21 arquivos | 55 | — | 1 | 54 | **só exibem** |
+
+#### O que foi convertido, e o achado do servidor
+
+**`lib/activityAccess`** — identificador primeiro nas duas funções de vínculo. `null` significa
+*"não sei"* e cai no texto; só responde `false` quando o registro **foi** convertido. As 138
+verificações de acesso seguem passando.
+
+**`ActivityKanban.isMineActivity`** — lê `assigned_to_id`/`participant_ids`, e a via do texto
+**recusa quando o meu próprio nome é ambíguo**: marcar o cartão do outro como "meu" é pior
+que não marcar nenhum.
+
+**As duas rotas de notificação** — este é o achado que importa. Elas já usavam
+`matchesIdentity`, que recusa nome ambíguo… **mas o conjunto de nomes ambíguos só era
+carregado no browser.** No servidor a função rodava com o conjunto vazio, ou seja, **sem
+trava** — e são rotas que decidem quem enxerga o quê. `carregarNomesAmbiguos()` fecha isso.
+
+#### O que ficou pendente, e por quê
+
+- **`api/meetings/notify-actions`** — decide destinatário por nome. Precisa de leitura da
+  rota inteira para não trocar quem recebe o e-mail; fica para quando houver como testar o
+  envio.
+- **`indicadores-lab`** — agrega indicadores por nome. Com homônimo, soma as duas pessoas
+  numa linha; é o mesmo caso da tela de Equipe, e a correção honesta é a mesma (somar e
+  anunciar). Não é urgente porque o número agregado do time não muda.
+- **Os 247 usos de exibição** — continuam corretos: pegam o texto e mostram. A marcação
+  (`lib/homonimos`) já resolve a confusão visual, e a sincronia mantém o texto em dia.
+
+---
+
+## O que falta rodar
+
+**Nenhuma migration desta rodada foi aplicada.** A ordem, com a razão:
+
+```bash
+# 1. Marcar homônimos: já vale no próximo deploy (é só código).
+
+# 2. A conversão — cria colunas, não apaga nada.
+./scripts/apply-conversao-identificador.sh          # 20260826200000
+
+# 3. Depois da decisão de qual Williame é o certo:
+PERFIL=<uuid> ./scripts/desempatar-homonimo.sh
+```
+
+> A conversão é **aditiva**: só cria colunas e preenche o que resolve. Nenhuma tela lê as
+> colunas novas ainda como fonte única — `lib/activityAccess` e o Kanban as preferem **quando
+> existem** e caem no texto quando não. Então a migration pode subir antes ou depois do
+> deploy do front, sem par obrigatório.
+
+## A pergunta que continua sendo de gente
+
+**Por qual login o Williame entra?** É o que destrava as 450 atividades vivas. As outras
+perguntas seguem em aberto: em qual máquina o build roda, qual `APP_VERSION` está no ar, e a
+conversa com o Bruno e o Williame sobre a P00.

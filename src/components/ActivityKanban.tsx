@@ -142,6 +142,7 @@ import {
   type SubActivityStatusSummary,
   type ActivityKanbanProps,
 } from "./kanban/shared";
+import { ehAgrupadorDoQuadro, faixaDoCartao } from "@/lib/quadroDeExecucao";
 import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
 import { migrarOrdenacaoDasColunas } from "@/lib/kanbanPrefs";
 import { GerenciarColunas, type PlanoDeSalvamento } from "./kanban/GerenciarColunas";
@@ -340,6 +341,22 @@ export const ActivityKanban = ({
   // Filtro "Apenas minhas tarefas" — persistido por projeto
   const myName = (profile?.full_name || "").trim().toLowerCase();
   const myId = user?.id || null;
+  /**
+   * O MEU nome pertence a mais de um perfil?
+   *
+   * Se pertence, a via do texto não pode dizer que uma atividade é minha — ela
+   * casaria com o homônimo do mesmo jeito. `profilesMap` é `id → nome`, então
+   * contar quantos ids levam ao meu nome responde a pergunta.
+   */
+  const meuNomeEhAmbiguo = useMemo(() => {
+    if (!myName) return false;
+    let quantos = 0;
+    for (const nome of Object.values(profilesMap)) {
+      if ((nome || "").trim().toLowerCase() === myName) quantos++;
+      if (quantos > 1) return true;
+    }
+    return false;
+  }, [profilesMap, myName]);
   const onlyMineKey = `kanban-only-mine:${projectId}`;
   const [onlyMine, setOnlyMine] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -669,6 +686,29 @@ export const ActivityKanban = ({
     return m;
   }, [activities]);
 
+  /**
+   * As filhas COMPLETAS, para `lib/quadroDeExecucao`.
+   *
+   * `filhosPorPai` acima carrega uma fatia (status, coluna, marco) porque
+   * serve ao cálculo de progresso. A regra do quadro precisa do item inteiro —
+   * `id` e `parent_id` inclusive — para responder "é agrupador?" e "qual é a
+   * faixa deste cartão?".
+   */
+  const filhasPorPaiParaRegra = useMemo(() => {
+    const m = new Map<string, Activity[]>();
+    activities.forEach((a) => {
+      if (!a.parent_id) return;
+      m.set(a.parent_id, [...(m.get(a.parent_id) || []), a]);
+    });
+    return m;
+  }, [activities]);
+
+  /** As colunas por id — a outra metade do que a regra do quadro consulta. */
+  const colunaPorIdParaRegra = useMemo(
+    () => new Map(stages.map((s) => [s.id, s as never])),
+    [stages],
+  );
+
   // Tipo EAP de uma atividade (fonte única: lib/eapModel). Três papéis:
   // Fase/Entrega (agrupa; cobre 'pacote' legado e itens com filhos), Atividade, Marco.
   const activityEapType = useCallback((a: Activity): string => {
@@ -922,12 +962,35 @@ export const ActivityKanban = ({
     return [];
   }, [groupBy, phases, assigneeOptions, activities, profileSectorMap, tagOptions, blockedStageIdSet, laneGroups]);
 
+  /**
+   * "É minha?" — a pergunta do filtro Minhas.
+   *
+   * IDENTIFICADOR PRIMEIRO. `assigned_to_id` e `participant_ids` são FK
+   * (migration 20260826200000): quando respondem, homônimo não confunde.
+   *
+   * O texto continua como via secundária, para os registros ainda pendentes —
+   * mas **nome ambíguo devolve `false`**: existem dois perfis "Williame
+   * Correia de Lima", e marcar o cartão do outro como "meu" é pior que não
+   * marcar nenhum. Quem tem nome único não perde nada.
+   */
   const isMineActivity = useCallback(
     (a: Activity) => {
       if (!myId && !myName) return false;
       if (myId && a.created_by === myId) return true;
-      if (myId && a.assigned_to === myId) return true;
+
+      // ── Via do identificador ──
+      if (myId) {
+        if (a.assigned_to_id && a.assigned_to_id === myId) return true;
+        if (Array.isArray(a.participant_ids) && a.participant_ids.includes(myId)) return true;
+        // Convertida e eu não estou nela: é resposta, não silêncio.
+        if (a.assigned_to_id && a.assigned_to_id !== myId) return false;
+        // `assigned_to` que já era uuid.
+        if (a.assigned_to === myId) return true;
+      }
+
+      // ── Via do texto, só para o que ainda não converteu ──
       if (myName) {
+        if (meuNomeEhAmbiguo) return false;
         if ((a.assigned_to || "").trim().toLowerCase() === myName) return true;
         // Resolve UUID → nome para comparação
         const resolvedName = a.assigned_to ? (profilesMap[a.assigned_to] || "").trim().toLowerCase() : "";
@@ -936,7 +999,7 @@ export const ActivityKanban = ({
       }
       return false;
     },
-    [myId, myName, profilesMap]
+    [myId, myName, profilesMap, meuNomeEhAmbiguo]
   );
 
   /**
@@ -1454,104 +1517,29 @@ export const ActivityKanban = ({
   }, [activities, optimisticMoves, stages]);
 
   /**
-   * O PAI ACOMPANHA QUANDO TODOS OS FILHOS CHEGAM À MESMA COLUNA.
+   * O PAI NÃO ACOMPANHA MAIS — e isto é a correção do bug relatado.
    *
-   * Mover o pai não move os filhos — proposital: a caixa pode avançar antes do
-   * conteúdo. O caminho inverso já existia, mas SÓ PARA A COLUNA FINAL: o
-   * bloco `ancestorsToComplete` do arrasto leva o pai quando todos os filhos
-   * ficam `completed`.
+   * `subirPaisCompletos` vivia aqui: ao mover um cartão, ela SUBIA O
+   * ANCESTRAL quando todos os irmãos chegavam à mesma coluna. Combinada com o
+   * diálogo "levar os N junto" (que cascateia para os descendentes), produzia
+   * o vaivém relatado:
    *
-   * O buraco era a coluna INTERMEDIÁRIA. Levar as cinco atividades de uma
-   * entrega para "Em Revisão" deixava a entrega em "A Fazer", sozinha, sem
-   * nada acontecendo ali — e o quadro mostrava um agrupador num lugar onde o
-   * trabalho não está mais.
+   *   promover pacote  -> só o pacote aparece
+   *   mover o pacote   -> a fase inteira vai junto (cascata + subida)
+   *   mover de volta   -> parte fica, parte volta, e o agrupamento se perde
    *
-   * Sobe RECURSIVAMENTE: se a entrega era a última pendência da fase, a fase
-   * vai junto.
+   * Medido antes de mexer: **142 agrupadores** estavam no quadro como cartão,
+   * **39 famílias** tinham filhas em colunas diferentes (uma com 16 filhas
+   * partidas entre "Em Andamento" e "Backlog"), e havia **97** casos de pai no
+   * Backlog com filha no quadro.
    *
-   * `status` não é gravado (diferente do caminho da coluna final, onde a
-   * conclusão dos filhos É a conclusão do pai): numa coluna intermediária não
-   * há o que concluir. O percentual da caixa é a média dos filhos e ignora a
-   * coluna dela (ver `isGrouper`), então o número segue verdadeiro.
+   * A regra agora: mover de coluna altera SOMENTE o status do cartão movido.
+   * O agrupador não é cartão — é FAIXA —, e o status dele é DERIVADO das
+   * filhas. Não há mais o que "acompanhar": a faixa está sempre onde as filhas
+   * dela estiverem, porque ela não tem coluna própria no desenho.
+   *
+   * A regra vive em `lib/quadroDeExecucao`, com os cinco testes do relato.
    */
-  const subirPaisCompletos = useCallback(async (activityId: string, stageId: string) => {
-    const porId = new Map(activities.map((a) => [a.id, a]));
-    const filhosDe = new Map<string, Activity[]>();
-    for (const a of activities) {
-      if (!a.parent_id) continue;
-      filhosDe.set(a.parent_id, [...(filhosDe.get(a.parent_id) ?? []), a]);
-    }
-    const subiram: string[] = [];
-    // `visto` protege contra ciclo em parent_id (dado corrompido): sem ele um
-    // A↔B travaria o laço para sempre.
-    const visto = new Set<string>([activityId]);
-    let atual = porId.get(activityId);
-    while (atual?.parent_id && !visto.has(atual.parent_id)) {
-      visto.add(atual.parent_id);
-      const pai = porId.get(atual.parent_id);
-      if (!pai) break;
-      // Marco fora da conta: ele não entra no quadro, então nunca chegaria a
-      // esta coluna — contá-lo impediria o pai de subir para sempre.
-      const irmaos = (filhosDe.get(pai.id) ?? []).filter((f) => !f.is_milestone);
-      if (irmaos.length === 0) break;
-      /**
-       * A coluna de cada irmão vem de TRÊS fontes, nesta ordem:
-       *
-       *   1. o argumento, para o item recém-movido — sua gravação ainda não
-       *      voltou do banco;
-       *   2. `optimisticMoves`, para os irmãos movidos AGORA, no mesmo lote;
-       *   3. `activities`, para o resto.
-       *
-       * A fonte 2 faltava, e era o defeito: mover um pacote de 10 subatividades
-       * chama esta função uma vez por filho, e cada chamada via os outros nove
-       * ainda na coluna ANTIGA — `activities` só é recarregado no fim, por
-       * `onDataChanged`. `todosLa` dava falso em todas as dez, e o pacote ficava
-       * para trás enquanto os filhos iam.
-       *
-       * Ao ARRASTAR o pacote isso não aparecia: aquele caminho passa pelo
-       * diálogo "Levar os N junto", que move o pai explicitamente. Só o
-       * caminho inverso — mover os filhos — dependia desta conta, e é por isso
-       * que o sintoma era assimétrico: ia junto na ida, ficava na volta.
-       */
-      const colunaDe = (f: Activity) =>
-        f.id === activityId ? stageId : (optimisticMoves[f.id] || f.workflow_stage_id);
-      const todosLa = irmaos.every((f) => colunaDe(f) === stageId);
-      if (!todosLa || (optimisticMoves[pai.id] || pai.workflow_stage_id) === stageId) break;
-      if (!canMutateActivity(pai)) break;
-      subiram.push(pai.id);
-      atual = pai;
-    }
-    if (subiram.length === 0) return;
-
-    setOptimisticMoves((prev) => {
-      const next = { ...prev };
-      for (const id of subiram) next[id] = stageId;
-      return next;
-    });
-    const { error } = await supabase
-      .from("activities")
-      .update({ workflow_stage_id: stageId } as never)
-      .in("id", subiram);
-    if (error) {
-      setOptimisticMoves((prev) => {
-        const next = { ...prev };
-        for (const id of subiram) delete next[id];
-        return next;
-      });
-      return;
-    }
-    const nomes = subiram.map((id) => porId.get(id)?.title).filter(Boolean);
-    toast({
-      title: subiram.length === 1
-        ? "A fase acompanhou"
-        : `${subiram.length} agrupadores acompanharam`,
-      description: `${nomes.join(", ")} — todos os itens de dentro chegaram aqui.`,
-    });
-    // `optimisticMoves` entra nas dependências porque a conta de "todos os
-    // irmãos chegaram" agora o consulta: sem ele a função ficaria com um
-    // retrato velho e voltaria a ignorar os filhos movidos no mesmo lote.
-  }, [activities, canMutateActivity, optimisticMoves, toast]);
-
   /**
    * Move o card para QUALQUER coluna do quadro. Generaliza o antigo
    * handleMoveToBacklog, que só mandava para o stage display_order=0 — uma
@@ -1653,9 +1641,9 @@ export const ActivityKanban = ({
         </ToastAction>
       ) : undefined,
     });
-    await subirPaisCompletos(activityId, stageId);
+    // Nada de subir o ancestral: mover um cartão escreve SÓ nele.
     onDataChanged();
-  }, [activities, avisoSemPermissao, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
+  }, [activities, avisoSemPermissao, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, toast]);
 
   /** Duplica a atividade (com a subárvore). A capacidade já existia em
    *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
@@ -1836,8 +1824,24 @@ export const ActivityKanban = ({
      * arrastar deixa de ser o único caminho.
      *
      * "onlyMine" sempre se aplica; o filtro geral/coluna é decidido POR coluna.
+     *
+     * ── E AGRUPADOR TAMBÉM NÃO ENTRA (26/08/2026) ────────────────────────
+     *
+     * Mesma razão, um degrau acima: Fase, Entrega e Pacote não são trabalho
+     * que passa por estágios — são CAIXAS que contêm trabalho. Estavam aqui
+     * como cartão, e daí vinha o bug relatado: arrastar a caixa cascateava
+     * para os filhos, e o retorno subia o ancestral atrás deles.
+     *
+     * Medido antes de tirar: **142 agrupadores** eram cartão no quadro, e **39
+     * famílias** tinham filhas em colunas diferentes.
+     *
+     * Eles continuam no quadro — como FAIXA sobre os cartões das filhas (ver
+     * `faixaDoCartao`), onde quer que elas estejam. O percentual da faixa é a
+     * média das filhas, como sempre foi.
      */
-    const semMarcos = activities.filter((a) => !a.is_milestone);
+    const semMarcos = activities.filter(
+      (a) => !a.is_milestone && !ehAgrupadorDoQuadro(a as never, filhasPorPaiParaRegra),
+    );
     const source = onlyMine ? semMarcos.filter(isMineActivity) : semMarcos;
     source.forEach((a) => {
       // Use optimistic override if available
@@ -2096,50 +2100,44 @@ export const ActivityKanban = ({
     const newStatus = stage?.is_final ? "completed" : "pending";
 
     /**
-     * A CAIXA NÃO ANDA NA FRENTE DO CONTEÚDO.
+     * AGRUPADOR NÃO SE ARRASTA — ele é FAIXA, não cartão.
      *
-     * Antes a trava valia só para a coluna FINAL e olhava `status`: dava para
-     * arrastar uma fase de "A Fazer" para "Em Revisão" com as onze tarefas
-     * paradas atrás. O quadro dizia que a fase estava em revisão sem que
-     * ninguém tivesse revisado coisa alguma.
+     * Aqui havia a trava "a caixa não anda na frente do conteúdo" e, logo
+     * abaixo, o diálogo "Levar os N junto" que a resolvia cascateando coluna e
+     * status para os descendentes. Essa cascata era metade do bug do vaivém:
      *
-     * Agora vale para QUALQUER coluna e olha ONDE os filhos estão: o pai só
-     * entra numa coluna quando todos os filhos vivos já estão nela — que é o
-     * mesmo critério pelo qual o pai SOBE sozinho quando o último filho chega
-     * (`subirPaisCompletos`). Os dois sentidos passam a ter uma regra só.
+     *   mover o pacote  -> a fase inteira ia junto (cascata)
+     *   mover de volta  -> o ancestral subia atrás dos filhos (subirPaisCompletos)
+     *                      e quem estava em outra coluna ficava para trás
      *
-     * Filho cancelado não trava: saiu do escopo, não é trabalho pendente.
+     * A trava e a cascata deixam de existir porque a pergunta que as
+     * originava — "onde a caixa fica?" — deixa de existir: o agrupador não tem
+     * coluna própria no desenho. Ele aparece como faixa sobre os cartões das
+     * filhas dele, onde quer que elas estejam, e o status dele é DERIVADO.
      *
-     * Só DESCENDENTES DIRETOS decidem. O neto é problema do filho — se ele
-     * está na coluna, é porque a regra já foi aplicada a ele.
+     * Quem quiser pôr o conteúdo de um pacote no quadro usa PROMOVER, no
+     * backlog, que pergunta se leva as subatividades — explícito, item a item,
+     * nunca automático.
      */
-    /**
-     * O AVISO OFERECE A SAÍDA, em vez de só barrar.
-     *
-     * Antes ele dizia "mova o que está dentro primeiro" e parava aí — mas o
-     * que estava dentro vinha COLAPSADO no próprio card que a pessoa acabou de
-     * arrastar. Era preciso expandir, e arrastar um a um. O aviso pedia
-     * trabalho sem mostrar o caminho, e apareceu três vezes na mesma conversa.
-     *
-     * Agora ele traz "Levar os N junto": um clique faz o que o bloqueio
-     * pedia. A regra continua de pé — a caixa não anda sozinha na frente do
-     * conteúdo — mas cumprir a regra deixa de ser tarefa manual.
-     */
-    if (draggedActivity) {
-      const foraDaColuna = filhosForaDaColuna(draggedActivity.id, targetStageId);
-      if (foraDaColuna.length > 0) {
-        setMoverJunto({
-          pai: draggedActivity,
-          filhos: foraDaColuna,
-          destinoId: targetStageId,
-          destinoNome: getStageDisplayTitle(stage?.title || ""),
-        });
-        // Abre com tudo marcado: levar a fase inteira é o caso comum, e o
-        // diálogo nasceu justamente para poupar o arrasto um a um.
-        setFilhosMarcados(new Set(foraDaColuna.map((f) => f.id)));
-        return;
-      }
+    if (draggedActivity && ehAgrupadorDoQuadro(draggedActivity as never, filhasPorPaiParaRegra)) {
+      toast({
+        title: "Fases e pacotes não se movem no quadro",
+        description: "Eles aparecem como faixa sobre as atividades. Mova as atividades — a faixa acompanha, e o percentual da caixa vem delas.",
+      });
+      return;
     }
+    /*
+     * O diálogo "Levar os N junto" saiu daqui.
+     *
+     * Ele existia para resolver a trava "a caixa não anda na frente do
+     * conteúdo", cascateando coluna e status para os descendentes — e era essa
+     * cascata que, somada à subida do ancestral, produzia o vaivém relatado.
+     *
+     * Com o agrupador virando faixa, a trava não tem mais razão de ser, e o
+     * gesto que ela oferecia mudou de lugar: quem quer pôr o conteúdo de um
+     * pacote no quadro PROMOVE, no backlog, e ali a pergunta "levar as
+     * subatividades junto?" é feita de propósito, uma vez, por quem decide.
+     */
 
     /**
      * ARRASTAR O CONJUNTO.
@@ -2324,13 +2322,14 @@ export const ActivityKanban = ({
           }
         }
 
-        // COLUNA INTERMEDIÁRIA: o bloco acima só leva o pai para a FINAL, e
-        // só quando os filhos ficam `completed`. Levar as cinco tarefas de uma
-        // entrega para "Em Revisão" não conclui nada — mas deixa a entrega
-        // sozinha na coluna antiga. Aqui ela acompanha.
-        if (!stage?.is_final && targetStageId) {
-          await subirPaisCompletos(activityId, targetStageId);
-        }
+        // O ANCESTRAL NÃO É MAIS TOCADO AQUI.
+        //
+        // Havia uma subida para a coluna intermediária, e ela era metade do bug
+        // do vaivém: a ida cascateava para os filhos, a volta trazia o pai
+        // atrás deles, e o que estava em outra coluna ficava para trás.
+        //
+        // O agrupador não precisa "acompanhar" porque não tem coluna própria no
+        // desenho — ele é FAIXA, e a faixa está onde as filhas dela estiverem.
       })()
     )
       .then(() => onDataChanged())

@@ -61,14 +61,19 @@ import {
   faixaDoGut,
   mostrarBadgeDeTipo,
   resumoDoGrupo,
+  totalDoProjeto,
   corDoGut,
   ROTULO_GUT_VAZIO,
   comoMostrarVazio,
   CLASSE_NUMERO,
   formatarHoras,
   formatarCusto,
+  codigoParaExibir,
 
 } from "@/lib/mesaDePlanejamento";
+import { useAuth } from "@/contexts/AuthContext";
+import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
+import { ALTURA_DA_LINHA, type DensidadeBacklog } from "@/lib/kanbanPrefs";
 
 interface Phase {
   id: string;
@@ -123,7 +128,13 @@ interface Activity {
   derived_hours?: number | string | null;
   derived_cost?: number | string | null;
   derived_children?: number | null;
+  /** A janela derivada: da filha que começa mais cedo à que termina mais tarde. */
+  derived_start?: string | null;
+  derived_end?: string | null;
 }
+
+/** Os chips de recorte rápido do topo. Combinam por E. */
+type RecorteRapido = "minhas" | "sem-resp" | "sem-data";
 
 interface BacklogSectionProps {
   projectId: string;
@@ -211,6 +222,11 @@ export const BacklogSection = ({
   const [soMinhas, setSoMinhas] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  /** "Levar as subatividades junto" — PERGUNTADO, e desmarcado por padrao.
+   *  Nunca automatico: levar junto e decisao de escopo, de quem promove. */
+  const [levarSubatividades, setLevarSubatividades] = useState(false);
+  /** Qual linha esta com o seletor de responsavel aberto (o botao + Sem responsavel). */
+  const [openAssigneeFor, setOpenAssigneeFor] = useState<string | null>(null);
   const [targetStageId, setTargetStageId] = useState<string>("");
   const [assignee, setAssignee] = useState<string>("");
   const [isMoving, setIsMoving] = useState(false);
@@ -235,6 +251,14 @@ export const BacklogSection = ({
   // é um recorte de trabalho ("o que preciso completar agora"), não uma
   // preferência de visualização como as colunas ou o agrupamento.
   const [prontidaoFilter, setProntidaoFilter] = useState<"all" | "ready" | "incomplete">("all");
+  /** Os chips de recorte rapido. Combinam por E, e cada um liga/desliga. */
+  const [recortesAtivos, setRecortesAtivos] = useState<Set<RecorteRapido>>(new Set());
+  const alternarRecorte = (id: RecorteRapido) =>
+    setRecortesAtivos((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
   // Mover item para dentro de outro (troca parent_id). Menu de linha, não
   // arraste: numa lista aninhada "soltar sobre" (aninha) e "soltar entre"
   // (reordena) ficam a pixels de distância, e aninhar por engano é caro de
@@ -246,6 +270,22 @@ export const BacklogSection = ({
   const [sequenciando, setSequenciando] = useState(false);
   // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
   // as demais exibem grupos planos por dimensão. Persistido por projeto.
+  /**
+   * DENSIDADE — compacto (30px) ou confortável (36px), guardada POR USUÁRIO.
+   *
+   * Vai pelo `useKanbanPrefs`, que já resolve o caminho inteiro: cache local
+   * síncrono no primeiro render, banco por cima quando responde, e debounce na
+   * escrita. A fase 06 pede exatamente isso — "siga o mesmo caminho, não
+   * invente um segundo".
+   *
+   * Sem usuário (ou com a migration de prefs pendente), o hook cai no cache
+   * local sozinho e a tela funciona igual.
+   */
+  const { user } = useAuth();
+  const { prefs, setPrefs } = useKanbanPrefs(projectId, user?.id ?? null);
+  const densidade: DensidadeBacklog = prefs.densidadeBacklog ?? "confortavel";
+  const alturaDaLinha = ALTURA_DA_LINHA[densidade];
+
   type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
   const groupByKey = `backlog-groupby:${projectId}`;
   const [groupBy, setGroupBy] = useState<GroupBy>(() => {
@@ -298,14 +338,29 @@ export const BacklogSection = ({
   // Máximos mais enxutos: as colunas de dado não precisam crescer sem limite —
   // a folga vai para o título, que é o que a pessoa lê. Prazo e Horas seguram
   // conteúdo curto ("20/07/2026", "55h") e não justificam largura de sobra.
+  /**
+   * AS COLUNAS DO BACKLOG — a ordem é a do desenho, e a ordem importa.
+   *
+   * EAP · TIPO · NOME · RESPONSÁVEL · PREVISTO · ESFORÇO · GUT
+   *
+   * (EAP, TIPO e NOME vivem no prefixo fixo do grid, junto da caixa e do
+   * chevron; daqui para a direita são as opcionais.)
+   *
+   * **STATUS SAIU.** Backlog é planejamento, não execução: o backlog inteiro
+   * está no backlog, e repetir isso em 141 linhas é ruído. Quem quer ver
+   * estágio abre o quadro — é a tela que existe para isso.
+   *
+   * PREVISTO passou a ser a JANELA (`08/09 → 09/09`), não só o prazo: planejar
+   * é decidir quando começa e quando termina, e mostrar só o fim esconde
+   * metade da decisão.
+   */
   const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
-    { id: "priority", label: "Prioridade", width: "minmax(80px,108px)", align: "left" },
-    { id: "status", label: "Status", width: "minmax(88px,124px)", align: "left" },
     { id: "assigned_to", label: "Responsável", width: "minmax(96px,168px)", align: "left" },
-    { id: "end_date", label: "Prazo", width: "minmax(64px,96px)", align: "left" },
-    { id: "hours", label: "Horas", width: "minmax(48px,68px)", align: "left" },
+    { id: "end_date", label: "Previsto", width: "minmax(104px,132px)", align: "left" },
+    { id: "hours", label: "Esforço", width: "minmax(48px,68px)", align: "left" },
+    { id: "priority", label: "GUT", width: "minmax(44px,64px)", align: "left" },
   ];
-  const BACKLOG_COLS_DEFAULT = ["priority", "status", "assigned_to", "end_date"];
+  const BACKLOG_COLS_DEFAULT = ["assigned_to", "end_date", "hours", "priority"];
   const backlogColsKey = `backlog-cols:${projectId}`;
   const [visibleCols, setVisibleCols] = useState<string[]>(() => {
     if (typeof window === "undefined") return BACKLOG_COLS_DEFAULT;
@@ -368,7 +423,20 @@ export const BacklogSection = ({
   // 20px com a seta — empilhadas, a seta sumindo no hover para a caixa tomar
   // o lugar. Quem mirava a seta via o alvo trocar de função debaixo do cursor.
   // Duas coisas clicáveis, duas células.
-  const backlogGrid = `26px 20px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
+  /**
+   * O GRID DA TABELA — a ordem do desenho, da esquerda para a direita.
+   *
+   *   26px  caixa de seleção
+   *   20px  chevron (expandir)
+   *   68px  EAP — mono, largura fixa: código alinhado é o que deixa a árvore
+   *         legível de relance, e `1fr` faria `1.1` e `1.1.10.2` começarem em
+   *         pontos diferentes
+   *   58px  TIPO — cabe "ATIVIDADE" em 9px; MARCO é mais curto
+   *   1fr   NOME — o que sobra, porque é o que a pessoa lê
+   *   …     as opcionais (responsável, previsto, esforço, GUT)
+   *   32px  o "⋯" das ações
+   */
+  const backlogGrid = `26px 20px 68px 58px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
   /**
    * A caixa aparece no HOVER — mas na coluna dela, não por cima da seta.
@@ -737,6 +805,43 @@ export const BacklogSection = ({
       vivas = vivas.filter((a) => manter.has(a.id));
     }
 
+    /**
+     * OS CHIPS DE RECORTE — `Minhas`, `Sem responsável`, `Sem data`.
+     *
+     * Combinam por E: ligar dois pede o que satisfaz os dois. É o que a pessoa
+     * espera de dois botões apertados ao mesmo tempo, e "minhas E sem data" é
+     * justamente o recorte útil.
+     *
+     * Só ATIVIDADE é testada. Agrupador não tem responsável nem data próprios
+     * (são rollup) e marco não tem responsável — julgá-los por um campo que
+     * não lhes pertence os tiraria da lista sempre. Eles seguem pela regra de
+     * ancestral logo abaixo: aparecem se alguma filha passou.
+     */
+    if (recortesAtivos.size > 0) {
+      const comFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+      const atende = (a: Activity) => {
+        if (comFilho.has(a.id)) return false;      // agrupador: decide pelas filhas
+        if (recortesAtivos.has("minhas") && !(ehMinha?.(a) ?? true)) return false;
+        if (recortesAtivos.has("sem-resp")) {
+          if (a.is_milestone) return false;        // marco não tem responsável
+          if ((a.assigned_to ?? "").trim()) return false;
+        }
+        if (recortesAtivos.has("sem-data") && a.end_date) return false;
+        return true;
+      };
+      const passaram = new Set(vivas.filter(atende).map((a) => a.id));
+      const idx = new Map(vivas.map((a) => [a.id, a]));
+      const manterR = new Set(passaram);
+      for (const id of passaram) {
+        let atual = idx.get(id);
+        while (atual?.parent_id && !manterR.has(atual.parent_id)) {
+          manterR.add(atual.parent_id);
+          atual = idx.get(atual.parent_id);
+        }
+      }
+      vivas = vivas.filter((a) => manterR.has(a.id));
+    }
+
     if (prontidaoFilter === "all") return vivas;
 
     // Quem tem filhos não é avaliado (horas e datas são rollup), mas precisa
@@ -1064,6 +1169,37 @@ export const BacklogSection = ({
     .filter((id) => (childrenByParent.get(id) || []).length > 0).length;
 
   /**
+   * O que "levar as subatividades junto" levaria — o número da pergunta.
+   *
+   * Conta a subárvore dos itens selecionados, DESCONTANDO o que já está na
+   * seleção: se a pessoa marcou o pacote e duas filhas, a pergunta é sobre as
+   * outras, não sobre as que ela já escolheu.
+   *
+   * A mesma separação de `lib/quadroDeExecucao`: atividade × agrupador, marco
+   * fora — só que aqui contada sobre os PENDENTES, não sobre a subárvore toda.
+   */
+  const subatividadesDaSelecao = useMemo(() => {
+    // Os descendentes de TODOS os selecionados, sem repetir e sem contar quem
+    // já está na seleção — esses vão de qualquer jeito, e contá-los faria a
+    // pergunta prometer mais do que ela decide.
+    const pendentes = new Set<string>();
+    for (const id of selectedIds) {
+      for (const d of descendentesDe(id)) {
+        if (!selectedIds.has(d)) pendentes.add(d);
+      }
+    }
+    let atividades = 0;
+    let agrupadores = 0;
+    for (const id of pendentes) {
+      const item = activities.find((a) => a.id === id);
+      if (!item || item.is_milestone) continue;   // marco não é promovível
+      if ((childrenByParent.get(id) || []).some((f) => !f.is_milestone)) agrupadores++;
+      else atividades++;
+    }
+    return { atividades, agrupadores };
+  }, [selectedIds, activities, childrenByParent, descendentesDe]);
+
+  /**
    * Quantas FASES REAIS ficariam sem nenhuma tarefa se a seleção fosse
    * arquivada — o número que a confirmação precisa mostrar antes do clique.
    *
@@ -1139,7 +1275,22 @@ export const BacklogSection = ({
      * IGNORA a própria coluna — ver `isGrouper` em activityProgress. Mover a
      * caixa não move o conteúdo, e o número não mente.
      */
-    const idsBrutos = Array.from(selectedIds);
+    /**
+     * A SUBÁRVORE SÓ VAI SE FOI PEDIDO.
+     *
+     * `levarSubatividades` vem do diálogo, desmarcado por padrão. Sem ele, o
+     * movimento alcança exatamente o que está selecionado — que é a regra:
+     * promover leva só o que foi escolhido.
+     */
+    const idsBrutos = levarSubatividades
+      ? Array.from(new Set(
+          Array.from(selectedIds).flatMap((id) => [id, ...descendentesDe(id)]),
+        )).filter((id) => {
+          // Marco não é promovível: não entra no quadro.
+          const a = activities.find((x) => x.id === id);
+          return a ? !a.is_milestone : false;
+        })
+      : Array.from(selectedIds);
     if (idsBrutos.length === 0) {
       setIsMoving(false);
       toast({ title: "Nenhuma tarefa selecionada", variant: "destructive" });
@@ -1295,7 +1446,6 @@ export const BacklogSection = ({
      * de destino. Cancelado não conta (saiu do escopo). `status` não é
      * gravado: quem conclui são as tarefas.
      */
-    const subiram: string[] = [];
     /**
      * SUCESSO SEM ESCRITA NÃO É SUCESSO.
      *
@@ -1327,50 +1477,24 @@ export const BacklogSection = ({
       }
     }
 
-    if (!error && !errorCaixas) {
-      const movidos = new Set(ids);
-      const canceladaIds = new Set(
-        allStages.filter((s) =>
-          (parseWorkflowCategory((s as { categoria?: string }).categoria)
-            ?? categoryFromLegacyFlags(s as never)) === "cancelada",
-        ).map((s) => s.id),
-      );
-      const colunaDe = (a: Activity) =>
-        movidos.has(a.id) || subiram.includes(a.id) ? targetStageId : a.workflow_stage_id;
-
-      // Candidatos: pais dos itens movidos, subindo nível a nível. `visto`
-      // protege contra ciclo em parent_id (dado corrompido).
-      const visto = new Set<string>();
-      let fronteira = [...new Set(ids.map((id) => activities.find((a) => a.id === id)?.parent_id).filter(Boolean))] as string[];
-      while (fronteira.length > 0) {
-        const proxima: string[] = [];
-        for (const paiId of fronteira) {
-          if (visto.has(paiId)) continue;
-          visto.add(paiId);
-          const pai = activities.find((a) => a.id === paiId);
-          if (!pai || movidos.has(paiId) || pai.workflow_stage_id === targetStageId) continue;
-          const filhos = (childrenByParent.get(paiId) || [])
-            .filter((f) => !f.is_milestone)
-            .filter((f) => !(f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)));
-          if (filhos.length === 0) continue;
-          if (!filhos.every((f) => colunaDe(f) === targetStageId)) continue;
-          subiram.push(paiId);
-          if (pai.parent_id) proxima.push(pai.parent_id);
-        }
-        fronteira = proxima;
-      }
-
-      if (subiram.length > 0) {
-        await mutateInChunks(subiram, (batch) =>
-          supabase.from("activities")
-            .update({ workflow_stage_id: targetStageId } as never)
-            .in("id", batch),
-        );
-      }
-    }
+    /*
+     * O ANCESTRAL NÃO SOBE MAIS — nem aqui.
+     *
+     * Esta era a TERCEIRA cópia da mesma regra ("o pai acompanha quando o
+     * último filho chega"): uma no arrasto do Kanban, uma no menu de mover, e
+     * esta no Backlog. Todas escreviam em quem ninguém tinha selecionado, e
+     * juntas produziam o vaivém relatado — a ida levava os filhos, a volta
+     * trazia o pai atrás deles.
+     *
+     * Agora a promoção escreve SÓ o que foi escolhido. O agrupador não precisa
+     * acompanhar porque não tem coluna própria no quadro: ele é FAIXA sobre os
+     * cartões das filhas, onde quer que elas estejam
+     * (ver `lib/quadroDeExecucao`).
+     */
 
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
+    setLevarSubatividades(false);   // a pergunta volta desmarcada na proxima vez
     setTargetStageId("");
     setAssignee("");
     setIsMoving(false);
@@ -1390,11 +1514,6 @@ export const BacklogSection = ({
     toast({
       title: `${ids.length} ${ids.length === 1 ? "item movido" : "itens movidos"}`,
       description: [
-        // A fase que subiu sozinha: ela não estava na seleção, então some da
-        // coluna antiga sem ter sido pedida — dizer evita o "por que mudou?".
-        subiram.length > 0
-          ? `${subiram.length} ${subiram.length === 1 ? "fase/entrega acompanhou" : "fases/entregas acompanharam"} — o último item de dentro chegou.`
-          : null,
         // Dizer que a caixa foi mas não concluiu: sem isto, mover uma fase para
         // "Concluída" e ver o agrupador sem o status parece falha da operação.
         caixas.length > 0 && ehFinal
@@ -1420,6 +1539,40 @@ export const BacklogSection = ({
    * Em lotes pelo mesmo motivo das outras ações em massa: o proxy corta a URL
    * em ~3,7 KB (ver lib/chunkedIn).
    */
+  /**
+   * Define o responsável de UMA linha, do botão `+ Sem responsável`.
+   *
+   * Separado de `aplicarEmLote` de propósito: aquele opera sobre a seleção, e
+   * este é um gesto de linha — sem seleção, sem lote.
+   *
+   * LÊ O RESULTADO antes de dizer que salvou. Um UPDATE que não casa linha
+   * nenhuma volta SEM erro no PostgREST, e é assim que a recusa da RLS vira
+   * silêncio. `count: "exact"` responde quantas linhas mudaram de verdade.
+   */
+  const definirResponsavelDaLinha = async (activityId: string, nome: string | null) => {
+    const { error, count } = await supabase
+      .from("activities")
+      .update({ assigned_to: nome } as never, { count: "exact" })
+      .eq("id", activityId);
+
+    setOpenAssigneeFor(null);
+
+    if (error) {
+      toast({ title: "Não foi possível atribuir", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (!count) {
+      toast({
+        title: "Sem permissão",
+        description: "O banco recusou a atribuição — você não tem permissão sobre esta atividade.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: nome ? `Responsável: ${nome}` : "Responsável removido" });
+    onDataChanged();
+  };
+
   const aplicarEmLote = async (
     patch: Record<string, unknown>,
     descricao: string,
@@ -1810,9 +1963,15 @@ export const BacklogSection = ({
         />
       </span>
       <span />
-      <span>Tarefa</span>
+      <span>EAP</span>
+      <span>Tipo</span>
+      <span>Nome</span>
       {activeCols.map((c) => (
-        <span key={c.id}>{c.label}</span>
+        // Número alinha à direita no cabeçalho também: título à esquerda com
+        // valor à direita faz a coluna parecer torta.
+        <span key={c.id} className={c.id === "hours" || c.id === "priority" ? "text-right" : ""}>
+          {c.label}
+        </span>
       ))}
       <span className="flex justify-end">
         <Popover>
@@ -1839,6 +1998,36 @@ export const BacklogSection = ({
                   <span>{col.label}</span>
                 </label>
               ))}
+            </div>
+
+            {/* DENSIDADE — dois níveis, guardada por usuário.
+                Fica aqui, junto das colunas, porque é a mesma pergunta ("como
+                eu quero ver esta lista") e a regra dos três não deixa nascer um
+                quarto controle no topo. */}
+            <div className="mt-2 pt-2 border-t">
+              <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
+                Densidade
+              </div>
+              <div className="flex gap-1">
+                {([
+                  { id: "compacto" as const, label: "Compacto" },
+                  { id: "confortavel" as const, label: "Confortável" },
+                ]).map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setPrefs({ ...prefs, densidadeBacklog: d.id })}
+                    className={cn(
+                      "flex-1 h-7 rounded text-[11px] normal-case font-normal border transition-colors",
+                      densidade === d.id
+                        ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                        : "border-border text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </PopoverContent>
         </Popover>
@@ -1973,13 +2162,63 @@ export const BacklogSection = ({
                 </>
               );
             })() : (() => {
-              // ── Decisão 5 — vazio diz O QUE FALTA ──────────────────────
-              // "Sem responsável" descrevia o campo; "a definir" descreve a
-              // pendência — e é o que a pessoa resolve. No MARCO a célula fica
-              // literalmente vazia: não é lacuna, marco não tem responsável.
+              /**
+               * O VAZIO É UM BOTÃO, não um rótulo.
+               *
+               * Era o texto "a definir" — que descrevia a pendência e parava
+               * aí: para resolver, a pessoa abria a atividade. Numa lista com
+               * 103 sem responsável, isso é 103 idas e voltas.
+               *
+               * Agora `+ Sem responsável` abre o seletor na própria linha. A
+               * contagem do que falta já vive na faixa do topo, então o texto
+               * repetido em cada linha era ruído; o botão é ação.
+               *
+               * No MARCO a célula fica literalmente VAZIA — não é lacuna,
+               * marco não tem responsável (`comoMostrarVazio` → não-se-aplica).
+               */
               const vazio = comoMostrarVazio(activity.assigned_to, "responsavel", !!activity.is_milestone);
               if (vazio.tipo === "nao-se-aplica") return null;
-              return <span className="text-[12px] text-muted-foreground/40 italic">{vazio.tipo === "a-definir" ? vazio.texto : ""}</span>;
+              // Sem permissão sobre a atividade, o campo vazio FICA QUIETO —
+              // um botão que abre um seletor e depois falha é pior que nada.
+              // `ehMinha` indefinido = a pessoa edita tudo (ver a prop).
+              if (ehMinha && !ehMinha(activity)) return null;
+              return (
+                <Popover
+                  open={openAssigneeFor === activity.id}
+                  onOpenChange={(o) => setOpenAssigneeFor(o ? activity.id : null)}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[12px] text-muted-foreground/50 hover:text-primary transition-colors"
+                      title="Definir responsável"
+                    >
+                      <Plus className="w-3 h-3 shrink-0" />
+                      Sem responsável
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-2" align="start" onClick={(e) => e.stopPropagation()}>
+                    {/* O MESMO seletor da edição e do Cronograma: busca por
+                        nome, setor e função, e marca homônimo com o e-mail
+                        (ver lib/homonimos). Uma lista de nomes soltos aqui
+                        seria a quinta implementação da mesma coisa. */}
+                    <PersonCombobox
+                      people={profiles.map((p) => ({
+                        id: p.id,
+                        full_name: p.full_name || p.email || "Sem nome",
+                        sector: (p as { sector?: string | null }).sector ?? null,
+                        role_title: (p as { role_title?: string | null }).role_title ?? null,
+                        email: (p as { email?: string | null }).email ?? null,
+                        avatar_url: resolveAvatarFromLookup(p.id, p.full_name || p.id, profileAvatarMap) ?? null,
+                      }))}
+                      value={null}
+                      placeholder="Quem responde por isto?"
+                      onSelect={(p) => definirResponsavelDaLinha(activity.id, p.full_name)}
+                    />
+                  </PopoverContent>
+                </Popover>
+              );
             })()}
           </span>
         );
@@ -1993,17 +2232,44 @@ export const BacklogSection = ({
         // virar `new Date()`, senão o fuso desloca o dia para quem está a
         // oeste de UTC (ver lib/dataLocal).
         const atraso = overdue ? Math.abs(diasAte(activity.end_date) ?? 0) : 0;
+
+        /**
+         * PREVISTO é a JANELA — `08/09 → 09/09`, não só o prazo.
+         *
+         * Planejar é decidir quando começa E quando termina; mostrar só o fim
+         * esconde metade da decisão, e era o que a coluna "Prazo" fazia.
+         *
+         * Só o dia e o mês (`dd/MM`): o ano cabe no title, e repetir "2026"
+         * 141 vezes gasta a largura que o nome precisa. `tabular-nums` para as
+         * datas alinharem em coluna.
+         *
+         * O AGRUPADOR mostra a janela DERIVADA — `derived_start`/`derived_end`,
+         * somados no servidor sobre todas as filhas. Ele não tem data própria:
+         * a fase vai de quando a primeira filha começa até quando a última
+         * termina.
+         */
+        const ehPaiData = hasChildren || (activity.derived_children ?? 0) > 0;
+        const ini = ehPaiData ? (activity.derived_start ?? activity.start_date) : activity.start_date;
+        const fim = ehPaiData ? (activity.derived_end ?? activity.end_date) : activity.end_date;
+        const dm = (d?: string | null) => (d ? formatarDataBR(d).slice(0, 5) : null);
+
         return (
-          <span key="end_date" className={`text-[12px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
-            {activity.end_date ? (
+          <span
+            key="end_date"
+            className={`text-[12px] font-mono tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}
+            title={ehPaiData ? "Janela somada a partir das subatividades" : undefined}
+          >
+            {ini || fim ? (
               <>
-                {formatarDataBR(activity.end_date)}
+                {dm(ini) ?? "—"}
+                <span className="mx-0.5 text-muted-foreground/50">→</span>
+                {dm(fim) ?? "—"}
                 {atraso > 0 && <span className="ml-1 font-normal">+{atraso}d</span>}
               </>
             ) : (
               // Data é o único campo que o marco TEM — por isso "sem data"
               // vale para ele também.
-              <span className="text-muted-foreground/40 italic">sem data</span>
+              <span className="text-muted-foreground/40">— sem data</span>
             )}
           </span>
         );
@@ -2079,9 +2345,9 @@ export const BacklogSection = ({
     return (
       <div key={activity.id}>
         <div
-          // py-1.5 (era 2.5): com o texto em 13px e uma coluna de ícone a menos,
-          // a linha aperta sem ficar apertada — cabem ~15% mais tarefas na tela.
-          className={`grid items-center gap-2 border-b px-3 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+          // A altura da linha vem da DENSIDADE (30px compacto / 36px
+          // confortável), no `style` abaixo, em vez do `py-1.5` fixo de antes.
+          className={`grid items-center gap-2 border-b px-3 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           } ${
             /* MARCA DO QUE É SEU — uma barra fina na borda esquerda, só para
@@ -2096,7 +2362,11 @@ export const BacklogSection = ({
           // área do grid e empurra TODAS as colunas para a direita, tanto mais
           // quanto mais fundo o item — era o que desalinhava as linhas do
           // cabeçalho. O recuo é aplicado só na coluna do título, abaixo.
-          style={{ gridTemplateColumns: backlogGrid }}
+          //
+          // `minHeight` e não `height`: título que quebra em duas linhas
+          // continua cabendo. Cortar texto para respeitar a densidade seria
+          // trocar informação por alinhamento.
+          style={{ gridTemplateColumns: backlogGrid, minHeight: alturaDaLinha }}
           // No modo seleção a linha ALTERNA a marcação em vez de abrir a
           // edição: quem está escolhendo várias tarefas quer clicar rápido, e
           // mirar na caixinha de 14px a cada item é trabalho desnecessário.
@@ -2165,7 +2435,45 @@ export const BacklogSection = ({
             <span className="w-5 shrink-0" />
           )}
 
-          {/* col: ícone de tipo (clicável) + título + código EAP + deps.
+          {/* ── col EAP ────────────────────────────────────────────────────
+              Coluna PRÓPRIA, não mais um selo dentro do título. Alinhado à
+              direita e em `tabular-nums`: "1.1" e "1.1.10.2" têm contagens de
+              dígitos diferentes, e é o comprimento do número que deixa o nível
+              legível de relance.
+
+              Marco NÃO TEM wbs_code (decisão de 11/08: ele é do cronograma,
+              não da EAP). `codigoParaExibir` devolve a âncora do pai — nunca um
+              código inventado. */}
+          <span
+            className="text-[10.5px] font-mono tabular-nums text-muted-foreground text-right pr-1 truncate"
+            title={activity.is_milestone ? "Marco não tem código EAP — mostra a âncora do pai" : "Código EAP"}
+          >
+            {codigoParaExibir(
+              activity,
+              activity.parent_id
+                ? (activities.find((a) => a.id === activity.parent_id)?.wbs_code ?? null)
+                : null,
+            )}
+          </span>
+
+          {/* ── col TIPO ───────────────────────────────────────────────────
+              ATIVIDADE apagado até quase sumir; MARCO em âmbar.
+              O contraste é a informação: numa lista onde 133 de 141 linhas são
+              atividade, o que precisa saltar são os 4 marcos. Escrever
+              "ATIVIDADE" com o mesmo peso 133 vezes seria repetir o óbvio em
+              destaque — e foi por isso que a decisão 1 tirou o badge. Aqui ele
+              volta como TEXTO, não como pastilha, e quase invisível. */}
+          <span className="text-[9px] font-semibold uppercase tracking-wider truncate">
+            {activity.is_milestone ? (
+              <span className="text-amber-600 dark:text-amber-400">Marco</span>
+            ) : eapCanGroup(kind) ? (
+              <span className="text-muted-foreground/50">{kindMeta.label}</span>
+            ) : (
+              <span className="text-muted-foreground/25">Atividade</span>
+            )}
+          </span>
+
+          {/* col: ícone de tipo (clicável) + título + deps.
               O recuo por profundidade vive AQUI, dentro da coluna do título:
               assim a hierarquia continua legível sem deslocar as demais
               colunas, que permanecem alinhadas com o cabeçalho. */}
@@ -2229,16 +2537,10 @@ export const BacklogSection = ({
               />
             ) : (
               <span className="min-w-0 flex items-center gap-2">
-                {/* `tabular-nums` + largura mínima: "1.2.2.10" e "1.1.1" têm
-                    contagens de dígitos diferentes, e sem isso a coluna de
-                    códigos serrilhava — cada linha começando o título num
-                    ponto. Alinhado à direita, o nível fica legível pelo
-                    comprimento do próprio número. */}
-                {!!(activity as any).wbs_code && (
-                  <span className="inline-flex items-center justify-end h-[18px] px-1.5 rounded border border-border bg-muted/50 text-[10.5px] font-mono tabular-nums text-muted-foreground shrink-0 min-w-[3.6rem]" title="Código EAP">
-                    {(activity as any).wbs_code}
-                  </span>
-                )}
+                {/* O código EAP saiu daqui: virou COLUNA própria, à esquerda.
+                    Dentro do título ele empurrava o nome para a direita numa
+                    distância que variava com o número de dígitos — e o nome é
+                    o que a pessoa lê. */}
                 <span
                   className={`text-[13px] font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
                   onDoubleClick={(e) => {
@@ -2546,26 +2848,34 @@ export const BacklogSection = ({
             {(() => {
               const resumo = resumoDoGrupo(acts as never);
               const horas = formatarHoras(resumo.horas);
-              const janela = resumo.inicio || resumo.fim
-                ? `${resumo.inicio ? formatarDataBR(resumo.inicio) : "?"} → ${resumo.fim ? formatarDataBR(resumo.fim) : "?"}`
-                : null;
               if (resumo.itens === 0) return null;
+              /**
+               * `N no backlog · Xh` — e RECOLHIDA a faixa continua dizendo.
+               *
+               * É o único momento em que o resumo é indispensável: com o grupo
+               * fechado, ele é a única informação sobre o que há ali dentro.
+               * Sumir justo aí seria esconder o que a faixa existe para mostrar.
+               *
+               * A janela saiu daqui: cada linha já mostra a dela na coluna
+               * PREVISTO, e repetir no cabeçalho gasta a largura que o nome da
+               * fase precisa.
+               */
               return (
-                <span className="text-[11px] text-muted-foreground tabular-nums hidden sm:inline" title="Somado no servidor a partir das subatividades">
-                  {resumo.itens} {resumo.itens === 1 ? "item" : "itens"}
+                <span
+                  className="text-[11px] text-muted-foreground tabular-nums"
+                  title="Somado no servidor a partir das subatividades"
+                >
+                  {resumo.itens} no backlog
                   {horas && <> · {horas}</>}
-                  {janela && <> · {janela}</>}
+                  {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                 </span>
               );
             })()}
-            {progTotal > 0 && (
-              <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
-                <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
-                  <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
-                </span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
-              </span>
-            )}
+            {/* A BARRA DE PROGRESSO SAIU DA FAIXA.
+                O backlog inteiro está no backlog: uma barra que marca 0% em
+                todas as fases não distingue nada, e ocupa a largura onde o
+                subtotal — que distingue — precisa caber. Progresso é do quadro,
+                onde o trabalho anda. */}
             <Button
               size="sm"
               variant="ghost"
@@ -2758,33 +3068,32 @@ export const BacklogSection = ({
           {/* gap-2: mesmo alinhamento do cabeçalho de fase real.
               stopPropagation: a faixa colapsa; os botões daqui não devem. */}
           <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
-            {/* EM QUE COLUNA ESTÁ. As linhas de tarefa sempre mostraram isso;
-                a faixa de fase/entrega, não — e desde que o agrupador passou a
-                acompanhar o conteúdo para o quadro, era a única linha da tela
-                que não dizia onde está. Você movia a fase e não tinha como
-                conferir se ela foi. */}
+            {/* A PASTILHA "Backlog" E A BARRA SAÍRAM daqui também — esta é a
+                faixa da fase VIRTUAL (agrupador sem linha em `phases`), e ela
+                tem de dizer a mesma coisa que a faixa da fase real.
+
+                A pastilha existia porque o agrupador acompanhava o conteúdo
+                para o quadro e era a única linha que não dizia onde estava.
+                Agora ele não vai a coluna nenhuma — é faixa —, então a
+                pastilha anunciaria "Backlog" em todas as fases de um backlog.
+
+                No lugar, o subtotal: `N no backlog · Xh`, e "recolhido" quando
+                fechada. */}
             {(() => {
-              const stgFase = phaseAct.workflow_stage_id ? stageById.get(phaseAct.workflow_stage_id) : null;
-              if (!stgFase) return null;
+              const resumo = resumoDoGrupo(subs as never);
+              const horas = formatarHoras(resumo.horas);
+              if (resumo.itens === 0) return null;
               return (
                 <span
-                  className="inline-flex items-center gap-1.5 h-5 px-2 rounded border text-[11px] font-medium shrink-0"
-                  style={{ borderColor: `${stgFase.color}55`, backgroundColor: `${stgFase.color}12`, color: stgFase.color }}
-                  title={`Está em "${stgFase.title}"`}
+                  className="text-[11px] text-muted-foreground tabular-nums"
+                  title="Somado no servidor a partir das subatividades"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: stgFase.color }} aria-hidden />
-                  {stgFase.title}
+                  {resumo.itens} no backlog
+                  {horas && <> · {horas}</>}
+                  {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                 </span>
               );
             })()}
-            {progTotal > 0 && (
-              <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
-                <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
-                  <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
-                </span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
-              </span>
-            )}
             <Button
               size="sm"
               variant="ghost"
@@ -2893,6 +3202,27 @@ export const BacklogSection = ({
   // vem recortado pelo filtro, e o resumo passaria a descrever o recorte em vez
   // do backlog — clicar em "Incompletas" mostraria "0 prontas", que é verdade
   // sobre a tela e mentira sobre o projeto.
+  /**
+   * Os números dos chips — contados sobre as ATIVIDADES do backlog.
+   *
+   * Agrupador fora: responsável e data dele são rollup das filhas, então
+   * "sem responsável" nele não é falta, é derivação. Marco fora de
+   * "sem responsável" pelo mesmo motivo — ele não tem esse campo —, mas DENTRO
+   * de "sem data", que é a única coisa que se cobra dele.
+   *
+   * É a mesma separação que faz a faixa do topo dizer "falta prazo em 107 ·
+   * falta responsável em 103": 107 inclui os 4 marcos, 103 não.
+   */
+  const recortes = (() => {
+    const comFilho = new Set(activities.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    const folhas = activities.filter((a) => !a.is_trashed && !comFilho.has(a.id));
+    return {
+      minhas: ehMinha ? folhas.filter((a) => ehMinha(a)).length : 0,
+      semResponsavel: folhas.filter((a) => !a.is_milestone && !(a.assigned_to ?? "").trim()).length,
+      semData: folhas.filter((a) => !a.end_date).length,
+    };
+  })();
+
   const prontidaoResumo = (() => {
     // A MESMA FILA que a lista mostra. Antes contava TODAS as vivas do projeto,
     // e o resultado era um contador que falava de outra coisa: a tela dizia
@@ -2975,7 +3305,7 @@ export const BacklogSection = ({
               <Input
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Buscar tarefa..."
+                placeholder="Buscar na EAP…"
                 className="pl-8 h-8 text-[13px]"
               />
             </div>
@@ -2988,37 +3318,51 @@ export const BacklogSection = ({
               quanto?) e "Incompletas 16" ao lado de "Todas 16".
               "Incompletas 0" não é renderizado: segmento vazio não é opção que
               se escolhe, é ruído. */}
-          <div className={cn(
-            "inline-flex rounded-md border border-border overflow-hidden h-8 shrink-0",
-            // Tudo pronto: não há o que recortar, e três botões dizendo isso
-            // seriam ruído. A busca ao lado continua.
-            !(prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total) && "hidden",
-          )}>
+          {/* ── CHIPS DE RECORTE RÁPIDO ─────────────────────────────────────
+              `Minhas · Sem responsável · Sem data`, no lugar do segmentado
+              `Todas / Prontas / Incompletas`.
+
+              Por que a troca: o segmentado respondia "quantas estão prontas?",
+              e essa pergunta já é respondida — melhor — pela faixa de prontidão
+              logo abaixo, que diz O QUE falta em vez de só contar. O que faltava
+              era o recorte ACIONÁVEL: "me mostre as que não têm responsável,
+              para eu atribuir".
+
+              Cada chip LIGA E DESLIGA por conta própria — não são exclusivos
+              entre si, porque as perguntas não são: "minhas e sem data" é um
+              recorte legítimo. O ativo fica marcado, que é o alerta do Groto
+              sobre segmentado-como-filtro: sem estado explícito, ninguém percebe
+              que está vendo dados recortados.
+
+              Chip com zero não aparece: "Sem data 0" não é opção que se
+              escolhe. Some sozinho quando o problema acaba. */}
+          <div className="inline-flex items-center gap-1.5 shrink-0">
             {([
-              { v: "all" as const, lab: "Todas", n: prontidaoResumo.total, cls: "" },
-              { v: "ready" as const, lab: "Prontas", n: prontidaoResumo.prontas, cls: "text-success" },
-              {
-                v: "incomplete" as const,
-                lab: "Incompletas",
-                n: prontidaoResumo.quaseProntas + prontidaoResumo.incompletas,
-                cls: "text-destructive",
-              },
-            ]).filter((s) => s.v === "all" || s.n > 0).map((s, i) => (
-              <button
-                key={s.v}
-                type="button"
-                onClick={() => setProntidaoFilter(s.v)}
-                className={cn(
-                  "px-3 text-[12.5px] transition-colors whitespace-nowrap",
-                  i > 0 && "border-l border-border",
-                  prontidaoFilter === s.v
-                    ? "bg-primary text-primary-foreground font-semibold"
-                    : cn("hover:bg-muted/60", s.cls || "text-muted-foreground"),
-                )}
-              >
-                {s.lab} <span className="tabular-nums">{s.n}</span>
-              </button>
-            ))}
+              ehMinha ? { id: "minhas" as const, lab: "Minhas", n: recortes.minhas } : null,
+              { id: "sem-resp" as const, lab: "Sem responsável", n: recortes.semResponsavel },
+              { id: "sem-data" as const, lab: "Sem data", n: recortes.semData },
+            ].filter(Boolean) as { id: RecorteRapido; lab: string; n: number }[])
+              .filter((c) => c.n > 0)
+              .map((c) => {
+                const ativo = recortesAtivos.has(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => alternarRecorte(c.id)}
+                    aria-pressed={ativo}
+                    className={cn(
+                      "h-8 px-2.5 rounded-md border text-[12.5px] transition-colors whitespace-nowrap",
+                      ativo
+                        ? "bg-primary text-primary-foreground border-primary font-semibold"
+                        : "border-border text-muted-foreground hover:bg-muted/60",
+                    )}
+                    title={ativo ? "Clique para desligar este recorte" : `Ver só ${c.lab.toLowerCase()}`}
+                  >
+                    {c.lab} <span className="tabular-nums">{c.n}</span>
+                  </button>
+                );
+              })}
           </div>
 
           {/* O painel guarda o que NÃO cabe como segmento: Status e Prioridade
@@ -3616,15 +3960,26 @@ export const BacklogSection = ({
                 </span>
                 <h4 className="text-[13px] font-semibold text-foreground truncate">{lane.label}</h4>
                 <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{lane.items.length}</span>
+                {/* A RAIA segue a mesma regra da faixa de fase: subtotal, não
+                    barra. Agrupar por responsável ou por prioridade não muda a
+                    natureza do backlog — continua sendo a fila, e uma barra em
+                    0% em todas as raias não distingue nada. */}
                 <div className="flex items-center gap-3 ml-auto" onClick={(e) => e.stopPropagation()}>
-                  {progTotal > 0 && (
-                    <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
-                      <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
-                        <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
+                  {(() => {
+                    const resumo = resumoDoGrupo(lane.items as never);
+                    const horas = formatarHoras(resumo.horas);
+                    if (resumo.itens === 0) return null;
+                    return (
+                      <span
+                        className="text-[11px] text-muted-foreground tabular-nums"
+                        title="Somado no servidor a partir das subatividades"
+                      >
+                        {resumo.itens} no backlog
+                        {horas && <> · {horas}</>}
+                        {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                       </span>
-                      <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
-                    </span>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
               {!isCollapsed && (
@@ -3707,6 +4062,57 @@ export const BacklogSection = ({
         {groupBy === "phase" && (topLevelByPhase.get("none") || []).length > 0 &&
           renderPhaseGroup(null, "Sem fase")}
       </div>
+
+      {/* ── Decisão 7 — O TOTAL DO PROJETO, FIXO NO RODAPÉ ──────────────────
+          "Planejar é somar", e até aqui saber o total exigia exportar. Fica
+          FIXO (sticky) porque o número que importa não pode depender de rolar
+          até o fim de 700 linhas.
+
+          Consome `totalDoProjeto`, que lê o agregado do servidor — não é uma
+          soma nova, e nada disto é persistido. Some quando não há o que somar:
+          um rodapé com "0h · R$ 0" é ruído. */}
+      {(() => {
+        const raizes = [
+          ...(topLevelByPhase.get("none") || []),
+          ...phases.flatMap((p) => topLevelByPhase.get(p.id) || []),
+          ...virtualPhaseActs,
+        ];
+        if (raizes.length === 0) return null;
+        const total = totalDoProjeto(raizes as never);
+        const horas = formatarHoras(total.horas);
+        const custo = formatarCusto(total.custo);
+
+        /**
+         * O RODAPÉ ACOMPANHA O FILTRO.
+         *
+         * `raizes` vem de `topLevelByPhase`, que já é a lista RECORTADA — então
+         * ligar um chip muda o topo e o rodapé juntos, sem código extra. É a
+         * propriedade que o desenho pede, e ela sai de graça por o rodapé
+         * consumir a mesma fonte que a tabela.
+         *
+         * `total.itens` conta as RAÍZES visíveis, não a árvore inteira: as
+         * horas já sobem por `derived_hours`, e contar tudo faria "141 itens ·
+         * 24h" para um projeto onde só 6 estão no primeiro nível.
+         *
+         * Não some mais quando não há horas: com filtro ligado e zero horas, um
+         * rodapé ausente parece tela quebrada. Some só quando não há nada.
+         */
+        const recorteLigado = recortesAtivos.size > 0 || prontidaoFilter !== "all";
+        return (
+          <div className="sticky bottom-0 z-10 flex items-center gap-4 px-3 py-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {recorteLigado ? "Total do recorte" : "Total do projeto"}
+            </span>
+            <span className="ml-auto flex items-center gap-4 text-[12px] tabular-nums text-foreground/80">
+              <span title="Itens de primeiro nível na lista atual">
+                {total.itens} no backlog
+              </span>
+              {horas && <span title="Somado no servidor a partir das subatividades">{horas}</span>}
+              {custo && <span title="Somado no servidor a partir das subatividades">{custo}</span>}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Trash Section */}
       <div className="border-t pt-4">
@@ -3801,6 +4207,46 @@ export const BacklogSection = ({
               </p>
             )}
           </DialogHeader>
+
+          {/* ── PROMOVER ≠ ASSUMIR: a pergunta que não pode ser automática ──
+              Promover é decisão de ESCOPO — o que entra no quadro. Levar as
+              subatividades junto é outra decisão, e é de quem promove.
+
+              Era automática das duas formas erradas, em momentos diferentes:
+              a seleção puxava a subárvore inteira sem pedir, e o arrasto do
+              quadro cascateava para os descendentes. As duas somadas
+              produziam o vaivém (ver lib/quadroDeExecucao).
+
+              Agora: PERGUNTADA, desmarcada por padrão, e o número que ela
+              mostra conta só o que VIRARIA cartão — marco fora, agrupador
+              intermediário contado à parte. Dizer "levar 20 junto" para um
+              pacote com 12 atividades e 8 caixas seria número inventado. */}
+          {subatividadesDaSelecao.atividades > 0 && (
+            <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border bg-muted/30 cursor-pointer">
+              <Checkbox
+                checked={levarSubatividades}
+                onCheckedChange={(v) => setLevarSubatividades(v === true)}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-foreground">
+                  Levar as subatividades junto
+                </span>
+                <span className="block text-[12px] text-muted-foreground leading-snug">
+                  {subatividadesDaSelecao.atividades}{" "}
+                  {subatividadesDaSelecao.atividades === 1 ? "atividade" : "atividades"} dentro
+                  {subatividadesDaSelecao.agrupadores > 0 && (
+                    <>, em {subatividadesDaSelecao.agrupadores}{" "}
+                    {subatividadesDaSelecao.agrupadores === 1 ? "caixa" : "caixas"}</>
+                  )}
+                  {". "}
+                  {levarSubatividades
+                    ? "Vão para a mesma coluna."
+                    : "Ficam onde estão — só o que você marcou é movido."}
+                </span>
+              </span>
+            </label>
+          )}
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Novo status *</Label>
