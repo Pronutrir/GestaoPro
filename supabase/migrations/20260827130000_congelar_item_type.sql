@@ -128,6 +128,15 @@ ALTER TABLE public.activities
 COMMENT ON COLUMN public.activities.item_type_antes_congelar IS
   'O item_type que existia antes da migration 20260827130000 congelar o tipo exibido. Existe para reverter e para conferir as 84 linhas da lista de revisao. Nunca reescrita depois.';
 
+-- Guard: a sombra, o congelamento e o loop de ponto-fixo mutam activities em
+-- massa (a sombra toca TODAS as linhas, inclusive as 140 de projetos
+-- concluidos). Sem o guard o trigger de projeto concluido abortaria. E desligar
+-- os triggers durante o freeze tambem resolve o "congelamento quebraria a
+-- arvore": o validate_activity_hierarchy antigo (que nao conhece 'entrega')
+-- fica inerte enquanto o item_type e reescrito; a versao nova entra depois.
+-- Religado apos o loop.
+SET session_replication_role = replica;
+
 UPDATE public.activities
    SET item_type_antes_congelar = item_type
  WHERE item_type_antes_congelar IS NULL;
@@ -332,6 +341,10 @@ BEGIN
     END IF;
   END LOOP;
 END $ponto_fixo$;
+
+-- Religa os triggers de negocio (a versao nova de validate_activity_hierarchy,
+-- que conhece 'entrega', e instalada mais abaixo).
+SET session_replication_role = origin;
 
 -- ---------------------------------------------------------------------------
 -- 4c) O TRIGGER DE ANINHAMENTO PRECISA APRENDER OS VALORES NOVOS

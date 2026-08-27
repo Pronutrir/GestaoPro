@@ -47,6 +47,12 @@ ALTER TABLE public.activities
 COMMENT ON COLUMN public.activities.marco_limpeza_backup IS
   'O que a migration 20260827120000 apagou de um marco (responsavel, GUT). Existe para reverter e para responder "quem estava aqui antes?". Nunca reescrita depois.';
 
+-- Guard: a sombra e a limpeza mutam activities (marcos), inclusive 1 marco
+-- sujo de projeto concluido. Sem o guard o trigger de projeto concluido
+-- abortaria. Religado apos a limpeza. As CHECK constraints (secao 3) ficam
+-- fora do guard -- constraint nao e trigger.
+SET session_replication_role = replica;
+
 UPDATE public.activities
    SET marco_limpeza_backup = jsonb_strip_nulls(jsonb_build_object(
          'assigned_to',    assigned_to,
@@ -92,6 +98,9 @@ UPDATE public.activities
      OR COALESCE(tendency, 0) > 0
      OR COALESCE(priority_score, 0) > 0
    );
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 3) A trava — para nao voltar a sujar
