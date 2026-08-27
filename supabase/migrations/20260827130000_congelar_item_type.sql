@@ -280,67 +280,83 @@ COMMENT ON FUNCTION public.eap_tipo_exibido(text, text, boolean, boolean) IS
   'Espelha resolveEapKind() de src/lib/eapModel.ts. Le item_type, nao deduz de hasChildren. Se divergirem, o TypeScript e a fonte.';
 
 -- ---------------------------------------------------------------------------
+-- 3b) A ESTRUTURA REAL, e a TRADUCAO para o dominio de armazenamento
+--
+-- O congelamento precisa gravar o que o item VERDADEIRAMENTE e, nao o que o
+-- campo (possivelmente mentiroso) diz. `eap_tipo_exibido_antigo` decidia
+-- "agrupa" tambem por `item_type IN (fase, pacote)` -- confiava no campo, e por
+-- isso mantinha 'fase' sem filha como agrupador. `eap_kind_estrutural` ignora o
+-- campo e decide pela POSICAO + is_milestone + hasChildren.
+--
+-- ⚠ EXCECAO DELIBERADA E UNICA -- hasChildren decide tipo AQUI, de proposito.
+--   Depois do congelamento, NADA mais pode consultar hasChildren para decidir
+--   tipo: o campo passa a ser a fonte. Este e o unico ponto autorizado, porque
+--   e a FOTO da estrutura, tirada uma vez. O teste
+--   scripts/verificar-tipo-nao-usa-haschildren.cjs barra qualquer outro uso e
+--   abre excecao so para esta funcao, pelo nome. NAO COPIE o padrao.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.eap_kind_estrutural(_wbs text, _is_milestone boolean, _tem_filhas boolean)
+RETURNS text
+LANGUAGE plpgsql IMMUTABLE
+AS $fn$
+DECLARE v_level int;
+BEGIN
+  IF COALESCE(_is_milestone, false) THEN RETURN 'marco'; END IF;
+  v_level := public.eap_nivel_do_codigo(_wbs);
+  IF v_level = 2 THEN RETURN 'fase';    END IF;   -- EAP_FASE_LEVEL
+  IF v_level = 1 THEN RETURN 'projeto'; END IF;   -- EAP_PROJECT_LEVEL
+  IF v_level = 3 THEN RETURN 'entrega'; END IF;   -- EAP_PACOTE_LEVEL, por posicao
+  -- nivel 4+ ou SEM codigo: a ESTRUTURA decide -- hasChildren, a excecao unica.
+  RETURN CASE WHEN COALESCE(_tem_filhas, false) THEN 'entrega' ELSE 'atividade' END;
+END $fn$;
+
+COMMENT ON FUNCTION public.eap_kind_estrutural(text, boolean, boolean) IS
+  'O EapKind pela ESTRUTURA (nivel/is_milestone/hasChildren), ignorando o item_type gravado. Usa hasChildren de proposito, UMA vez, para a foto do congelamento. Nao usar em codigo novo -- ver scripts/verificar-tipo-nao-usa-haschildren.cjs.';
+
+-- Espelha eapToPersisted (src/lib/eapModel.ts:506): traduz o vocabulario de
+-- EXIBICAO (EapKind) para o de ARMAZENAMENTO (item_type). NUNCA gravar o EapKind
+-- cru -- 'entrega'/'projeto'/'marco' nao existem no dominio da coluna (CHECK
+-- activities_item_type_check). `_tem_filhas` so importa para 'projeto': nivel-1
+-- COM filha continua agrupador ('fase'); sem filha e folha ('atividade').
+CREATE OR REPLACE FUNCTION public.eap_item_type_persistido(_kind text, _tem_filhas boolean)
+RETURNS text
+LANGUAGE sql IMMUTABLE
+AS $fn$
+  SELECT CASE lower(btrim(COALESCE(_kind, '')))
+    WHEN 'marco'   THEN 'atividade'   -- is_milestone ja carrega o marco
+    WHEN 'fase'    THEN 'fase'
+    WHEN 'entrega' THEN 'fase'         -- fase e entrega gravam igual; o nivel separa na tela
+    WHEN 'projeto' THEN CASE WHEN COALESCE(_tem_filhas, false) THEN 'fase' ELSE 'atividade' END
+    ELSE 'atividade'
+  END;
+$fn$;
+
+COMMENT ON FUNCTION public.eap_item_type_persistido(text, boolean) IS
+  'Traduz EapKind -> item_type, espelhando eapToPersisted. So devolve fase/atividade -- o dominio real da coluna. Nunca gravar EapKind cru.';
+
+-- ---------------------------------------------------------------------------
 -- 4) O CONGELAMENTO
 --
 -- `tem_filhas` sai de um EXISTS sobre parent_id, sem filtrar is_trashed: filha
 -- na lixeira volta, e o pai nao pode trocar de tipo quando ela voltar.
 --
--- PRIMEIRA PASSADA — a foto, com a formula ANTIGA. E o que a tela mostra hoje.
+-- UMA passada, pela ESTRUTURA, gravando o PERSISTIDO. Nao ha mais
+-- primeira-passada + ponto-fixo: aquele desenho existia porque se gravava o
+-- EapKind cru ('entrega'), que ao ser relido produzia outro EapKind e nunca
+-- convergia -- e 'entrega' viola a CHECK de qualquer forma. Aqui o valor sai de
+-- eap_kind_estrutural (le a estrutura, nao o campo que pode mentir) e passa por
+-- eap_item_type_persistido -> so 'fase'/'atividade', estavel por construcao.
+-- A verificacao da secao 5 confirma que reaplicar nao muda nada.
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS _congelar_alvo;
-CREATE TEMP TABLE _congelar_alvo AS
-  SELECT a.id,
-         a.item_type AS de,
-         public.eap_tipo_exibido_antigo(
-           a.item_type, a.wbs_code, a.is_milestone,
-           EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id)
-         ) AS para
-    FROM public.activities a;
-
 UPDATE public.activities a
-   SET item_type = t.para
-  FROM _congelar_alvo t
- WHERE t.id = a.id
-   AND t.para IS DISTINCT FROM a.item_type;
-
--- ---------------------------------------------------------------------------
--- 4b) ATE O PONTO FIXO, ja pela formula NOVA
---
--- Os 14 itens aceitos na decisao do passo 3 nao convergem em uma passada: eram
--- `item_type='fase'` sem codigo e sem filhas, exibiam "Entrega", e ao gravar
--- 'entrega' deixam de casar com o IN e passam a 'atividade'. Uma passada so
--- pararia com o campo dizendo 'entrega' e a leitura devolvendo 'atividade' —
--- exatamente a divergencia que o congelamento existe para eliminar.
---
--- O laco reaplica a REGRA NOVA ate nao mudar mais nada. Converge rapido porque
--- cada passada so pode mover um item para "menos agrupador", nunca de volta.
--- O teto de 10 e um freio de seguranca: se nao convergir em 10, ha ciclo, e
--- ciclo aqui seria defeito de regra, nao de dado.
--- ---------------------------------------------------------------------------
-DO $ponto_fixo$
-DECLARE
-  v_voltas int := 0;
-  v_mudou  int;
-BEGIN
-  LOOP
-    UPDATE public.activities a
-       SET item_type = public.eap_tipo_exibido(
-             a.item_type, a.wbs_code, a.is_milestone,
-             EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id))
-     WHERE a.item_type IS DISTINCT FROM public.eap_tipo_exibido(
-             a.item_type, a.wbs_code, a.is_milestone,
-             EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id));
-
-    GET DIAGNOSTICS v_mudou = ROW_COUNT;
-    v_voltas := v_voltas + 1;
-    RAISE NOTICE '  ponto fixo, volta %: % linhas', v_voltas, v_mudou;
-
-    EXIT WHEN v_mudou = 0;
-    IF v_voltas >= 10 THEN
-      RAISE EXCEPTION 'nao convergiu em % voltas — ha ciclo na regra de tipo', v_voltas;
-    END IF;
-  END LOOP;
-END $ponto_fixo$;
+   SET item_type = public.eap_item_type_persistido(
+         public.eap_kind_estrutural(a.wbs_code, a.is_milestone,
+           EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id)),
+         EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id))
+ WHERE a.item_type IS DISTINCT FROM public.eap_item_type_persistido(
+         public.eap_kind_estrutural(a.wbs_code, a.is_milestone,
+           EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id)),
+         EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id));
 
 -- Religa os triggers de negocio (a versao nova de validate_activity_hierarchy,
 -- que conhece 'entrega', e instalada mais abaixo).
@@ -541,8 +557,9 @@ BEGIN
   -- migration existe para matar.
   SELECT count(*) INTO v_diverge
     FROM public.activities a
-   WHERE a.item_type IS DISTINCT FROM public.eap_tipo_exibido(
-           a.item_type, a.wbs_code, a.is_milestone,
+   WHERE a.item_type IS DISTINCT FROM public.eap_item_type_persistido(
+           public.eap_kind_estrutural(a.wbs_code, a.is_milestone,
+             EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id)),
            EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id));
   IF v_diverge > 0 THEN
     RAISE EXCEPTION 'nao convergiu: % linhas ainda divergem apos o congelamento', v_diverge;

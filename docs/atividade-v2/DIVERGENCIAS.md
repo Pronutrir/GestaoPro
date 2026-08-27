@@ -208,3 +208,22 @@ com raia) é reescrita de interface no `ActivityKanban.tsx`, que tem 4.000+ linh
 executar a aplicação, uma mudança dessa natureza é escrita às cegas — e o agrupamento por
 responsável já existe hoje (`ActivityKanban.tsx:831-836`). Fica para quando houver como testar
 as duas pontas.
+
+---
+
+## DEDUÇÃO RESIDUAL — nível 1 exibe 'projeto' independentemente do item_type
+
+`resolveEapKind` (`src/lib/eapModel.ts:314`) lê o **NÍVEL** nesse caso, não o
+campo: todo item de `wbs_code` nível 1 exibe `'projeto'`, tenha `item_type`
+`'fase'` ou `'atividade'`. Consequência: nos 14 itens de nível 1 o `item_type`
+é **invisível** — ninguém vê, ninguém confere, ninguém corrige. É a mesma
+família da dedução por `hasChildren` que saiu nesta leva (o congelamento tirou
+o `OR hasChildren`, mas o `OR nível` continua).
+
+**Não bloqueia nada.** Decidir DEPOIS do deploy: ou o nível 1 passa a respeitar
+o campo (como os demais níveis), ou "nível 1 é sempre projeto" vira regra
+explícita, como `is_milestone` — declarada, não um efeito colateral do nível.
+
+Medido em 27/08: 14 itens de nível 1 (5 com filhas → `fase`, 9 sem → `atividade`);
+o congelamento troca o campo de 5 deles (todos na lixeira) sem trocar o rótulo.
+Ver `docs/medicoes/os-14-que-mudam-de-rotulo-27-08-2026.md`.
