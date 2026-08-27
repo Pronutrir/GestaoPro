@@ -106,7 +106,7 @@
 
     <div class="aviso"><b>Copie os valores exatos.</b> Cor, tamanho de fonte, peso, espaçamento, gap, raio de borda, largura de coluna, altura de controle. Não arredonde para múltiplos de 4 ou 8, não substitua por padrão de framework, não “melhore” o espaçamento. Se algum valor conflitar com o que já existe no sistema, pare e pergunte em vez de escolher sozinho.<br><br><b>A seção 07 é pré-requisito da 03.</b> A criação depende da regra de tipo e hierarquia — leia antes.</div>
 
-    <div class="falta"><b>ARQUIVO INCOMPLETO — seções 05 a 11 não chegaram.</b> O conteúdo original excedeu o limite de uma mensagem e foi cortado no meio da seção 04 — nas duas tentativas de envio, no mesmo ponto. O que está aqui é <b>fiel ao original, sem invenção</b>: as seções 01, 02 e 03 estão íntegras, e a 04 vai até onde o texto chegou. <b>A seção 02 — a referência principal — está completa</b>, assim como os tokens e as nove regras abaixo.<br><br><b>A seção 07 (Tipo e hierarquia da EAP) é a que mais falta.</b> Ela é pré-requisito declarado da 03, e a nona regra aponta para ela. Sem a 07, a regra “o tipo é gravado, nunca deduzido” está enunciada mas não especificada.</div>
+    <div class="falta"><b>ARQUIVO INCOMPLETO — faltam as seções 05, 06, 08, 09, 10 e 11.</b> O envio integral excedeu o limite de uma mensagem e foi cortado no meio da seção 04, nas duas tentativas. O que está aqui é <b>fiel ao original, sem invenção</b>: as seções 01, 02, 03 e <b>07</b> estão íntegras, e a 04 vai até onde o texto chegou.<br><br><b>Dá para construir a tela da atividade.</b> A referência principal (02) e o pré-requisito da criação (07) estão completos, com os tokens e as nove regras. Faltam as três do quadro (09, 10, 11), necessárias antes de mexer no Kanban.</div>
 
     <div class="indice">
       <a href="#sec1-anc">01 · Atividade — como é hoje</a>
@@ -115,7 +115,7 @@
       <a href="#sec4-anc">04 · Atividade — visualizar (parcial)</a>
       <span class="ausente">05 · Os três estados lado a lado</span>
       <span class="ausente">06 · Os quatro estados de um campo</span>
-      <span class="ausente">07 · Tipo e hierarquia da EAP</span>
+      <a href="#sec7-anc">07 · Tipo e hierarquia da EAP</a>
       <span class="ausente">08 · De onde se cria, e a lição aprendida</span>
       <span class="ausente">09 · Quadro — como é hoje</span>
       <span class="ausente">10 · Quadro — proposto</span>
@@ -584,36 +584,134 @@ mono           Roboto Mono + font-variant-numeric: tabular-nums</pre>
 </div></div></div>
 </section>
 
+<section class="bloco" id="sec7-anc">
+  <div class="cab"><span class="num">07</span>
+  <div><h2>Tipo e hierarquia da EAP</h2><p>O que a auditoria de 27/08 obriga a mudar. PRÉ-REQUISITO da seção 03.</p></div></div>
+  <div class="palco"><div id="sec7" class="art"><div style="width:1440px;height:960px;box-sizing:border-box;background:#FFFFFF;padding:26px 28px;display:flex;flex-direction:column;gap:17px;">
+
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <span class="rot" style="color:#2563EB;">Depois da auditoria da EAP</span>
+    <span style="font-size:25px;font-weight:400;letter-spacing:-.4px;">O tipo passa a ser escolhido, não deduzido</span>
+    <span style="font-size:13.5px;font-weight:300;color:#5F6570;line-height:1.6;max-width:104ch;">Hoje o tipo é calculado na hora a partir de “tem filhas?”, e quem pergunta decide a resposta — por isso <b style="font-weight:500;color:#212121;">2.076 itens mudam de tipo conforme a tela</b>. O banco, enquanto isso, valida pelo campo gravado. A regra que o banco aplica não é a que você vê.</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:18px;flex-grow:1;min-height:0;align-content:start;">
+
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <span style="font-size:15px;font-weight:500;">O que aparece ao criar, conforme onde você clicou</span>
+      <div style="border:1px solid #E8E8E8;border-radius:8px;padding:14px 16px;">
+        <table>
+          <thead><tr><th style="width:150px;">Onde você clicou</th><th>Tipos oferecidos</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span style="font-weight:500;">Raiz do projeto</span></td>
+              <td><div style="display:flex;gap:7px;"><span class="tp on">Fase</span></div></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:500;">Dentro de uma Fase</span></td>
+              <td><div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="tp on">Entrega</span><span class="tp">Atividade</span><span class="tp">Marco</span></div></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:500;">Dentro de uma Entrega</span></td>
+              <td><div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="tp on">Atividade</span><span class="tp">Marco</span></div></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:500;">Dentro de uma Atividade</span></td>
+              <td><div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="tp on">Atividade</span><span style="font-size:11px;color:#9AA1AC;align-self:center;">a subatividade é atividade</span><span class="tp">Marco</span></div></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:500;">Dentro de um Marco</span></td>
+              <td><div style="display:flex;align-items:center;gap:9px;"><span class="tp no">nada</span><span style="font-size:11.5px;color:#9AA1AC;">marco é folha — o “+ Subatividade” não aparece</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;padding:14px 17px;border-left:3px solid #212121;background:#FAFAFB;">
+        <span class="rot" style="color:#3A3A3A;">Por que gravar em vez de deduzir</span>
+        <span style="font-size:12.5px;line-height:1.65;color:#3A3A3A;">Se o tipo vem de “tem filhas?”, uma <b style="font-weight:500;">Atividade vira Entrega sozinha</b> no instante em que alguém cria uma subatividade — e some do quadro, porque agrupador não é cartão. Ninguém decidiu isso, e ninguém consegue explicar depois. Gravado, o item só muda de tipo quando alguém troca, e fica no histórico.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <span style="font-size:15px;font-weight:500;">Mudar o tipo depois</span>
+
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border:1px solid #E8E8E8;border-radius:7px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#16A249;flex:none;"></span>
+          <div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:13px;font-weight:500;">Atividade sem filhas → Marco</span><span style="font-size:11.5px;color:#8A8A8A;">avisa que horas, esforço e GUT serão apagados, e pede confirmação</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border:1px solid #E8E8E8;border-radius:7px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#16A249;flex:none;"></span>
+          <div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:13px;font-weight:500;">Atividade com filhas → Entrega</span><span style="font-size:11.5px;color:#8A8A8A;">sai do quadro e vira faixa; avisa antes</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border:1px solid #F0C7C3;background:#FDF7F6;border-radius:7px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#C0392F;flex:none;"></span>
+          <div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:13px;font-weight:500;color:#8C2A22;">Qualquer coisa com filhas → Marco</span><span style="font-size:11.5px;color:#8C2A22;">recusado. Marco é folha — mova as filhas primeiro</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border:1px solid #F0C7C3;background:#FDF7F6;border-radius:7px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#C0392F;flex:none;"></span>
+          <div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:13px;font-weight:500;color:#8C2A22;">Fase → Atividade tendo Entregas dentro</span><span style="font-size:11.5px;color:#8C2A22;">recusado. Atividade não contém Entrega</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;padding:14px 17px;border-left:3px solid #C0392F;background:#FDF3F2;">
+        <span class="rot" style="color:#B4342B;">O que a auditoria achou, e força esta decisão</span>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.6;color:#8C2A22;">
+          <span><b style="font-weight:500;">2.076 itens</b> mudam de tipo conforme a tela que pergunta — dois pontos de chamada passam resposta fixa.</span>
+          <span><b style="font-weight:500;">818 linhas</b> gravadas com um tipo e exibidas com outro. A trigger do banco valida o gravado; a tela mostra o deduzido.</span>
+          <span><b style="font-weight:500;">13 marcos</b> com responsável ou GUT — o banco protege o que ele conhece, a tela protegia o resto e só passou a proteger ontem.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+    <div style="display:flex;flex-direction:column;gap:3px;padding:13px 16px;border-left:3px solid #2563EB;background:#F5F8FE;">
+      <span class="rot" style="color:#2563EB;">Uma fonte só</span>
+      <span style="font-size:12.5px;line-height:1.6;color:#1D4ED8;">O campo gravado passa a ser a verdade, e a função para de deduzir: passa a ler. Os 15 pontos de chamada param de discordar porque param de decidir.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px;padding:13px 16px;border-left:3px solid #F59F0A;background:#FEFAF3;">
+      <span class="rot" style="color:#B45309;">O código EAP acompanha</span>
+      <span style="font-size:12.5px;line-height:1.6;color:#7A4A08;">Mover um item passa a recalcular o código da subárvore. Hoje grava só o pai novo — daí 13 códigos que não derivam do pai e 9 duplicados.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px;padding:13px 16px;border-left:3px solid #16A249;background:#F3FAF6;">
+      <span class="rot" style="color:#0F7A55;">A regra desce para o banco</span>
+      <span style="font-size:12.5px;line-height:1.6;color:#215F48;">O que o banco protege está limpo: <b style="font-weight:500;">0 marcos com filhas, 0 com horas</b>. O que só a tela protege tem 13 registros sujos. A prova de qual camada segura está nos números.</span>
+    </div>
+  </div>
+
+</div></div></div>
+</section>
+
 <section class="bloco">
   <div class="cab">
-    <span class="num" style="color:#C0392F;border-color:#F3D2CE;">05<br>11</span>
+    <span class="num" style="color:#C0392F;border-color:#F3D2CE;">06</span>
     <div class="tx">
-      <h2>Seções 05 a 11 — não chegaram</h2>
-      <p>Precisam ser reenviadas para o desenho ficar completo.</p>
+      <h2>Seis seções ainda não chegaram</h2>
+      <p>05, 06, 08, 09, 10 e 11. As do quadro (09–11) bloqueiam o Kanban.</p>
     </div>
   </div>
   <div class="palco">
     <div style="padding:26px 30px;display:flex;flex-direction:column;gap:16px;max-width:900px;">
       <div style="font-size:13.5px;line-height:1.7;color:#3A3A3A;">
-        O envio original excedeu o limite de uma mensagem e foi cortado no meio da seção 04 —
-        nas <b style="font-weight:500;">duas tentativas</b>, no mesmo ponto. Estas sete seções não
-        chegaram, e <b style="font-weight:500;">nada foi inventado no lugar delas</b>:
+        O envio integral foi cortado no meio da seção 04, nas duas tentativas. A <b style="font-weight:500;">07
+        chegou avulsa</b> e já está acima. Estas seis ainda não chegaram, e
+        <b style="font-weight:500;">nada foi inventado no lugar delas</b>:
       </div>
       <div style="display:flex;flex-direction:column;gap:9px;">
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">05</span><span>Os três estados lado a lado</span></div>
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">06</span><span>Os quatro estados de um campo</span></div>
-        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;background:#FDF3F2;padding:7px 10px;border-radius:5px;"><span class="mono" style="color:#C0392F;font-size:12px;">07</span><span><b style="font-weight:500;">Tipo e hierarquia da EAP</b> — pré-requisito declarado da seção 03, e destino da nona regra</span></div>
-        <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">08</span><span>De onde se cria, e a lição aprendida</span></div>
+                <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">08</span><span>De onde se cria, e a lição aprendida</span></div>
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">09</span><span>Quadro — como é hoje</span></div>
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">10</span><span>Quadro — proposto</span></div>
         <div style="display:flex;gap:12px;align-items:baseline;font-size:13.5px;"><span class="mono" style="color:#C0392F;font-size:12px;">11</span><span>Quadro — cor de coluna e tema escuro</span></div>
       </div>
       <div style="font-size:12.5px;line-height:1.7;color:#5F6570;background:#F5F8FE;border-left:3px solid #2563EB;padding:14px 16px;border-radius:0 6px 6px 0;">
-        <b style="font-weight:500;">O que já dá para construir com o que chegou:</b> a seção 02 — a referência
-        principal — está íntegra, e com ela os tokens e as nove regras. A tela da atividade
-        no estado <b style="font-weight:500;">editar</b> e <b style="font-weight:500;">visualizar</b> pode ser construída a partir daqui.
-        A <b style="font-weight:500;">criação</b> depende da 07, por dependência declarada na capa.
-        As seções do quadro (09–11) são necessárias antes de mexer no Kanban.
+        <b style="font-weight:500;">A tela da atividade está destravada.</b> A referência principal (02), a criação
+        (03) e o pré-requisito dela (07) chegaram completos, com os tokens e as nove regras —
+        os três estados dão para construir.<br><br>
+        <b style="font-weight:500;">O quadro não.</b> As seções 09, 10 e 11 são as do Kanban, e nenhuma chegou.
       </div>
     </div>
   </div>
