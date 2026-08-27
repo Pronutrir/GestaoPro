@@ -284,14 +284,19 @@ export function TelaDaAtividade({
           <CampoNoLugar
             rotulo="Descrição"
             valor={dados.descricao}
+            /* O TEXTO NÃO PROMETE O QUE A TELA AINDA NÃO FAZ.
+               A versão anterior dizia "aceita lista, link e @menção" — que é o
+               desenho, e é para onde isto vai. Mas hoje o campo é textarea, e
+               anunciar o que não existe é pior que anunciar menos: a pessoa
+               tenta, não funciona, e conclui que a tela está quebrada. */
             vazio={
               criando
                 ? "O que precisa ser feito, e o que conta como pronto."
-                : "clique para escrever · aceita lista, link e @menção"
+                : "clique para escrever"
             }
             aoGravar={gravador("description", capacidades.editarDescricao)}
             multilinha
-            dica="Aceita lista de conferência, link e @menção"
+            dica="O que precisa ser feito, e o que conta como pronto"
           />
         </div>
 
