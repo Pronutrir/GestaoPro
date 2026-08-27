@@ -24,6 +24,30 @@ dentro de Atividade → Atividade
 
 ---
 
+## ⚠ Contra o que foi medido o "certo" — leia antes da tabela
+
+**A referência foi a própria posição na árvore.** Isso não é uma verdade
+externa: é uma terceira regra, escrita por mim a partir da seção 07 do desenho.
+
+Então a linha *"o deduzido está certo em 42%"* significa, com precisão:
+
+> **duas heurísticas concordam em 42% dos casos** — a que a tela usa hoje
+> (`hasChildren` + nível do código) e a que eu derivei da seção 07 (posição do
+> pai na árvore).
+
+Não significa que o deduzido seja verdade, nem que os 358 "nenhum dos dois"
+estejam errados. Significa que **não há árbitro**: o sistema não guarda em lugar
+nenhum o que cada item *deveria* ser, porque nunca houve um momento em que
+alguém tenha decidido item a item.
+
+O que a tabela mede de verdade é **o quanto o campo gravado se afastou de
+qualquer leitura defensável** — e isso basta para a conclusão que importa:
+`item_type` não pode virar fonte sem ser corrigido antes. Não basta para
+escolher *qual* correção, e é por isso que a decisão foi pedida em vez de
+tomada.
+
+---
+
 ## A resposta — e ela não favorece o gravado
 
 Das 818, **57 são marco** (`is_milestone` vence, por desenho). Sobram **761**:
@@ -119,20 +143,35 @@ Cumpre a instrução literal e aceita que 319 itens piorem de aparência hoje.
 
 ---
 
-## O que eu faria, se a decisão fosse minha
+## A decisão: nenhuma das três — a quarta
 
-**A**, com duas condições:
+**Congelar o que a tela já mostra.** Gravar em `item_type`, para todas as
+linhas, o valor que `resolveEapKind` produz com o `hasChildren` **real**.
 
-1. **os 232 "fase sem filhas" saem da conversão automática** e entram na lista
-   de pendentes da saída B — são exatamente os que a heurística erra;
-2. **coluna sombra** com o `item_type` original, para reverter.
+Não é heurística nova: é a **foto do estado atual**. E resolve o que as outras
+três não resolviam:
 
-Isso converte ~529 linhas com segurança e deixa 232 marcadas, em vez de chutar
-761 ou não mexer em nenhuma.
+- **ninguém vê nada mudar** no dia seguinte; nenhum relatório muda de número;
+- os **232 "fase sem filhas"** se resolvem sozinhos — sem filha, a dedução já os
+  classifica como atividade, que é o que eles são;
+- os **319** em que o deduzido acerta continuam certos;
+- os **2.076** que mudavam conforme a tela param de mudar;
+- e o defeito fatal morre: **criar uma subatividade deixa de mudar o tipo de
+  alguém**.
 
-**Mas é decisão sua.** O que muda de aparência para toda a equipe é diferente em
-cada saída, e o número que importa é este: **741 itens hoje aparecem como
-"Entrega" e podem passar a aparecer como "Fase" ou "Atividade"**.
+O que a medição acima faz por esta decisão não é escolher o valor certo — é
+provar que **ler o campo como está não era opção**. A escolha do valor veio de
+outro critério: não mexer no que as pessoas já enxergam.
+
+### As 84 linhas que ficam erradas de propósito
+
+São aquelas em que o gravado original batia com a posição e o congelamento vai
+por cima. Elas **não são corrigidas** — viram lista de revisão humana em
+`docs/medicoes/tipos-a-revisar-27-08-2026.md`, para depois que a tela permitir
+trocar o tipo.
+
+Congelar erra em 84 linhas conhecidas e listadas. Qualquer outra saída erra em
+centenas, sem lista.
 
 ---
 
