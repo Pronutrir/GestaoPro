@@ -271,6 +271,11 @@ essa regra — e com ela, sem querer, tirou o contador do caso mais importante.
 > filhas não viram cartão (correto, por desenho), e o cartão do pai não anuncia
 > que elas existem (defeito, porque depende de uma preferência desligada).
 
+**A varredura pelos outros caronas foi feita** (27/08): 13 leitores da regra,
+**12 perguntavam mesmo "é uma caixa?" e continuam certos**; o contador é o único
+quebrado. Ver [caronas-da-regra-removida-27-08-2026.md](medicoes/caronas-da-regra-removida-27-08-2026.md)
+— existe para ninguém refazer a busca.
+
 **O conserto** é tirar o contador de trás da preferência quando o item tem
 filhas: um cartão com subatividades sempre diz quantas. A preferência
 `subCount` continua fazendo sentido para quem quer escondê-la deliberadamente,
