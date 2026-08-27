@@ -214,6 +214,73 @@ quê.
 
 ---
 
+## 5 · Dois sintomas relatados no incidente — conferir DEPOIS da reversão
+
+Relatados pelo Raphael em 27/08, com o build quebrado no ar. **Não foram
+investigados de propósito**: sintoma observado durante um incidente não é
+diagnóstico, e conferir com o sistema instável produz conclusão errada com
+aparência de certeza.
+
+Voltar a eles **com o sistema estável**, na ordem abaixo.
+
+### a) O quadro não agrupa — nenhuma faixa aparece
+
+**Hipótese (do Raphael, plausível e não verificada):** a faixa agrupa cartões;
+sem cartão embaixo, ela não existe.
+
+Isso é coerente com o que já se sabe: os quatro itens promovidos no projeto de
+teste são todos `item_type='fase'` e portanto faixa, e as filhas deles nunca
+foram promovidas. Uma faixa sem nenhum cartão sob ela não tem o que desenhar.
+
+**Como confirmar:** depois da reversão e do UPDATE, promover uma atividade
+comum para o quadro e ver se a faixa do pai dela aparece.
+
+> **Se houver cartão e ainda assim não houver faixa, aí é defeito** — e o lugar
+> de olhar é `faixaDoCartao`, que sobe por `parent_id` até achar um agrupador
+> **que esteja no quadro**. Um pacote ainda na fila não desenha faixa, e isso é
+> intencional.
+
+### b) Subatividades não permanecem no quadro
+
+**Hipótese (do Raphael):** é o desenho — subatividade não vira cartão sozinha,
+aparece no contador do cartão do pai.
+
+**A hipótese está certa na primeira metade e precisa de uma correção na
+segunda.** Fui conferir antes de registrar:
+
+> **O contador existe.** `KanbanCard.tsx:1054` renderiza *"N subatividades"*, e
+> `ActivityKanban.tsx:3421` alimenta o valor. Não é peça faltando.
+
+O problema é a condição que o mostra:
+
+```js
+(isPhase || cardFields.subCount) && subActivityCount > 0
+```
+
+Ele aparece se o item for **agrupador** (`isPhase`) — **ou** se o usuário tiver
+ligado o campo `subCount` nas preferências de exibição do quadro. E
+`subCount: false` é o padrão (`kanban/shared.ts:127`).
+
+Até 27/08 isso funcionava por acidente: uma atividade com filhas **era**
+`isPhase`, pela regra estrutural, então o contador aparecia. O item 4 tirou
+essa regra — e com ela, sem querer, tirou o contador do caso mais importante.
+
+**A consequência, que é o que o Raphael descreve:**
+
+> Promover uma atividade que tem filhas **esconde as filhas sem dizer nada**. As
+> filhas não viram cartão (correto, por desenho), e o cartão do pai não anuncia
+> que elas existem (defeito, porque depende de uma preferência desligada).
+
+**O conserto** é tirar o contador de trás da preferência quando o item tem
+filhas: um cartão com subatividades sempre diz quantas. A preferência
+`subCount` continua fazendo sentido para quem quer escondê-la deliberadamente,
+mas não pode ser a razão de o dado sumir por padrão.
+
+Isso encaixa com o item 1 desta fila (a coluna "Situação" no backlog): os dois
+são a mesma família — **o sistema deixou de mostrar onde as coisas estão**.
+
+---
+
 ## Esperando gente, não código
 
 - **Quem publicou** em 26/08 18:01 e em 27/08 12:08 — e qual `APP_VERSION`.
