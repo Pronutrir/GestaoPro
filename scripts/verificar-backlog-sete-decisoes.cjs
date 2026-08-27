@@ -116,6 +116,28 @@ check(
   /minHeight: alturaDaLinha/.test(backlog),
 );
 
+// ── PROMOVER ≠ ASSUMIR: a pergunta que nao pode ser automatica ───────────
+check(
+  "levar as subatividades e PERGUNTADO (existe o controle)",
+  /setLevarSubatividades/.test(backlog),
+);
+check(
+  "e nasce DESMARCADO — levar junto é decisão, não padrão",
+  /\[levarSubatividades, setLevarSubatividades\] = useState\(false\)/.test(backlog),
+);
+check(
+  "sem a marca, o movimento alcança só o que está selecionado",
+  /levarSubatividades[\s\S]{0,400}: Array\.from\(selectedIds\)/.test(backlog),
+);
+check(
+  "marco nunca entra no lote da promoção",
+  /a \? !a\.is_milestone : false/.test(backlog),
+);
+check(
+  "a pergunta volta desmarcada depois de mover",
+  /setLevarSubatividades\(false\)/.test(backlog),
+);
+
 // ── A regra que atravessa tudo: agregado NÃO se recalcula na tela ─────────
 check(
   "o esforço do pai lê derived_hours (não soma no cliente)",

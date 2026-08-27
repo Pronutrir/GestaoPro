@@ -215,6 +215,9 @@ export const BacklogSection = ({
   const [soMinhas, setSoMinhas] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  /** "Levar as subatividades junto" — PERGUNTADO, e desmarcado por padrao.
+   *  Nunca automatico: levar junto e decisao de escopo, de quem promove. */
+  const [levarSubatividades, setLevarSubatividades] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
   const [assignee, setAssignee] = useState<string>("");
   const [isMoving, setIsMoving] = useState(false);
@@ -1084,6 +1087,37 @@ export const BacklogSection = ({
     .filter((id) => (childrenByParent.get(id) || []).length > 0).length;
 
   /**
+   * O que "levar as subatividades junto" levaria — o número da pergunta.
+   *
+   * Conta a subárvore dos itens selecionados, DESCONTANDO o que já está na
+   * seleção: se a pessoa marcou o pacote e duas filhas, a pergunta é sobre as
+   * outras, não sobre as que ela já escolheu.
+   *
+   * A mesma separação de `lib/quadroDeExecucao`: atividade × agrupador, marco
+   * fora — só que aqui contada sobre os PENDENTES, não sobre a subárvore toda.
+   */
+  const subatividadesDaSelecao = useMemo(() => {
+    // Os descendentes de TODOS os selecionados, sem repetir e sem contar quem
+    // já está na seleção — esses vão de qualquer jeito, e contá-los faria a
+    // pergunta prometer mais do que ela decide.
+    const pendentes = new Set<string>();
+    for (const id of selectedIds) {
+      for (const d of descendentesDe(id)) {
+        if (!selectedIds.has(d)) pendentes.add(d);
+      }
+    }
+    let atividades = 0;
+    let agrupadores = 0;
+    for (const id of pendentes) {
+      const item = activities.find((a) => a.id === id);
+      if (!item || item.is_milestone) continue;   // marco não é promovível
+      if ((childrenByParent.get(id) || []).some((f) => !f.is_milestone)) agrupadores++;
+      else atividades++;
+    }
+    return { atividades, agrupadores };
+  }, [selectedIds, activities, childrenByParent, descendentesDe]);
+
+  /**
    * Quantas FASES REAIS ficariam sem nenhuma tarefa se a seleção fosse
    * arquivada — o número que a confirmação precisa mostrar antes do clique.
    *
@@ -1159,7 +1193,22 @@ export const BacklogSection = ({
      * IGNORA a própria coluna — ver `isGrouper` em activityProgress. Mover a
      * caixa não move o conteúdo, e o número não mente.
      */
-    const idsBrutos = Array.from(selectedIds);
+    /**
+     * A SUBÁRVORE SÓ VAI SE FOI PEDIDO.
+     *
+     * `levarSubatividades` vem do diálogo, desmarcado por padrão. Sem ele, o
+     * movimento alcança exatamente o que está selecionado — que é a regra:
+     * promover leva só o que foi escolhido.
+     */
+    const idsBrutos = levarSubatividades
+      ? Array.from(new Set(
+          Array.from(selectedIds).flatMap((id) => [id, ...descendentesDe(id)]),
+        )).filter((id) => {
+          // Marco não é promovível: não entra no quadro.
+          const a = activities.find((x) => x.id === id);
+          return a ? !a.is_milestone : false;
+        })
+      : Array.from(selectedIds);
     if (idsBrutos.length === 0) {
       setIsMoving(false);
       toast({ title: "Nenhuma tarefa selecionada", variant: "destructive" });
@@ -1363,6 +1412,7 @@ export const BacklogSection = ({
 
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
+    setLevarSubatividades(false);   // a pergunta volta desmarcada na proxima vez
     setTargetStageId("");
     setAssignee("");
     setIsMoving(false);
@@ -3862,6 +3912,46 @@ export const BacklogSection = ({
               </p>
             )}
           </DialogHeader>
+
+          {/* ── PROMOVER ≠ ASSUMIR: a pergunta que não pode ser automática ──
+              Promover é decisão de ESCOPO — o que entra no quadro. Levar as
+              subatividades junto é outra decisão, e é de quem promove.
+
+              Era automática das duas formas erradas, em momentos diferentes:
+              a seleção puxava a subárvore inteira sem pedir, e o arrasto do
+              quadro cascateava para os descendentes. As duas somadas
+              produziam o vaivém (ver lib/quadroDeExecucao).
+
+              Agora: PERGUNTADA, desmarcada por padrão, e o número que ela
+              mostra conta só o que VIRARIA cartão — marco fora, agrupador
+              intermediário contado à parte. Dizer "levar 20 junto" para um
+              pacote com 12 atividades e 8 caixas seria número inventado. */}
+          {subatividadesDaSelecao.atividades > 0 && (
+            <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border bg-muted/30 cursor-pointer">
+              <Checkbox
+                checked={levarSubatividades}
+                onCheckedChange={(v) => setLevarSubatividades(v === true)}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-foreground">
+                  Levar as subatividades junto
+                </span>
+                <span className="block text-[12px] text-muted-foreground leading-snug">
+                  {subatividadesDaSelecao.atividades}{" "}
+                  {subatividadesDaSelecao.atividades === 1 ? "atividade" : "atividades"} dentro
+                  {subatividadesDaSelecao.agrupadores > 0 && (
+                    <>, em {subatividadesDaSelecao.agrupadores}{" "}
+                    {subatividadesDaSelecao.agrupadores === 1 ? "caixa" : "caixas"}</>
+                  )}
+                  {". "}
+                  {levarSubatividades
+                    ? "Vão para a mesma coluna."
+                    : "Ficam onde estão — só o que você marcou é movido."}
+                </span>
+              </span>
+            </label>
+          )}
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Novo status *</Label>
