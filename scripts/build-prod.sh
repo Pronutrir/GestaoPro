@@ -23,6 +23,26 @@ PROD_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:?defina NEXT_PUBLIC_SUPABASE_ANON
 
 IMAGE="pronutrir/gestaopro:${APP_VERSION}"
 
+# ---------------------------------------------------------------------------
+# BARREIRA DE ACOPLAMENTO — escrita depois do incidente de 27/08/2026 12:08.
+#
+# Havia um `publicar-as-tres.sh` desde as 09:48 daquele dia, e ele não impediu
+# nada: os comandos de build viviam dentro de um `cat <<TXT`, isto é, eram TEXTO
+# IMPRESSO para um humano ler. Quem publicou pelo caminho normal — este script —
+# passou por fora sem contorcer nada.
+#
+# Uma barreira que depende de alguém ler não é barreira, é uma placa. Esta roda
+# aqui, no caminho que as pessoas usam de verdade, e derruba o build.
+#
+# Para forçar: PULAR_BARREIRA=1 ./scripts/build-prod.sh <versao>
+# ---------------------------------------------------------------------------
+if command -v node >/dev/null 2>&1; then
+  node scripts/barreira-de-acoplamento.cjs || exit 1
+else
+  echo "AVISO: node não encontrado — a barreira de acoplamento NÃO foi conferida."
+  echo "       Confirme à mão que as migrations acopladas já estão aplicadas."
+fi
+
 echo "==> Buildando ${IMAGE}"
 echo "    NEXT_PUBLIC_SUPABASE_URL=${PROD_SUPABASE_URL}"
 

@@ -15,6 +15,7 @@
 
 | data/hora (Fortaleza) | APP_VERSION | commit | quem publicou | o que entrou |
 |---|---|---|---|---|
+| **27/08/2026 12:08:31** | *desconhecida* | *desconhecido* | **a descobrir** | **INCIDENTE** — leitura de item_type sem o backfill; ver abaixo |
 | 26/08/2026 18:01:08 | *desconhecida* | *desconhecido* | **a descobrir** | migrations da leva + código até ~17:33 |
 | 25/08/2026 17:57 | *desconhecida* | *desconhecido* | *desconhecido* | — |
 
@@ -60,3 +61,126 @@ com esta.
 agrupadores viram faixa sobre os cartões das filhas.
 
 Nenhuma migration precisa ir antes: nada aqui lê coluna nova.
+
+---
+
+# INCIDENTE — 27/08/2026, 12:08 · build sem o backfill do congelamento
+
+> **Estado: build ainda no ar no momento em que este registro foi escrito.**
+> A reversão depende de quem tem Docker — ver "O que trava a reversão".
+
+## O que subiu
+
+| | |
+|---|---|
+| build no ar | **27/08/2026 12:08:31** (Fortaleza), decodificado do ETag |
+| build anterior | 26/08/2026 18:01:08 — `APP_VERSION` **desconhecida** |
+| o que o build contém | a leitura pura de `item_type` (commit `7c9fde6` e acima) |
+| quem publicou | **desconhecido** |
+| qual comando | **desconhecido** — presumivelmente `build-prod.sh`, o caminho normal |
+
+## O que quebrou
+
+Itens de **nível 3** gravados como `item_type='fase'` passaram a ser lidos como
+**Entrega**. Como Entrega é agrupador, eles:
+
+- **sumiram do Kanban** — agrupador não vira cartão;
+- **recusaram arrasto em silêncio** — relato do Raphael: *"arrasta e nada acontece"*.
+
+Confirmado na tela em `1.1.1`, `1.1.2` e `1.1.3` do projeto de teste, todos
+folhas sem filhas, exibidos como Entrega.
+
+**Não houve corrupção de dado.** É exibição: some assim que o backfill rodar.
+
+## A causa — e ela não é a que o relato do incidente supôs
+
+O relato dizia "subiu **sem** a migration". O banco diz outra coisa:
+
+```
+item_type_antes_congelar ... existe, preenchida nas 8.199 linhas
+distribuição de item_type ... atividade 5.622 · fase 2.577   ← estado PRÉ-congelamento
+```
+
+Se o backfill tivesse rodado, haveria 2.205 `entrega`, 370 `fase`, 220 `marco`,
+22 `projeto`. Então:
+
+> **A migration rodou pela metade.** Criou a coluna sombra, copiou os valores
+> antigos para dentro dela, e **não escreveu o backfill** — ou escreveu e foi
+> revertida.
+
+A distinção importa porque muda o conserto: não é "esqueceram de rodar", é
+"rodou e ninguém percebeu que não terminou".
+
+## Por que a barreira não barrou
+
+**Porque nunca houve barreira.** `publicar-as-tres.sh` existia desde as **09:48**
+daquele dia — duas horas antes do build. Ele não falhou nem foi contornado:
+
+Os comandos de build viviam dentro de um `cat <<'TXT'`, isto é, eram **texto
+impresso** para um humano ler. E `build-prod.sh` — o caminho normal e
+documentado de publicar — não consultava nada sobre migrations.
+
+Quem publicou pelo caminho normal passou por fora sem contorcer nada.
+
+> Escrevi um documento e chamei de barreira. **Uma barreira que depende de
+> alguém ler é uma placa.**
+
+### A armadilha que fez ninguém perceber
+
+Havia uma segunda falha, minha, e mais insidiosa: **as conferências que escrevi
+olhavam o artefato, não o efeito.** `conferir-migrations.cjs` e as sondas por
+coluna perguntavam *"a coluna `item_type_antes_congelar` existe?"*.
+
+Existia. Então **toda conferência respondia "APLICADA"** — inclusive as minhas,
+nesta mesma sessão — enquanto o backfill não tinha escrito uma linha.
+
+## O conserto
+
+`scripts/barreira-de-acoplamento.cjs`, chamado **de dentro** do `build-prod.sh`,
+com `exit 1`. Duas mudanças de fundo:
+
+1. **Roda no caminho que as pessoas usam**, não num script que alguém precisa
+   lembrar de escolher.
+2. **Confere o EFEITO, não o artefato.** A regra do congelamento pergunta
+   *"existe alguma linha com `item_type='entrega'`?"* — que é zero enquanto o
+   backfill não rodar, por mais que a coluna exista.
+
+Testado contra o estado quebrado de agora: **recusa o build, com exit 1**, e
+nomeia a consequência e o comando que resolve. Para forçar é preciso escrever
+`PULAR_BARREIRA=1` — explícito, visível no histórico, e não acontece por
+distração.
+
+## O que trava a reversão
+
+**Ninguém sabe a `APP_VERSION` de 26/08 18:01.** É a pergunta aberta desde o
+início: a data se descobre pelo ETag, o commit e a tag não. Quem tiver acesso à
+VM precisa lê-la de lá:
+
+```bash
+docker ps --format '{{.Image}}'                                       # a que roda agora
+docker images pronutrir/gestaopro --format '{{.Tag}}\t{{.CreatedAt}}' # as anteriores
+APP_VERSION=<tag-de-26/08> docker compose -f docker-compose.prod.yml up -d app
+```
+
+**Não aplicar a migration de congelamento como conserto rápido** (decisão do
+Raphael, e concordo). Dois motivos:
+
+1. a reescrita via `eapToPersisted` não terminou e ela não passou o clone-teste;
+2. **a sombra já está preenchida** — reaplicar encontraria
+   `item_type_antes_congelar IS NULL` em lugar nenhum, pularia o passo da
+   sombra, e faria o backfill a partir do estado atual. O registro do "antes"
+   ficaria sendo o de hoje, não o original.
+
+Aplicar migration inacabada sob pressão troca um defeito de tela por um
+problema de dado.
+
+## O que este incidente muda no processo
+
+- **Toda conferência de migration passa a olhar o efeito.** "A coluna existe"
+  nunca mais é resposta para "a migration foi aplicada".
+- **Barreira que não executa não conta.** Se não roda no caminho normal e não
+  derruba o processo, é documentação — útil, mas não é controle.
+- **`deploys.md` precisa da `APP_VERSION` anotada no momento da publicação.**
+  Este incidente custou a reversão imediata por causa de uma linha que ninguém
+  escreveu em 26/08.
+
