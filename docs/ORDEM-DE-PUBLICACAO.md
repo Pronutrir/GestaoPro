@@ -177,6 +177,31 @@ O tipo de um item **parava de mudar sozinho**. Antes, criar a primeira
 subatividade transformava uma Atividade em Entrega sem ninguém ter decidido —
 e uma Entrega que perdesse a última filha voltava a ser Atividade.
 
+### ⚠ O teste de fumaça de escrita — obrigatório antes de liberar
+
+O apply roda um terceiro passo, depois do congelamento e da prova de ponto
+fixo: ele **tenta escrever de verdade** — inserir filha, mover item, trocar
+tipo, virar marco — uma vez para cada tipo que o congelamento produz. Tudo
+dentro de uma transação que termina em `ROLLBACK`; nada fica gravado.
+
+**Por que ele existe:** um teste que só lê nunca vai ver trigger. Foi
+exatamente ali que o defeito do `eap_is_group` se escondeu — 1.272 pais que o
+trigger passaria a recusar, invisíveis para o ponto fixo, porque o trigger só
+dispara em escrita e o backfill não insere nem move nada. Passou pelas duas
+execuções, pelo `tsc` e por 139 asserções sem levantar nada.
+
+Compare a saída com o que a **tela** oferece:
+
+| a tela oferece | o banco deveria |
+|---|---|
+| fase/entrega/atividade como destino do "Dentro de" | aceitar filha e mover |
+| marco como destino | **recusar** |
+| trocar para qualquer um dos 4 papéis | aceitar |
+| virar Marco tendo filhas | **recusar** |
+
+Onde divergir, é a mesma família do `eap_is_group`: duas listas de regra que
+ninguém amarrou. **Não publique com divergência em aberto** — anote e resolva.
+
 ### Como reverter
 
 **Os dois lados, ou nenhum.**

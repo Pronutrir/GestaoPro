@@ -127,6 +127,51 @@ END \$\$;"
 
 $PSQL -c "DROP TABLE IF EXISTS public._ponto_fixo_antes;"
 
+# ---------------------------------------------------------------------------
+# TESTE DE FUMACA DE ESCRITA
+#
+# Um teste que so LE nunca vai ver trigger. Ate aqui tudo que rodou foi SELECT
+# e UPDATE de backfill — nenhum INSERT, nenhum move, nenhuma troca de tipo. E
+# foi exatamente ali que o defeito do `eap_is_group` se escondeu: 1.272 pais
+# que o trigger passaria a recusar, invisiveis para o ponto fixo porque o
+# trigger so dispara em escrita.
+#
+# Este passo TENTA ESCREVER, de verdade, uma vez para cada tipo que o
+# congelamento produz. Tudo dentro de uma transacao que termina em ROLLBACK:
+# nada fica gravado.
+#
+# RODA DEPOIS DO CONGELAMENTO E ANTES DE LIBERAR A ENTREGA. Antes nao serviria
+# — mediria o banco velho.
+# ---------------------------------------------------------------------------
+echo ""
+echo "══════════════════════════════════════════════════════════"
+echo "  TESTE DE FUMACA — o que o banco aceita DE VERDADE"
+echo "══════════════════════════════════════════════════════════"
+echo "  (transacao com ROLLBACK ao fim — nada fica gravado)"
+echo ""
+
+docker cp scripts/fumaca-de-escrita.sql "$CONTAINER:/tmp/fumaca.sql"
+$PSQL -f /tmp/fumaca.sql
+
+cat <<'LEIA'
+
+  ── COMO LER ──
+
+  Compare a coluna `banco` com o que a TELA oferece:
+
+    A TELA OFERECE                              O BANCO DEVERIA
+    fase/entrega/atividade como destino do      aceitar filha e mover
+      "Dentro de" (eapCanMoveInto)
+    marco como destino                          RECUSAR
+    trocar para qualquer um dos 4 papeis        aceitar
+    virar Marco tendo filhas                    RECUSAR
+
+  Onde divergir, e a mesma familia do eap_is_group: duas listas de regra que
+  ninguem amarrou. ANOTE e resolva ANTES de liberar a entrega — nao publique
+  com divergencia em aberto.
+
+LEIA
+
 echo ""
 echo "── DEPOIS ──"
 $PSQL -c "SELECT item_type, count(*) FROM public.activities
