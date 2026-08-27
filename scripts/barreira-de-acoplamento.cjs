@@ -74,19 +74,59 @@ const REGRAS = [
       return /const agrupa\s*=/.test(trecho) && !/hasChildren/.test(trecho.split("const agrupa")[1]?.slice(0, 200) ?? "");
     },
     /**
-     * O banco tem? NÃO basta a coluna existir — a armadilha do incidente. O
-     * congelamento produz 'entrega' e 'projeto'; se não houver nenhum, o
-     * backfill não rodou, por mais que a sombra esteja lá.
+     * O banco tem? Reporta qual dos TRÊS ESTADOS o congelamento está, porque o
+     * conserto é diferente em cada um — dizer só "falta a migration" mandaria
+     * alguém rodar a coisa inteira no estado B, onde isso destrói dado.
+     *
+     *   A · sombra ausente ................ rodar a migration inteira
+     *   B · sombra cheia, backfill não feito  rodar SÓ o backfill
+     *   C · sombra cheia, backfill feito ... pode buildar
+     *
+     * COMO SE DISTINGUE B DE C — e por que não é comparando as colunas:
+     *
+     * O caminho intuitivo seria "a sombra difere do item_type atual?". Está
+     * ERRADO. Hoje elas divergem em 785 linhas, e a causa não é o congelamento:
+     * é a migration 20260824130000_pacote_e_posicao, que rodou DEPOIS da sombra
+     * e fez atividade → fase nos itens de nível 3. Divergência prova que
+     * *alguma coisa* escreveu, não que o BACKFILL escreveu.
+     *
+     * A prova tem de vir de algo que só o backfill produz: o VOCABULÁRIO. O
+     * congelamento é a única coisa no sistema que grava 'entrega' e 'projeto'
+     * em item_type — `eapToPersisted` grava 'fase' para os dois papéis
+     * agrupadores, e nenhuma tela ou importação escreve esses valores.
      */
     bancoTem: async () => {
-      const r = await api("activities?select=id&item_type=eq.entrega&limit=1", { Prefer: "count=exact" });
-      if (!r.ok) return { ok: false, detalhe: `não consegui consultar o banco (${r.status})` };
-      const cr = r.headers.get("content-range") || "";
-      const total = Number((cr.split("/")[1] ?? "0"));
-      if (total > 0) return { ok: true, detalhe: `${total} linhas com item_type='entrega'` };
+      // Existe o vocabulário que só o backfill produz?
+      const rv = await api("activities?select=id&item_type=in.(entrega,projeto)&limit=1",
+        { Prefer: "count=exact" });
+      if (!rv.ok) return { ok: false, detalhe: `não consegui consultar o banco (${rv.status})` };
+      const total = Number((rv.headers.get("content-range") || "").split("/")[1] ?? "0");
+
+      // A sombra existe? Filtrar pela coluna é o que força o erro 42703 —
+      // `?select=` ignora coluna desconhecida em silêncio.
+      const rs = await api("activities?select=id&item_type_antes_congelar=not.is.null&limit=1");
+      const sombraExiste = rs.ok;
+
+      if (total > 0) {
+        return { ok: true, detalhe: `estado C — backfill feito (${total} linhas com 'entrega'/'projeto')` };
+      }
+      if (!sombraExiste) {
+        return {
+          ok: false,
+          detalhe: "estado A — a migration nunca rodou (não há coluna sombra)",
+          comoResolver: "PGPASSWORD=... ./scripts/apply-congelar-item-type.sh",
+        };
+      }
       return {
         ok: false,
-        detalhe: "ZERO linhas com item_type='entrega' — o backfill do congelamento não rodou",
+        detalhe:
+          "estado B — a sombra EXISTE mas o backfill NÃO rodou.\n" +
+          "     ⚠ NÃO rode a migration inteira: ela pularia o passo da sombra\n" +
+          "       (WHERE ... IS NULL não casa com nada) e gravaria o 'antes' de\n" +
+          "       HOJE por cima do original. 785 linhas perderiam o valor real,\n" +
+          "       e o rollback da entrega 3 passaria a devolver um estado que\n" +
+          "       nunca existiu.",
+        comoResolver: "a migration RETOMÁVEL — ver docs/FILA-DE-TRABALHO.md §3.0. Ela ainda não existe.",
       };
     },
     consequencia:
@@ -169,14 +209,20 @@ const REGRAS = [
       console.log(`  \x1b[31m✗ ${r.nome}\x1b[0m`);
       console.log(`      ${res.detalhe}`);
       console.log(`      SE PUBLICAR ASSIM: ${r.consequencia}`);
-      console.log(`      RESOLVA COM: ${r.comoResolver}`);
+      // A regra pode devolver um conserto específico do estado que encontrou —
+      // "rode a migration" e "NÃO rode a migration" são conselhos diferentes
+      // conforme o estado, e o genérico está errado em um deles.
+      console.log(`      RESOLVA COM: ${res.comoResolver ?? r.comoResolver}`);
     }
     console.log("");
   }
 
   if (bloqueia > 0) {
     console.error(`  \x1b[31mBUILD RECUSADO\x1b[0m — ${bloqueia} acoplamento(s) não satisfeito(s).`);
-    console.error("  Aplique a migration ANTES. Se souber o que está fazendo:");
+    // Sem "aplique a migration" genérico: no estado B esse conselho DESTRÓI
+    // dado. Cada regra já imprimiu o conserto certo para o estado que achou.
+    console.error("  Siga o RESOLVA COM de cada linha acima — o conserto muda conforme o estado.");
+    console.error("  Se souber exatamente o que está fazendo:");
     console.error("    PULAR_BARREIRA=1 ./scripts/build-prod.sh <versao>\n");
     process.exit(1);
   }

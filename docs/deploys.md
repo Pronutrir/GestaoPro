@@ -105,11 +105,41 @@ Se o backfill tivesse rodado, haveria 2.205 `entrega`, 370 `fase`, 220 `marco`,
 22 `projeto`. Então:
 
 > **A migration rodou pela metade.** Criou a coluna sombra, copiou os valores
-> antigos para dentro dela, e **não escreveu o backfill** — ou escreveu e foi
-> revertida.
+> antigos para dentro dela, e **não escreveu o backfill**.
 
-A distinção importa porque muda o conserto: não é "esqueceram de rodar", é
-"rodou e ninguém percebeu que não terminou".
+### CORREÇÃO — apurado depois, e muda o conserto
+
+A primeira versão deste registro parou aí. Investigando o passo seguinte,
+apareceu algo que desmente parte dele: a sombra e o `item_type` atual **divergem
+em 785 linhas**. Isso parecia prova de que o backfill escreveu alguma coisa.
+
+**Não é.** Os pares são `atividade → fase` (767), `fase → atividade` (14) e
+`historia_usuario → fase` (4). O congelamento não produz nenhum deles — ele
+produziria `fase → entrega` (1.591) e `atividade → marco` (220).
+
+A origem é a migration **`20260824130000_pacote_e_posicao`**, que faz
+`atividade → fase` em itens com código de exatamente 3 níveis, e que **rodou
+depois de a sombra ter sido preenchida**.
+
+Ou seja:
+
+1. **o backfill do congelamento nunca rodou** — nem parcialmente;
+2. o que quebrou a tela foi a combinação da leitura pura com o
+   `pacote_e_posicao`: ele gravou `'fase'` em `1.1.1`, `1.1.2` e `1.1.3`, e
+   `resolveEapKind` sem o OR devolve `entrega` para nível 3 **por posição**;
+3. e a sombra guarda o estado de **antes do `pacote_e_posicao`** — o que a torna
+   mais valiosa, não menos: é o único registro de que aqueles 767 itens eram
+   `atividade`.
+
+A distinção muda o conserto: não é "esqueceram de rodar", nem "rodou pela
+metade" — é **"rodou o primeiro passo, e outra migration escreveu por cima antes
+de o segundo acontecer"**. Uma migration **retomável** é o que resolve; ver
+[FILA-DE-TRABALHO.md](FILA-DE-TRABALHO.md) §3.0.
+
+> **E é por isso que aplicar a congelar como conserto rápido seria pior que o
+> incidente.** Ela pularia o passo da sombra e gravaria o "antes" de hoje por
+> cima — os 767 `atividade` originais virariam `fase` no registro, e o rollback
+> da entrega 3 passaria a devolver um estado que nunca existiu.
 
 ## Por que a barreira não barrou
 
