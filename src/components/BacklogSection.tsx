@@ -1315,7 +1315,6 @@ export const BacklogSection = ({
      * de destino. Cancelado não conta (saiu do escopo). `status` não é
      * gravado: quem conclui são as tarefas.
      */
-    const subiram: string[] = [];
     /**
      * SUCESSO SEM ESCRITA NÃO É SUCESSO.
      *
@@ -1347,47 +1346,20 @@ export const BacklogSection = ({
       }
     }
 
-    if (!error && !errorCaixas) {
-      const movidos = new Set(ids);
-      const canceladaIds = new Set(
-        allStages.filter((s) =>
-          (parseWorkflowCategory((s as { categoria?: string }).categoria)
-            ?? categoryFromLegacyFlags(s as never)) === "cancelada",
-        ).map((s) => s.id),
-      );
-      const colunaDe = (a: Activity) =>
-        movidos.has(a.id) || subiram.includes(a.id) ? targetStageId : a.workflow_stage_id;
-
-      // Candidatos: pais dos itens movidos, subindo nível a nível. `visto`
-      // protege contra ciclo em parent_id (dado corrompido).
-      const visto = new Set<string>();
-      let fronteira = [...new Set(ids.map((id) => activities.find((a) => a.id === id)?.parent_id).filter(Boolean))] as string[];
-      while (fronteira.length > 0) {
-        const proxima: string[] = [];
-        for (const paiId of fronteira) {
-          if (visto.has(paiId)) continue;
-          visto.add(paiId);
-          const pai = activities.find((a) => a.id === paiId);
-          if (!pai || movidos.has(paiId) || pai.workflow_stage_id === targetStageId) continue;
-          const filhos = (childrenByParent.get(paiId) || [])
-            .filter((f) => !f.is_milestone)
-            .filter((f) => !(f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)));
-          if (filhos.length === 0) continue;
-          if (!filhos.every((f) => colunaDe(f) === targetStageId)) continue;
-          subiram.push(paiId);
-          if (pai.parent_id) proxima.push(pai.parent_id);
-        }
-        fronteira = proxima;
-      }
-
-      if (subiram.length > 0) {
-        await mutateInChunks(subiram, (batch) =>
-          supabase.from("activities")
-            .update({ workflow_stage_id: targetStageId } as never)
-            .in("id", batch),
-        );
-      }
-    }
+    /*
+     * O ANCESTRAL NÃO SOBE MAIS — nem aqui.
+     *
+     * Esta era a TERCEIRA cópia da mesma regra ("o pai acompanha quando o
+     * último filho chega"): uma no arrasto do Kanban, uma no menu de mover, e
+     * esta no Backlog. Todas escreviam em quem ninguém tinha selecionado, e
+     * juntas produziam o vaivém relatado — a ida levava os filhos, a volta
+     * trazia o pai atrás deles.
+     *
+     * Agora a promoção escreve SÓ o que foi escolhido. O agrupador não precisa
+     * acompanhar porque não tem coluna própria no quadro: ele é FAIXA sobre os
+     * cartões das filhas, onde quer que elas estejam
+     * (ver `lib/quadroDeExecucao`).
+     */
 
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
@@ -1410,11 +1382,6 @@ export const BacklogSection = ({
     toast({
       title: `${ids.length} ${ids.length === 1 ? "item movido" : "itens movidos"}`,
       description: [
-        // A fase que subiu sozinha: ela não estava na seleção, então some da
-        // coluna antiga sem ter sido pedida — dizer evita o "por que mudou?".
-        subiram.length > 0
-          ? `${subiram.length} ${subiram.length === 1 ? "fase/entrega acompanhou" : "fases/entregas acompanharam"} — o último item de dentro chegou.`
-          : null,
         // Dizer que a caixa foi mas não concluiu: sem isto, mover uma fase para
         // "Concluída" e ver o agrupador sem o status parece falha da operação.
         caixas.length > 0 && ehFinal

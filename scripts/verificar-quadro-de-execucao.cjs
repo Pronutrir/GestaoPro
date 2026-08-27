@@ -264,6 +264,25 @@ const fotoCompleta = (ctx) =>
     "o lote da seleção múltipla continua existindo (não é cascata)",
     /const emLote = selecionados\.has\(activityId\)/.test(kanban),
   );
+
+  // ── A TERCEIRA CÓPIA ────────────────────────────────────────────────────
+  // A mesma regra ("o pai acompanha quando o último filho chega") existia em
+  // TRÊS lugares: o arrasto do Kanban, o menu de mover, e o Backlog. Encontrar
+  // duas e esquecer a terceira deixaria o bug vivo por um caminho.
+  const backlog = fs.readFileSync(path.join(raiz, "src/components/BacklogSection.tsx"), "utf8");
+  check(
+    "o Backlog também não sobe o ancestral ao promover",
+    !/const subiram: string\[\] = \[\]/.test(backlog),
+  );
+  check(
+    "e a promoção escreve só o que foi selecionado",
+    !/subiram\.push\(paiId\)/.test(backlog),
+  );
+  check(
+    "o agrupador promovido muda de coluna mas NÃO de status",
+    /O AGRUPADOR MUDA DE COLUNA, MAS NÃO DE STATUS/.test(backlog)
+    && /const soAColuna/.test(backlog),
+  );
 }
 
 console.log(`\n  ${ok} passaram, ${falhou} falharam\n`);
