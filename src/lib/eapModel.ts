@@ -299,28 +299,49 @@ export function eapCodeToPersist(
 export function resolveEapKind(item: EapItemLike, _hasChildren = false): EapKind {
   if (item.is_milestone) return "marco";
 
+  /**
+   * ============================================================================
+   * O NÍVEL NÃO DECIDE MAIS NADA (27/08/2026) — a segunda cirurgia
+   *
+   * Até aqui havia um bloco que lia `eapLevel(wbs_code)` e devolvia o papel
+   * pela POSIÇÃO, antes de olhar o campo:
+   *
+   *     nível 1 → 'projeto'    nível 2 → 'fase'    nível 3 → 'entrega'
+   *
+   * Ele estava certo quando `item_type` era lixo de importação — a posição era
+   * a única informação confiável. O congelamento derrubou essa premissa, e
+   * então o bloco passou a fazer o oposto do que devia: **ignorar o campo que
+   * agora é a fonte**.
+   *
+   * O QUE ISSO CUSTAVA, medido: um item de nível 3 gravado como 'atividade'
+   * exibia **Entrega** — agrupador, portanto sem cartão no quadro. Eram **67
+   * folhas** de trabalho promovidas e invisíveis, 64 delas no quadro naquele
+   * momento. A migration dos 68 já as tinha corrigido no banco, e a tela
+   * continuava sem consultá-las.
+   *
+   * É a mesma cirurgia do `OR hasChildren`, agora no nível. O padrão dos dois
+   * defeitos é idêntico: uma heurística que existia para suprir a ausência do
+   * campo, e que sobreviveu ao campo passar a existir.
+   *
+   * MEDIDO ANTES DE APLICAR (docs/medicoes/tirar-a-deducao-por-nivel-27-08-2026.md):
+   *
+   *   mudam de papel .......... 448 de 8.199   (111 no quadro)
+   *     fase → entrega ......... 359  troca rótulo, não natureza — as duas agrupam
+   *     entrega → atividade ..... 56
+   *     projeto → entrega ....... 16
+   *     fase → atividade ........ 11
+   *     projeto → atividade ...... 6
+   *   DEIXAM de ser agrupador ... 67  ← viram cartão; é o ganho
+   *   pais que virariam folha .... 0  ← risco estrutural nulo
+   *
+   * `eapLevel` e as constantes de nível CONTINUAM existindo e sendo usadas —
+   * pela numeração da EAP, pela importação e pelo aviso "pela estrutura este
+   * item seria X". O que saiu foi o nível decidir o PAPEL EXIBIDO.
+   * ============================================================================
+   */
   const t = (item.item_type || "").trim().toLowerCase();
   const agrupa = t === "fase" || t === "entrega" || t === "pacote";
 
-  // COM código EAP: a posição manda. Só o nível da Fase é Fase — abaixo dela o
-  // item está DENTRO de uma fase, então é Entrega (se agrupa) ou Atividade.
-  const level = eapLevel(item.wbs_code);
-  if (level !== null) {
-    if (eapIsFaseLevel(level)) return "fase";
-    // O nível do projeto é PROJETO, não Fase. Chamá-lo de Fase foi um remendo
-    // meu para "alinhar" duas funções, e o resultado apareceu na tela: uma EAP
-    // com uma fase só era importada como TRÊS fases — o projeto e as duas fases
-    // de verdade, todos com o mesmo rótulo.
-    if (eapIsProjectLevel(level)) return "projeto";
-    // PACOTE É POSIÇÃO — ver `eapRoleForImport`. O nível 3 é pacote de
-    // trabalho tenha ou não conteúdo.
-    if (eapIsPacoteLevel(level)) return "entrega";
-    return agrupa ? "entrega" : "atividade";
-  }
-
-  // SEM código (criado no Kanban/Backlog): não há nível, só o campo. Quem está
-  // gravado como agrupador é Entrega, não Fase — item criado à mão nasce dentro
-  // de algo, e chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
   return agrupa ? "entrega" : "atividade";
 }
 

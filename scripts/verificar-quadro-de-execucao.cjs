@@ -39,6 +39,23 @@ try {
 }
 const Q = require(path.join(saida, "quadroDeExecucao.js"));
 
+// eapModel compilado a parte: a cirurgia do nível vive nele, e o teste dela
+// precisa da função real — não de uma cópia à mão, que já produziu 56
+// divergências falsas numa medição anterior.
+const saidaEap = path.join(raiz, "node_modules", ".cache", "verificar-quadro-eap");
+fs.mkdirSync(saidaEap, { recursive: true });
+try {
+  execFileSync(process.execPath,
+    [tsc, "src/lib/eapModel.ts", "--outDir", saidaEap, "--module", "commonjs",
+     "--target", "es2020", "--skipLibCheck"],
+    { cwd: raiz, stdio: "pipe" });
+} catch (e) {
+  if (!fs.existsSync(path.join(saidaEap, "eapModel.js"))) {
+    console.error("não foi possível compilar src/lib/eapModel.ts");
+    process.exit(1);
+  }
+}
+
 let ok = 0;
 let falhou = 0;
 const check = (nome, condicao) => {
@@ -438,6 +455,57 @@ const fotoCompleta = (ctx) =>
     "o botão 'Mudar status' NÃO tem guarda própria — ela mediria a operação errada",
     /onClick=\{\(\) => setMoveDialogOpen\(true\)\}>\s*\n\s*<ArrowRight/.test(bl),
   );
+}
+
+
+// ── 11. O NÍVEL NÃO DECIDE MAIS O PAPEL (27/08/2026) ─────────────────────
+//
+// A segunda cirurgia, irmã da que tirou o `OR hasChildren`. O padrão dos dois
+// defeitos é o mesmo: uma heurística criada para suprir a ausência do campo,
+// que sobreviveu ao campo passar a existir.
+//
+// Custava 67 folhas de trabalho promovidas e INVISÍVEIS no quadro: gravadas
+// como 'atividade' (correto), exibidas como 'entrega' porque o nível 3 decidia
+// antes de o campo ser lido.
+{
+  const eap = require(path.join(saidaEap, "eapModel.js"));
+
+  // O caso que motivou tudo: nível 3, gravado como atividade.
+  const folhaN3 = { item_type: "atividade", wbs_code: "1.1.1", is_milestone: false };
+  check("nível 3 gravado como atividade É atividade — era 'entrega'",
+    eap.resolveEapKind(folhaN3) === "atividade");
+  check("e portanto vira CARTÃO, não faixa",
+    !eap.eapCanGroup(eap.resolveEapKind(folhaN3)));
+
+  // Nível 2 idem — eram 11 itens.
+  check("nível 2 gravado como atividade É atividade — era 'fase'",
+    eap.resolveEapKind({ item_type: "atividade", wbs_code: "1.1", is_milestone: false }) === "atividade");
+
+  // O contrário também: quem está gravado como agrupador continua agrupador,
+  // com ou sem código. É o campo que manda, nos dois sentidos.
+  check("gravado como fase É agrupador, mesmo em nível 3",
+    eap.eapCanGroup(eap.resolveEapKind({ item_type: "fase", wbs_code: "1.1.1", is_milestone: false })));
+  check("gravado como entrega É agrupador, mesmo sem código",
+    eap.eapCanGroup(eap.resolveEapKind({ item_type: "entrega", wbs_code: null, is_milestone: false })));
+  check("pacote legado continua agrupador",
+    eap.eapCanGroup(eap.resolveEapKind({ item_type: "pacote", wbs_code: null, is_milestone: false })));
+
+  // Marco vence tudo, como sempre.
+  check("marco vence o campo e o código",
+    eap.resolveEapKind({ item_type: "fase", wbs_code: "1.1", is_milestone: true }) === "marco");
+
+  // O MESMO ITEM, com e sem código, dá o MESMO papel. É o teste que prova que
+  // o nível saiu de verdade: antes, acrescentar um wbs_code mudava o papel.
+  const semCod = eap.resolveEapKind({ item_type: "atividade", wbs_code: null, is_milestone: false });
+  const comCod = eap.resolveEapKind({ item_type: "atividade", wbs_code: "1.2.3.4", is_milestone: false });
+  check("o código EAP não altera o papel — mesmo item, mesma resposta",
+    semCod === comCod);
+
+  // E a função de nível CONTINUA existindo: ela serve à numeração da EAP, à
+  // importação e ao aviso "pela estrutura este item seria X". O que saiu foi
+  // ela decidir o papel exibido.
+  check("eapLevel continua disponível para a numeração e o aviso",
+    typeof eap.eapLevel === "function" && eap.eapLevel("1.2.3") === 3);
 }
 
 
