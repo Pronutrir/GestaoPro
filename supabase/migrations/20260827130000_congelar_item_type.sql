@@ -184,7 +184,27 @@ END $fn$;
 COMMENT ON FUNCTION public.eap_nivel_do_codigo(text) IS
   'Espelha eapLevel() de src/lib/eapModel.ts. Se divergirem, o TypeScript e a fonte — esta e a copia.';
 
-CREATE OR REPLACE FUNCTION public.eap_tipo_exibido(
+-- DUAS FUNCOES, NAO UMA — e a distincao e o coracao desta migration.
+--
+-- O congelamento tira uma FOTO do que a tela mostra HOJE, e a tela de hoje usa
+-- a formula com o OR. Mas o codigo que vai LER o campo depois usa a formula sem
+-- o OR (decisao de 27/08). Se a migration congelasse com a formula nova, ela
+-- nao estaria congelando o que a tela mostra — estaria aplicando a regra nova
+-- sobre o lixo da importacao, que e justamente a saida "C" que foi descartada.
+--
+--   eap_tipo_exibido_antigo  -> com o OR. So o backfill usa. E a FOTO.
+--   eap_tipo_exibido         -> sem o OR. E a regra daqui para a frente.
+--
+-- A migration escreve com a primeira e VERIFICA com a segunda. Se as duas
+-- discordarem sobre o resultado ja gravado, o backfill nao tem ponto fixo e a
+-- migration falha alto — e foi exatamente isso que a prova do passo 3 mediu
+-- antes de aplicar: 14 linhas, listadas em
+-- docs/medicoes/os-14-que-mudam-de-rotulo-27-08-2026.md, aceitas por decisao.
+--
+-- Como sao aceitas, o backfill precisa convergir NELAS tambem — e converge,
+-- porque o passo 4 abaixo reaplica ate o ponto fixo.
+
+CREATE OR REPLACE FUNCTION public.eap_tipo_exibido_antigo(
   p_item_type    text,
   p_wbs_code     text,
   p_is_milestone boolean,
@@ -200,6 +220,7 @@ DECLARE
 BEGIN
   IF COALESCE(p_is_milestone, false) THEN RETURN 'marco'; END IF;
 
+  -- COM o OR: a formula que a tela usava ate 27/08/2026.
   v_agrupa := (v_t IN ('fase', 'pacote')) OR COALESCE(p_tem_filhas, false);
   v_level  := public.eap_nivel_do_codigo(p_wbs_code);
 
@@ -212,20 +233,56 @@ BEGIN
   RETURN CASE WHEN v_agrupa THEN 'entrega' ELSE 'atividade' END;
 END $fn$;
 
+COMMENT ON FUNCTION public.eap_tipo_exibido_antigo(text, text, boolean, boolean) IS
+  'A formula ANTIGA (com OR hasChildren), que a tela usava ate 27/08/2026. Existe so para o backfill da migration 20260827130000 tirar a foto do estado atual. Nao usar em codigo novo.';
+
+CREATE OR REPLACE FUNCTION public.eap_tipo_exibido(
+  p_item_type    text,
+  p_wbs_code     text,
+  p_is_milestone boolean,
+  p_tem_filhas   boolean DEFAULT false
+)
+RETURNS text
+LANGUAGE plpgsql IMMUTABLE
+AS $fn$
+DECLARE
+  v_t      text := lower(btrim(COALESCE(p_item_type, '')));
+  v_agrupa boolean;
+  v_level  int;
+BEGIN
+  IF COALESCE(p_is_milestone, false) THEN RETURN 'marco'; END IF;
+
+  -- SEM o OR: leitura pura do campo. `p_tem_filhas` e ignorado de proposito e
+  -- fica na assinatura pelo mesmo motivo do TypeScript — documenta que ter
+  -- filhas NAO decide mais o papel de ninguem.
+  v_agrupa := v_t IN ('fase', 'entrega', 'pacote');
+  v_level  := public.eap_nivel_do_codigo(p_wbs_code);
+
+  IF v_level IS NOT NULL THEN
+    IF v_level = 2 THEN RETURN 'fase';    END IF;  -- EAP_FASE_LEVEL
+    IF v_level = 1 THEN RETURN 'projeto'; END IF;  -- EAP_PROJECT_LEVEL
+    IF v_level = 3 THEN RETURN 'entrega'; END IF;  -- EAP_PACOTE_LEVEL, por posicao
+  END IF;
+
+  RETURN CASE WHEN v_agrupa THEN 'entrega' ELSE 'atividade' END;
+END $fn$;
+
 COMMENT ON FUNCTION public.eap_tipo_exibido(text, text, boolean, boolean) IS
-  'Espelha resolveEapKind() de src/lib/eapModel.ts:271. Se divergirem, o TypeScript e a fonte.';
+  'Espelha resolveEapKind() de src/lib/eapModel.ts. Le item_type, nao deduz de hasChildren. Se divergirem, o TypeScript e a fonte.';
 
 -- ---------------------------------------------------------------------------
 -- 4) O CONGELAMENTO
 --
 -- `tem_filhas` sai de um EXISTS sobre parent_id, sem filtrar is_trashed: filha
 -- na lixeira volta, e o pai nao pode trocar de tipo quando ela voltar.
+--
+-- PRIMEIRA PASSADA — a foto, com a formula ANTIGA. E o que a tela mostra hoje.
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS _congelar_alvo;
 CREATE TEMP TABLE _congelar_alvo AS
   SELECT a.id,
          a.item_type AS de,
-         public.eap_tipo_exibido(
+         public.eap_tipo_exibido_antigo(
            a.item_type, a.wbs_code, a.is_milestone,
            EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id)
          ) AS para
@@ -238,6 +295,45 @@ UPDATE public.activities a
    AND t.para IS DISTINCT FROM a.item_type;
 
 -- ---------------------------------------------------------------------------
+-- 4b) ATE O PONTO FIXO, ja pela formula NOVA
+--
+-- Os 14 itens aceitos na decisao do passo 3 nao convergem em uma passada: eram
+-- `item_type='fase'` sem codigo e sem filhas, exibiam "Entrega", e ao gravar
+-- 'entrega' deixam de casar com o IN e passam a 'atividade'. Uma passada so
+-- pararia com o campo dizendo 'entrega' e a leitura devolvendo 'atividade' —
+-- exatamente a divergencia que o congelamento existe para eliminar.
+--
+-- O laco reaplica a REGRA NOVA ate nao mudar mais nada. Converge rapido porque
+-- cada passada so pode mover um item para "menos agrupador", nunca de volta.
+-- O teto de 10 e um freio de seguranca: se nao convergir em 10, ha ciclo, e
+-- ciclo aqui seria defeito de regra, nao de dado.
+-- ---------------------------------------------------------------------------
+DO $ponto_fixo$
+DECLARE
+  v_voltas int := 0;
+  v_mudou  int;
+BEGIN
+  LOOP
+    UPDATE public.activities a
+       SET item_type = public.eap_tipo_exibido(
+             a.item_type, a.wbs_code, a.is_milestone,
+             EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id))
+     WHERE a.item_type IS DISTINCT FROM public.eap_tipo_exibido(
+             a.item_type, a.wbs_code, a.is_milestone,
+             EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = a.id));
+
+    GET DIAGNOSTICS v_mudou = ROW_COUNT;
+    v_voltas := v_voltas + 1;
+    RAISE NOTICE '  ponto fixo, volta %: % linhas', v_voltas, v_mudou;
+
+    EXIT WHEN v_mudou = 0;
+    IF v_voltas >= 10 THEN
+      RAISE EXCEPTION 'nao convergiu em % voltas — ha ciclo na regra de tipo', v_voltas;
+    END IF;
+  END LOOP;
+END $ponto_fixo$;
+
+-- ---------------------------------------------------------------------------
 -- 5) O DEPOIS, e a falha alta
 -- ---------------------------------------------------------------------------
 DO $depois$
@@ -248,19 +344,23 @@ DECLARE
   v_vazios  int;
   v_diverge int;
 BEGIN
-  SELECT count(*) FILTER (WHERE de IS DISTINCT FROM para),
-         count(*) FILTER (WHERE de IS NOT DISTINCT FROM para)
+  -- Comparado contra a SOMBRA, nao contra a primeira passada: a sombra tem o
+  -- valor com que a tabela comecou, e o laco do ponto fixo pode ter mexido
+  -- depois. E o numero honesto de "quantas linhas esta migration alterou".
+  SELECT count(*) FILTER (WHERE item_type IS DISTINCT FROM item_type_antes_congelar),
+         count(*) FILTER (WHERE item_type IS NOT DISTINCT FROM item_type_antes_congelar)
     INTO v_mudou, v_igual
-    FROM _congelar_alvo;
+    FROM public.activities;
 
   RAISE NOTICE '--- MUDANCA ---';
   RAISE NOTICE '  linhas alteradas : %', v_mudou;
   RAISE NOTICE '  linhas iguais    : %', v_igual;
 
   RAISE NOTICE '--- DE -> PARA ---';
-  FOR r IN SELECT de, para, count(*) AS n FROM _congelar_alvo
-            WHERE de IS DISTINCT FROM para
-            GROUP BY de, para ORDER BY n DESC LOOP
+  FOR r IN SELECT item_type_antes_congelar AS de, item_type AS para, count(*) AS n
+             FROM public.activities
+            WHERE item_type IS DISTINCT FROM item_type_antes_congelar
+            GROUP BY 1, 2 ORDER BY n DESC LOOP
     RAISE NOTICE '  % -> % : %', rpad(COALESCE(r.de, '(null)'), 10), rpad(r.para, 10), r.n;
   END LOOP;
 

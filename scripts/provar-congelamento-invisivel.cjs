@@ -90,12 +90,48 @@ try {
 }
 const { resolveEapKind, EAP_LABELS } = require(path.join(saida, "eapModel.js"));
 
-/* ── a tradução que a migration faz, em JS ───────────────────────────────────
- * Espelha eap_tipo_exibido() da 20260827130000. Aqui ela é só um NOME para
- * `resolveEapKind` — o valor congelado É o valor exibido, por definição da
- * decisão. Escrever assim deixa explícito que a migration não inventa regra.
+/* ── a FÓRMULA ANTIGA, que só existe aqui ────────────────────────────────────
+ * `resolveEapKind` já não tem o `OR hasChildren` — ele saiu no passo 4. Mas o
+ * congelamento é a foto do que a tela mostrava ANTES disso, e para conferir a
+ * foto é preciso saber o que ela mostrava.
+ *
+ * Espelha `eap_tipo_exibido_antigo()` da migration 20260827130000. Aqui a cópia
+ * à mão é aceitável e inevitável: a original não existe mais no código.
  */
-const valorCongelado = (item, temFilhas) => resolveEapKind(item, temFilhas);
+const eapLevelLocal = (wbs) => {
+  const raw = String(wbs ?? "").trim();
+  if (!raw || !/^\d+(\.\d+)*$/.test(raw)) return null;
+  const p = raw.split(".");
+  while (p.length > 1 && p[p.length - 1] === "0") p.pop();
+  return p.length;
+};
+
+const exibidoAntigo = (item, temFilhas) => {
+  if (item.is_milestone) return "marco";
+  const t = String(item.item_type || "").trim().toLowerCase();
+  const agrupa = t === "fase" || t === "pacote" || temFilhas;   // <- o OR
+  const level = eapLevelLocal(item.wbs_code);
+  if (level !== null) {
+    if (level === 2) return "fase";
+    if (level === 1) return "projeto";
+    if (level === 3) return "entrega";
+  }
+  return agrupa ? "entrega" : "atividade";
+};
+
+/** O que a migration grava: a foto, pela fórmula antiga. */
+const valorCongelado = (item, temFilhas) => exibidoAntigo(item, temFilhas);
+
+/** O laço 4b: reaplica a regra NOVA até o valor parar de mudar. */
+const ateOPontoFixo = (item, temFilhas) => {
+  let v = valorCongelado(item, temFilhas);
+  for (let i = 0; i < 10; i++) {
+    const prox = resolveEapKind({ ...item, item_type: v }, temFilhas);
+    if (prox === v) return v;
+    v = prox;
+  }
+  throw new Error(`sem ponto fixo em ${item.id}`);
+};
 
 /* ── leitura ─────────────────────────────────────────────────────────────── */
 const api = async (rota) => {
@@ -157,8 +193,8 @@ const api = async (rota) => {
   const divergem = [];
   for (const a of amostra) {
     const temFilhas = comFilha.has(a.id);
-    const antes = resolveEapKind(a, temFilhas);
-    const congelado = valorCongelado(a, temFilhas);
+    const antes = exibidoAntigo(a, temFilhas);
+    const congelado = ateOPontoFixo(a, temFilhas);
     const depois = resolveEapKind({ ...a, item_type: congelado }, temFilhas);
     if (antes !== depois) divergem.push({ a, antes, congelado, depois, temFilhas });
   }
@@ -166,7 +202,9 @@ const api = async (rota) => {
   if (divergem.length === 0) {
     console.log(`  \x1b[32m✓\x1b[0m os ${amostra.length} itens exibem o MESMO tipo antes e depois.`);
   } else {
-    console.log(`  \x1b[31m✗ ${divergem.length} de ${amostra.length} MUDAM de aparência\x1b[0m\n`);
+    // Não é mais falha: os 14 conhecidos foram aceitos por decisão em 27/08.
+    // Continua sendo impresso porque a lista precisa bater com o documento.
+    console.log(`  \x1b[33m! ${divergem.length} de ${amostra.length} mudam de aparência\x1b[0m\n`);
     for (const d of divergem.slice(0, 30)) {
       console.log(
         `    ${(d.a.wbs_code || "—").padEnd(10)} ${String(d.a.title).slice(0, 42).padEnd(44)}` +
@@ -186,8 +224,8 @@ const api = async (rota) => {
   const paresBase = new Map();
   for (const a of todos) {
     const temFilhas = comFilha.has(a.id);
-    const antes = resolveEapKind(a, temFilhas);
-    const depois = resolveEapKind({ ...a, item_type: valorCongelado(a, temFilhas) }, temFilhas);
+    const antes = exibidoAntigo(a, temFilhas);
+    const depois = resolveEapKind({ ...a, item_type: ateOPontoFixo(a, temFilhas) }, temFilhas);
     if (antes !== depois) {
       mudamNaBase++;
       const k = `${antes} -> ${depois}`;
@@ -205,7 +243,7 @@ const api = async (rota) => {
   let campoMuda = 0;
   const paresCampo = new Map();
   for (const a of todos) {
-    const novo = valorCongelado(a, comFilha.has(a.id));
+    const novo = ateOPontoFixo(a, comFilha.has(a.id));
     if (novo !== (a.item_type || "")) {
       campoMuda++;
       const k = `${a.item_type || "(vazio)"} -> ${novo}`;
@@ -218,7 +256,40 @@ const api = async (rota) => {
     console.log(`    ${k.padEnd(26)} ${n}`);
   }
 
+  /* ── PONTO FIXO — o que a segunda execução da migration tem de provar ──────
+   * Gravado o valor congelado, reler tem de devolver o MESMO valor. Se alguma
+   * linha não convergir, a migration alteraria dado na segunda execução e o
+   * defeito continuaria vivo, só que num valor diferente.
+   */
+  let semPontoFixo = 0;
+  for (const a of todos) {
+    const temFilhas = comFilha.has(a.id);
+    const congelado = ateOPontoFixo(a, temFilhas);
+    if (resolveEapKind({ ...a, item_type: congelado }, temFilhas) !== congelado) semPontoFixo++;
+  }
+
+  /* E a REGRA NOVA não pode olhar `hasChildren` — se olhar, o `OR` não saiu de
+   * verdade e o tipo voltaria a mudar quando o item ganhasse uma filha, que é o
+   * defeito fatal do modelo anterior.
+   *
+   * Compara-se `resolveEapKind(a, true)` com `resolveEapKind(a, false)` sobre o
+   * MESMO item. Passar `hasChildren` por dentro de `ateOPontoFixo` mediria
+   * outra coisa: aquele caminho atravessa a fórmula ANTIGA, que tem o OR por
+   * construção — e ali a dependência é esperada, não defeito. (Foi o que eu
+   * media na primeira versão deste teste: 5.386 falsos positivos.)
+   */
+  let dependeDeFilhas = 0;
+  for (const a of todos) {
+    if (resolveEapKind(a, true) !== resolveEapKind(a, false)) dependeDeFilhas++;
+  }
+
+  console.log("");
+  console.log(`  ${semPontoFixo === 0 ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m"} ponto fixo: ` +
+    `${semPontoFixo === 0 ? "todas as linhas convergem" : `${semPontoFixo} linhas NÃO convergem`}`);
+  console.log(`  ${dependeDeFilhas === 0 ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m"} independência: ` +
+    `${dependeDeFilhas === 0 ? "ter filhas não muda o papel de ninguém" : `${dependeDeFilhas} linhas ainda dependem de hasChildren`}`);
+
   console.log("");
   console.log("  (só SELECT — nada foi alterado)\n");
-  process.exit(divergem.length === 0 && mudamNaBase === 0 ? 0 : 1);
+  process.exit(semPontoFixo === 0 && dependeDeFilhas === 0 ? 0 : 1);
 })().catch((e) => { console.error("\n  erro:", e.message, "\n"); process.exit(1); });

@@ -265,14 +265,42 @@ export function eapCodeToPersist(
  *  3. sem wbs_code → agrupa              → Entrega
  *                    não agrupa          → Atividade
  *
- * `hasChildren` só é consultado no caso 3, para não desfazer a regra de nível
- * em item importado que agrupa (ex.: "2.1" com subitens continua Atividade).
+ * ============================================================================
+ * O TIPO É LIDO, NÃO DEDUZIDO (decisão de 27/08/2026)
+ *
+ * Até 27/08 a fórmula era:
+ *
+ *     agrupa = item_type IN (fase, pacote)  OR  hasChildren
+ *
+ * O `OR hasChildren` era o defeito. Ele fazia o papel de um item **mudar
+ * sozinho** quando alguém criava a primeira subatividade dele: uma Atividade
+ * virava Entrega sem que ninguém tivesse decidido isso. E criava um estado
+ * **sem ponto fixo** — gravar o valor exibido produzia um valor exibido
+ * diferente, porque o campo entra na própria conta que o produziu.
+ *
+ * A migration 20260827130000 congelou em `item_type` o que a tela mostrava, e
+ * a partir daí o campo é a fonte. `hasChildren` deixou de decidir.
+ *
+ * O CUSTO, medido e aceito: 14 itens trocaram de rótulo (Entrega → Atividade)
+ * — os que tinham `item_type='fase'` sem código EAP e sem filhas. Estão
+ * listados um a um em `docs/medicoes/os-14-que-mudam-de-rotulo-27-08-2026.md`.
+ *
+ * `pacote` continua na lista por compatibilidade: é o agrupador legado, sempre
+ * exibido como Fase/Entrega, e ainda existe em dados antigos.
+ *
+ * `hasChildren` PERMANECE NA ASSINATURA de propósito, e ignorado. São 11 pontos
+ * de chamada; removê-lo agora seria uma mudança mecânica grande sem ganho, e o
+ * parâmetro documenta que ter filhas **não decide mais** o papel de ninguém.
+ * Duas das chamadas passavam constante (ActivityDetailPanel.tsx:77,
+ * ProjectCronogramaPanel.tsx:3156) e por isso exibiam papel errado — agora dá
+ * no mesmo, que é a prova de que o valor parou de importar.
+ * ============================================================================
  */
-export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind {
+export function resolveEapKind(item: EapItemLike, _hasChildren = false): EapKind {
   if (item.is_milestone) return "marco";
 
   const t = (item.item_type || "").trim().toLowerCase();
-  const agrupa = t === "fase" || t === "pacote" || hasChildren;
+  const agrupa = t === "fase" || t === "entrega" || t === "pacote";
 
   // COM código EAP: a posição manda. Só o nível da Fase é Fase — abaixo dela o
   // item está DENTRO de uma fase, então é Entrega (se agrupa) ou Atividade.
@@ -285,15 +313,14 @@ export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind 
     // de verdade, todos com o mesmo rótulo.
     if (eapIsProjectLevel(level)) return "projeto";
     // PACOTE É POSIÇÃO — ver `eapRoleForImport`. O nível 3 é pacote de
-    // trabalho tenha ou não conteúdo; decidir por `agrupa` fazia o item mudar
-    // de papel na tela ao ganhar a primeira sub-atividade.
+    // trabalho tenha ou não conteúdo.
     if (eapIsPacoteLevel(level)) return "entrega";
     return agrupa ? "entrega" : "atividade";
   }
 
-  // SEM código (criado no Kanban/Backlog): não há nível, só a função. Quem
-  // agrupa é Entrega, não Fase — item criado à mão nasce dentro de algo, e
-  // chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
+  // SEM código (criado no Kanban/Backlog): não há nível, só o campo. Quem está
+  // gravado como agrupador é Entrega, não Fase — item criado à mão nasce dentro
+  // de algo, e chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
   return agrupa ? "entrega" : "atividade";
 }
 
