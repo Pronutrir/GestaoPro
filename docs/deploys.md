@@ -8,6 +8,11 @@
 > (`node scripts/data-do-build-no-ar.cjs`, que decodifica o ETag). O **commit**,
 > não: só o que estiver escrito aqui.
 
+> **O que ainda NAO foi publicado, e em que ordem publicar:**
+> [ORDEM-DE-PUBLICACAO.md](ORDEM-DE-PUBLICACAO.md). Ha um par acoplado ali —
+> uma migration que precisa ir ANTES do build, sob pena de 1.591 itens
+> aparecerem como Fase na tela.
+
 | data/hora (Fortaleza) | APP_VERSION | commit | quem publicou | o que entrou |
 |---|---|---|---|---|
 | 26/08/2026 18:01:08 | *desconhecida* | *desconhecido* | **a descobrir** | migrations da leva + código até ~17:33 |

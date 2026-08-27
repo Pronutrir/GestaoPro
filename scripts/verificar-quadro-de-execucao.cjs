@@ -66,14 +66,18 @@ const colunaPorId = new Map(COLS.map((c) => [c.id, c]));
 const col = (id) => COLS.find((c) => c.id === id);
 
 const cenario = () => {
+  // `item_type` EXPLICITO desde 27/08/2026. Antes o fixture o omitia, porque a
+  // regra era estrutural ("tem filhas") e o campo nao era lido. Agora o tipo E
+  // a regra, e um fixture sem tipo testaria um cenario que nao existe: no banco
+  // congelado toda linha tem item_type, e NOT NULL.
   const itens = [
-    { id: "F1", parent_id: null, workflow_stage_id: "bk", status: "pending" },
-    { id: "PA", parent_id: "F1", workflow_stage_id: "bk", status: "pending" },
-    { id: "A1", parent_id: "PA", workflow_stage_id: "bk", status: "pending" },
-    { id: "A2", parent_id: "PA", workflow_stage_id: "bk", status: "pending" },
-    { id: "M",  parent_id: "PA", workflow_stage_id: "bk", status: "pending", is_milestone: true },
-    { id: "PB", parent_id: "F1", workflow_stage_id: "bk", status: "pending" },
-    { id: "B1", parent_id: "PB", workflow_stage_id: "bk", status: "pending" },
+    { id: "F1", parent_id: null, item_type: "fase",      workflow_stage_id: "bk", status: "pending" },
+    { id: "PA", parent_id: "F1", item_type: "pacote",    workflow_stage_id: "bk", status: "pending" },
+    { id: "A1", parent_id: "PA", item_type: "atividade", workflow_stage_id: "bk", status: "pending" },
+    { id: "A2", parent_id: "PA", item_type: "atividade", workflow_stage_id: "bk", status: "pending" },
+    { id: "M",  parent_id: "PA", item_type: "atividade", workflow_stage_id: "bk", status: "pending", is_milestone: true },
+    { id: "PB", parent_id: "F1", item_type: "pacote",    workflow_stage_id: "bk", status: "pending" },
+    { id: "B1", parent_id: "PB", item_type: "atividade", workflow_stage_id: "bk", status: "pending" },
   ];
   const porId = new Map(itens.map((i) => [i.id, i]));
   const filhas = new Map();
@@ -218,10 +222,45 @@ const fotoCompleta = (ctx) =>
   check("mover um MARCO não gera escrita nenhuma",
     Q.escritasDeMoverColuna(c.porId.get("M"), col("em"), c.filhas, "T").length === 0);
 
-  // Pacote sem filhas é trabalho, não caixa: pode mover.
-  const solto = { id: "S", parent_id: null, workflow_stage_id: "ni", status: "pending" };
-  check("um 'pacote' SEM filhas é atividade — e move normalmente",
-    Q.escritasDeMoverColuna(solto, col("em"), new Map(), "T").length === 1);
+  // ── INVERTIDA EM 27/08/2026 ─────────────────────────────────────────────
+  // Dizia: "um 'pacote' SEM filhas é atividade — e move normalmente", e
+  // passava porque a regra era estrutural (sem filhas => não é caixa).
+  //
+  // Agora o TIPO manda: um pacote é caixa mesmo vazio. Não é regressão, é a
+  // decisão — o tipo parou de mudar sozinho, nos dois sentidos. Antes, um
+  // pacote virava trabalho ao perder a última filha; agora continua pacote até
+  // alguém dizer o contrário.
+  //
+  // Quem quiser mover trabalho move uma ATIVIDADE, que é o que o segundo caso
+  // trava — e é o caso que a regra nova existe para proteger.
+  const pacoteVazio = { id: "S", parent_id: null, item_type: "pacote", workflow_stage_id: "ni", status: "pending" };
+  check("um pacote SEM filhas continua caixa — o tipo manda, não a estrutura",
+    Q.escritasDeMoverColuna(pacoteVazio, col("em"), new Map(), "T").length === 0);
+
+  // ── NOVA: o coração da decisão de 27/08 ─────────────────────────────────
+  // Uma ATIVIDADE COM FILHAS continua atividade: continua cartão, continua
+  // arrastável. Com a regra antiga ela virava caixa no instante em que ganhava
+  // a primeira subatividade, e sumia do quadro sem ninguém ter decidido.
+  const paiTrabalhador = { id: "AP", parent_id: null, item_type: "atividade", workflow_stage_id: "ni", status: "pending" };
+  const filhaDele = { id: "AF", parent_id: "AP", item_type: "atividade", workflow_stage_id: "ni", status: "pending" };
+  const comFilha = new Map([["AP", [filhaDele]]]);
+
+  check("atividade COM filhas NÃO é agrupador",
+    !Q.ehAgrupadorDoQuadro(paiTrabalhador, comFilha));
+  check("atividade COM filhas continua cartão",
+    Q.viraCartao(paiTrabalhador, comFilha, colunaPorId));
+  check("e continua arrastável — mover gera a escrita normal",
+    Q.escritasDeMoverColuna(paiTrabalhador, col("em"), comFilha, "T").length === 1);
+  check("a subatividade promovida ganha cartão próprio — pai e filha convivem",
+    Q.viraCartao(filhaDele, new Map(), colunaPorId)
+    && Q.viraCartao(paiTrabalhador, comFilha, colunaPorId));
+  check("e a atividade-pai NÃO desenha faixa: faixa é de agrupador",
+    Q.faixaDoCartao(filhaDele, new Map([["AP", paiTrabalhador]]), comFilha, colunaPorId) === null);
+
+  // MARCO é o único que nunca tem filha — a regra que não mudou.
+  check("marco continua fora, com ou sem filhas",
+    !Q.ehAgrupadorDoQuadro({ id: "MM", item_type: "atividade", is_milestone: true }, comFilha)
+    && !Q.viraCartao({ id: "MM", item_type: "atividade", is_milestone: true, workflow_stage_id: "ni" }, comFilha, colunaPorId));
 }
 
 // ── 7. Nenhuma tela grava status em agrupador (código real) ──────────────

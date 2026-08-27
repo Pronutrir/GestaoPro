@@ -265,14 +265,42 @@ export function eapCodeToPersist(
  *  3. sem wbs_code → agrupa              → Entrega
  *                    não agrupa          → Atividade
  *
- * `hasChildren` só é consultado no caso 3, para não desfazer a regra de nível
- * em item importado que agrupa (ex.: "2.1" com subitens continua Atividade).
+ * ============================================================================
+ * O TIPO É LIDO, NÃO DEDUZIDO (decisão de 27/08/2026)
+ *
+ * Até 27/08 a fórmula era:
+ *
+ *     agrupa = item_type IN (fase, pacote)  OR  hasChildren
+ *
+ * O `OR hasChildren` era o defeito. Ele fazia o papel de um item **mudar
+ * sozinho** quando alguém criava a primeira subatividade dele: uma Atividade
+ * virava Entrega sem que ninguém tivesse decidido isso. E criava um estado
+ * **sem ponto fixo** — gravar o valor exibido produzia um valor exibido
+ * diferente, porque o campo entra na própria conta que o produziu.
+ *
+ * A migration 20260827130000 congelou em `item_type` o que a tela mostrava, e
+ * a partir daí o campo é a fonte. `hasChildren` deixou de decidir.
+ *
+ * O CUSTO, medido e aceito: 14 itens trocaram de rótulo (Entrega → Atividade)
+ * — os que tinham `item_type='fase'` sem código EAP e sem filhas. Estão
+ * listados um a um em `docs/medicoes/os-14-que-mudam-de-rotulo-27-08-2026.md`.
+ *
+ * `pacote` continua na lista por compatibilidade: é o agrupador legado, sempre
+ * exibido como Fase/Entrega, e ainda existe em dados antigos.
+ *
+ * `hasChildren` PERMANECE NA ASSINATURA de propósito, e ignorado. São 11 pontos
+ * de chamada; removê-lo agora seria uma mudança mecânica grande sem ganho, e o
+ * parâmetro documenta que ter filhas **não decide mais** o papel de ninguém.
+ * Duas das chamadas passavam constante (ActivityDetailPanel.tsx:77,
+ * ProjectCronogramaPanel.tsx:3156) e por isso exibiam papel errado — agora dá
+ * no mesmo, que é a prova de que o valor parou de importar.
+ * ============================================================================
  */
-export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind {
+export function resolveEapKind(item: EapItemLike, _hasChildren = false): EapKind {
   if (item.is_milestone) return "marco";
 
   const t = (item.item_type || "").trim().toLowerCase();
-  const agrupa = t === "fase" || t === "pacote" || hasChildren;
+  const agrupa = t === "fase" || t === "entrega" || t === "pacote";
 
   // COM código EAP: a posição manda. Só o nível da Fase é Fase — abaixo dela o
   // item está DENTRO de uma fase, então é Entrega (se agrupa) ou Atividade.
@@ -285,21 +313,52 @@ export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind 
     // de verdade, todos com o mesmo rótulo.
     if (eapIsProjectLevel(level)) return "projeto";
     // PACOTE É POSIÇÃO — ver `eapRoleForImport`. O nível 3 é pacote de
-    // trabalho tenha ou não conteúdo; decidir por `agrupa` fazia o item mudar
-    // de papel na tela ao ganhar a primeira sub-atividade.
+    // trabalho tenha ou não conteúdo.
     if (eapIsPacoteLevel(level)) return "entrega";
     return agrupa ? "entrega" : "atividade";
   }
 
-  // SEM código (criado no Kanban/Backlog): não há nível, só a função. Quem
-  // agrupa é Entrega, não Fase — item criado à mão nasce dentro de algo, e
-  // chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
+  // SEM código (criado no Kanban/Backlog): não há nível, só o campo. Quem está
+  // gravado como agrupador é Entrega, não Fase — item criado à mão nasce dentro
+  // de algo, e chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
   return agrupa ? "entrega" : "atividade";
 }
 
 /** Só os agrupadores — Fase (nível 1) e Entrega (abaixo dela). */
 export function eapCanGroup(kind: EapKind): boolean {
   return kind === "fase" || kind === "entrega";
+}
+
+/**
+ * PODE TER FILHAS? — o espelho exato de `eap_is_group()` no Postgres.
+ *
+ * ============================================================================
+ * NÃO CONFUNDIR COM `eapCanGroup`. São perguntas diferentes:
+ *
+ *   eapCanGroup(kind)    "este item é uma CAIXA?" — decide faixa × cartão no
+ *                        quadro, ícone no backlog, seleção em cascata.
+ *   eapPodeSerPai(item)  "o banco aceita pendurar algo aqui?" — decide destino
+ *                        de movimentação e criação de subitem.
+ *
+ * Uma Atividade responde **não** à primeira e **sim** à segunda: ela é
+ * trabalho, não caixa, mas pode ter subatividades. Foi exatamente essa
+ * distinção que faltava até 27/08/2026 — havia uma pergunta só, e ela
+ * respondia errado a uma das duas.
+ *
+ * DESDE 27/08 A REGRA É UMA EXCEÇÃO, NÃO UMA LISTA: todo item pode ser pai,
+ * menos marco. Antes era `IN (fase, pacote, historia_usuario)`, o que proibia
+ * subatividade sob atividade — e por isso existiam zero na base inteira.
+ *
+ * O desenho depende disso: o "+ Subatividade" da tela nova, o contador no
+ * cartão, o total derivado das filhas. Deixou de ser arriscado quando o tipo
+ * passou a ser gravado — uma Atividade com filhas continua Atividade.
+ *
+ * `verificar-agrupador-aceito-no-banco.cjs` compara esta função com a lista da
+ * migration e falha se divergirem.
+ * ============================================================================
+ */
+export function eapPodeSerPai(item: Pick<EapItemLike, "is_milestone">): boolean {
+  return !item.is_milestone;
 }
 
 /** Folhas (não agrupam). */
@@ -675,9 +734,19 @@ export function eapCanMoveInto(
     };
   }
 
-  // Marco é folha de controle por definição — nunca agrupa. O trigger do banco
-  // também recusa (eap_is_group exige não-milestone).
-  if (target.is_milestone) {
+  // ── A MESMA REGRA DO BANCO, e a mesma frase ──────────────────────────────
+  //
+  // `eapPodeSerPai` espelha `eap_is_group()` do Postgres, e a mensagem é
+  // literalmente a que o trigger devolve. As duas listas divergiram uma vez e
+  // ninguém percebeu: a tela dizia "escolha uma fase, entrega ou ATIVIDADE" e
+  // o banco recusava atividade, porque `eap_is_group` era
+  // `IN (fase, pacote, historia_usuario)`. Ninguém esbarrou nisso porque não
+  // havia como criar a situação — mas era divergência latente, e o usuário
+  // teria descoberto no clique, com um erro cru.
+  //
+  // Se as duas voltarem a divergir, `verificar-agrupador-aceito-no-banco.cjs`
+  // falha antes de chegar à VM.
+  if (!eapPodeSerPai(target)) {
     return {
       ok: false,
       reason: "milestone-parent",

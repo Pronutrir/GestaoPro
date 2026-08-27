@@ -40,6 +40,8 @@
  * ============================================================================
  */
 
+import { resolveEapKind, eapCanGroup } from "./eapModel";
+
 export type Estagio = "backlog" | "quadro";
 
 /** O mínimo que precisamos saber de um item para decidir o papel dele. */
@@ -47,6 +49,13 @@ export interface ItemDoQuadro {
   id: string;
   parent_id?: string | null;
   is_milestone?: boolean | null;
+  /**
+   * O papel gravado. Desde o congelamento (27/08/2026) é confiável, e é ele
+   * que decide se o item é caixa ou trabalho — ver `ehAgrupadorDoQuadro`.
+   */
+  item_type?: string | null;
+  /** Só para `resolveEapKind` ler o nível: o código EAP vence o campo. */
+  wbs_code?: string | null;
   /** A coluna onde está. `null` = ainda não posicionado. */
   workflow_stage_id?: string | null;
   status?: string | null;
@@ -82,20 +91,56 @@ export function estagioDoItem(
 }
 
 /**
- * É AGRUPADOR? — tem filhas vivas, e não é marco.
+ * É AGRUPADOR? — o TIPO diz que agrupa, e não é marco.
  *
- * A definição é estrutural de propósito. `item_type` e `wbs_code` descrevem a
- * intenção; ter filhas descreve o fato, e é o fato que decide se a coisa é uma
- * caixa ou um trabalho. Um "pacote" sem filhas é uma atividade que ainda não
- * foi quebrada, e arrastá-la é legítimo.
+ * ============================================================================
+ * ESTA REGRA JÁ FOI ESTRUTURAL, E O MOTIVO DE TER MUDADO IMPORTA
+ *
+ * Até 27/08/2026 a definição era: "tem filhas vivas". O comentário de então
+ * dizia, e estava certo para o seu contexto:
+ *
+ *   > A definição é estrutural de propósito. `item_type` e `wbs_code` descrevem
+ *   > a intenção; ter filhas descreve o fato, e é o fato que decide se a coisa
+ *   > é uma caixa ou um trabalho.
+ *
+ * Ele não está sendo apagado porque não estava errado — estava **certo enquanto
+ * `item_type` era lixo de importação**. Naquele banco, 1.591 linhas gravadas
+ * como 'fase' eram atividades comuns que receberam o rótulo porque
+ * `fase`/`atividade` eram os únicos valores disponíveis. A intenção era mentira
+ * e só o fato era confiável, então ler o fato era a decisão correta.
+ *
+ * O congelamento (migration 20260827130000) derrubou essa premissa: `item_type`
+ * passou a valer o que a tela mostrava, com ponto fixo provado. A intenção
+ * virou confiável, e ler o fato deixou de ser a opção segura para virar a
+ * insegura — porque "ter filhas" muda sozinho.
+ *
+ * O QUE A REGRA ANTIGA PROVOCARIA HOJE: no instante em que alguém criasse a
+ * primeira subatividade sob uma Atividade, ela sumiria do quadro, viraria faixa
+ * e deixaria de ser arrastável — sem ninguém ter decidido isso. É exatamente o
+ * defeito que o congelamento matou (o tipo mudando sozinho ao ganhar filha),
+ * reaparecendo pela porta estrutural.
+ *
+ * A REGRA COMPLETA, de 27/08:
+ *
+ *   atividade promovida ...... cartão, SEMPRE, mesmo com filhas
+ *   subatividade ............. NÃO vira cartão por ter nascido; aparece dentro
+ *                              do cartão do pai como contador
+ *   subatividade promovida ... ganha cartão próprio, e pai e filha convivem no
+ *                              quadro — foi decisão de gente
+ *   fase, entrega, pacote .... faixa
+ *   marco .................... o único que nunca tem filha
+ *
+ * `filhasPorPai` continua na assinatura, e ignorado: são três pontos de
+ * chamada, e o parâmetro documenta que ter filhas **não decide mais** se algo é
+ * caixa. Mesma escolha feita em `resolveEapKind`.
+ * ============================================================================
  */
 export function ehAgrupadorDoQuadro(
   item: ItemDoQuadro,
-  filhasPorPai: Map<string, ItemDoQuadro[]>,
+  _filhasPorPai?: Map<string, ItemDoQuadro[]>,
 ): boolean {
   if (item.is_milestone) return false;
-  const filhas = filhasPorPai.get(item.id) ?? [];
-  return filhas.some((f) => !f.is_milestone);
+  return eapCanGroup(resolveEapKind(item));
 }
 
 /**
