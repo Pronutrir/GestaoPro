@@ -15,8 +15,14 @@ import {
   carregarTrilha,
   carregarPessoas,
   lerTotaisDerivados,
+  carregarFeed,
+  contarNaoLidos,
+  marcarFeedVisto,
+  registrarEvento,
+  agruparPorDia,
   type DegrauDaTrilha,
   type PessoaDaAtividade,
+  type EventoDoBanco,
 } from "@/lib/telaDaAtividadeDados";
 import { capacidadesNaAtividade } from "@/lib/activityAccess";
 import { resolveEapKind, EAP_LABELS } from "@/lib/eapModel";
@@ -56,6 +62,10 @@ export default function PaginaDaAtividade() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
 
+  /** O nome que vai para o feed. Nunca UUID: o histórico é para gente ler. */
+  const nomeDeQuemFez =
+    ((profile as Record<string, unknown>)?.full_name as string) || user?.email || "alguém";
+
   const projectId = typeof params?.id === "string" ? params.id : "";
   const activityId = typeof params?.activityId === "string" ? params.activityId : "";
 
@@ -67,6 +77,8 @@ export default function PaginaDaAtividade() {
   const [pessoas, setPessoas] = useState<PessoaDaAtividade[]>([]);
   const [filhas, setFilhas] = useState<Record<string, unknown>[]>([]);
   const [coluna, setColuna] = useState<Record<string, unknown> | null>(null);
+  const [eventos, setEventos] = useState<EventoDoBanco[]>([]);
+  const [naoLidos, setNaoLidos] = useState(0);
 
   const carregar = useCallback(async () => {
     if (!projectId || !activityId) return;
@@ -93,9 +105,21 @@ export default function PaginaDaAtividade() {
       // A trilha e as pessoas têm módulo próprio — e SOBEM o erro em vez de
       // devolver vazio. Uma trilha vazia por falha silenciosa faria o item
       // parecer de raiz, que é informação errada, não informação ausente.
-      const [t, ps] = await Promise.all([
+      /**
+       * O FEED entra aqui, e a falha dele NÃO derruba a tela.
+       *
+       * A trilha e as pessoas sobem o erro porque sem elas a tela mente — um
+       * item sem trilha parece de raiz. O feed é diferente: sem ele a tela
+       * fica incompleta, não errada. Derrubar a atividade inteira porque o
+       * histórico não carregou seria trocar uma falha pequena por uma grande.
+       *
+       * A coluna do sino mostra o que houver; se não houver nada, diz isso.
+       */
+      const [t, ps, evs, nl] = await Promise.all([
         carregarTrilha(activityId),
         carregarPessoas(activityId),
+        carregarFeed(activityId).catch(() => [] as EventoDoBanco[]),
+        user?.id ? contarNaoLidos(activityId, user.id).catch(() => 0) : Promise.resolve(0),
       ]);
 
       setAtividade(a as Record<string, unknown>);
@@ -104,12 +128,14 @@ export default function PaginaDaAtividade() {
       setColuna((col ?? null) as Record<string, unknown> | null);
       setTrilha(t);
       setPessoas(ps);
+      setEventos(evs);
+      setNaoLidos(nl);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "não foi possível abrir a atividade");
     } finally {
       setCarregando(false);
     }
-  }, [projectId, activityId]);
+  }, [projectId, activityId, user?.id]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -156,8 +182,36 @@ export default function PaginaDaAtividade() {
     if (error) throw new Error(error.message);
     if (!count) throw new Error("o banco recusou a alteração — você tem permissão sobre esta atividade?");
 
+    /**
+     * A CONFIRMAÇÃO É A LINHA NO FEED.
+     *
+     * Não há "salvo com sucesso": sair do campo grava, e o que diz que gravou é
+     * o evento aparecendo na coluna da direita. Sem isso, gravar ao sair seria
+     * gravação silenciosa — e a regra do "sucesso sem escrita não é sucesso"
+     * exige que a pessoa VEJA o resultado, não que confie nele.
+     *
+     * O evento só é registrado DEPOIS de o count confirmar a escrita: um feed
+     * que anuncia o que o banco recusou é pior que feed nenhum.
+     *
+     * A frase é montada AQUI, onde se sabe o que mudou — nunca na leitura.
+     */
+    const rotulo: Record<string, string> = {
+      title: "o nome", description: "a descrição", hours: "as horas previstas",
+    };
+    await registrarEvento({
+      activityId,
+      tipo: "mudou_campo",
+      texto: `${nomeDeQuemFez} alterou ${rotulo[campo] ?? campo}`,
+      dados: { campo, valor },
+      autorId: user?.id ?? null,
+      autorNome: nomeDeQuemFez,
+    }).catch(() => {
+      // O evento é registro, não a operação. Se ele falhar, a alteração já
+      // aconteceu — e esconder isso seria pior que um feed com um buraco.
+    });
+
     await carregar();
-  }, [activityId, carregar]);
+  }, [activityId, carregar, user?.id, nomeDeQuemFez]);
 
   /* ── TRADUÇÃO PARA O VOCABULÁRIO DA TELA ───────────────────────────────── */
   const dados: DadosDaTela | null = useMemo(() => {
@@ -241,8 +295,21 @@ export default function PaginaDaAtividade() {
         pessoas={pessoas}
         totais={lerTotaisDerivados(atividade as never)}
         subatividades={subatividades}
-        feed={[]}
-        naoLidos={0}
+        feed={agruparPorDia(eventos, new Date().toISOString()).map((d) => ({
+          rotulo: d.rotulo,
+          eventos: d.eventos.map((e) => ({
+            id: e.id,
+            autor: e.autor_nome,
+            texto: e.texto,
+            hora: new Date(e.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            // O evento que subiu de uma filha traz activity_id ≠ feed_de. É o
+            // que o desenho marca como "na subatividade".
+            naSubatividade: e.activity_id !== e.feed_de,
+            marco: e.tipo === "marco_pronto",
+            ehComentario: e.tipo === "comentou",
+          })),
+        }))}
+        naoLidos={naoLidos}
         capacidades={capacidadesDaTela(caps)}
         avisoDePapel={
           soLeitura
@@ -250,6 +317,17 @@ export default function PaginaDaAtividade() {
             : null
         }
         aoGravarCampo={gravarCampo}
+        aoMarcarLido={user?.id ? async () => {
+          await marcarFeedVisto(activityId, user.id).catch(() => {});
+          setNaoLidos(0);
+        } : undefined}
+        aoComentar={caps.canComment ? async (texto: string) => {
+          await registrarEvento({
+            activityId, tipo: "comentou", texto,
+            autorId: user?.id ?? null, autorNome: nomeDeQuemFez,
+          });
+          await carregar();
+        } : undefined}
         aoCancelar={() => router.push(`/project/${projectId}`)}
       />
     </div>

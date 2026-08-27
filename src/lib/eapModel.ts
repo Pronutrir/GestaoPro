@@ -799,3 +799,45 @@ export function eapCanMoveInto(
 
   return { ok: true, depth };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * O QUE SE PODE CRIAR DENTRO DE QUÊ — seção 07 do desenho
+ *
+ * A regra da criação, que é diferente da regra de EXIBIÇÃO:
+ *
+ *   raiz              → Fase
+ *   dentro de Fase    → Entrega · Atividade · Marco
+ *   dentro de Entrega → Atividade · Marco
+ *   dentro de Atividade → Atividade · Marco
+ *   dentro de Marco   → nada
+ *
+ * POR QUE ELA EXISTE, se o tipo é livre depois: na CRIAÇÃO o item ainda não
+ * tem identidade, e oferecer "Fase" dentro de uma atividade convida a montar
+ * uma árvore que não descreve nada. Depois de criado, quem conhece o item pode
+ * mudar — com o aviso âmbar dizendo o que a estrutura sugeriria.
+ *
+ * É orientação na origem, não trava permanente. A trava permanente é uma só, e
+ * está no banco: marco não tem filha.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Os tipos oferecidos ao criar DENTRO de um item (ou na raiz, se `null`). */
+export function eapTiposQuePodeCriar(paiKind: EapKind | null): EapKind[] {
+  if (paiKind === null) return ["fase"];
+  switch (paiKind) {
+    case "projeto": return ["fase"];
+    case "fase":    return ["entrega", "atividade", "marco"];
+    case "entrega": return ["atividade", "marco"];
+    case "atividade": return ["atividade", "marco"];
+    // Marco é ponto no tempo: não agrupa, e o banco recusa (eap_is_group).
+    case "marco":   return [];
+    default:        return ["atividade", "marco"];
+  }
+}
+
+/** Por que não dá para criar aqui. `null` quando dá. */
+export function eapMotivoNaoCriaDentro(paiKind: EapKind | null): string | null {
+  if (paiKind === "marco") {
+    return "Marco é um ponto no tempo e não agrupa. Crie ao lado dele, dentro da mesma fase.";
+  }
+  return null;
+}

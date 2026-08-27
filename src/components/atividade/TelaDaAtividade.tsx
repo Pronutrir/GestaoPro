@@ -3,6 +3,7 @@
 import { Diamond, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CampoNoLugar } from "./CampoNoLugar";
+import { DescricaoRica } from "./DescricaoRica";
 import { TrilhaDaAtividade } from "./TrilhaDaAtividade";
 import { FeedDaAtividade, type DiaDoFeed } from "./FeedDaAtividade";
 import type {
@@ -279,24 +280,14 @@ export function TelaDaAtividade({
           </div>
         </div>
 
-        {/* ── DESCRIÇÃO ──────────────────────────────────────────────── */}
+        {/* ── DESCRIÇÃO ──────────────────────────────────────────────
+            Texto rico de leitura: lista de conferência, link e @menção. A
+            descrição continua sendo TEXTO no banco — ver lib/textoRico para
+            por que não é um editor. */}
         <div className="rounded-[6px] border border-border bg-card p-4">
-          <CampoNoLugar
-            rotulo="Descrição"
+          <DescricaoRica
             valor={dados.descricao}
-            /* O TEXTO NÃO PROMETE O QUE A TELA AINDA NÃO FAZ.
-               A versão anterior dizia "aceita lista, link e @menção" — que é o
-               desenho, e é para onde isto vai. Mas hoje o campo é textarea, e
-               anunciar o que não existe é pior que anunciar menos: a pessoa
-               tenta, não funciona, e conclui que a tela está quebrada. */
-            vazio={
-              criando
-                ? "O que precisa ser feito, e o que conta como pronto."
-                : "clique para escrever"
-            }
             aoGravar={gravador("description", capacidades.editarDescricao)}
-            multilinha
-            dica="O que precisa ser feito, e o que conta como pronto"
           />
         </div>
 
