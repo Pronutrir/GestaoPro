@@ -49,6 +49,26 @@
 
 BEGIN;
 
+-- ---------------------------------------------------------------------------
+-- BYPASS DO CONGELAMENTO — necessario NESTA producao, decidido em 27/08/2026.
+--
+-- 11 dos 68 ids estao no projeto "Revitalizacao do GLPI", que esta CONCLUIDO.
+-- O gatilho trg_prevent_activity_mutation_on_concluded_project aborta qualquer
+-- UPDATE em atividade de projeto concluido (P0001), e faria esta fatia parar
+-- sem gravar nada. Sao exatamente os 11 com sombra='atividade'.
+--
+-- session_replication_role=replica desliga os gatilhos SO nesta transacao
+-- (SET LOCAL: volta ao normal no COMMIT/ROLLBACK). E o mesmo caminho ja usado
+-- no congelamento (20260827130000). Justificativa: a fatia corrige apenas o
+-- VOCABULARIO DE EXIBICAO (fase->atividade), nao toca prazo, custo nem trabalho
+-- do projeto encerrado, e e revertivel pela 20260827140001. As checagens abaixo
+-- (item_type virou atividade, sombra intacta, 115 faixas) seguem valendo com os
+-- gatilhos desligados, pois sao SELECT.
+--
+-- Se num banco os 68 estiverem todos em projeto vivo, este SET e inofensivo.
+-- ---------------------------------------------------------------------------
+SET LOCAL session_replication_role = replica;
+
 CREATE TEMP TABLE _alvo(id uuid PRIMARY KEY, item_type_antes text) ON COMMIT DROP;
 INSERT INTO _alvo(id, item_type_antes) VALUES
   ('1d6cbcfe-acc4-437c-886e-263d650c08d0', 'fase'),  -- 1.1.1 Kick Off com Thayanne Matos (Marketing)
@@ -124,7 +144,7 @@ INSERT INTO _alvo(id, item_type_antes) VALUES
 -- ---------------------------------------------------------------------------
 -- 1) O ANTES
 -- ---------------------------------------------------------------------------
-SELECT '--- ANTES ---' AS "";
+SELECT '--- ANTES ---' AS " ";
 SELECT rpad(a.item_type, 12) AS "item_type",
        rpad(COALESCE(a.item_type_antes_congelar, '(null)'), 12) AS "sombra",
        count(*) AS "linhas"
@@ -161,6 +181,16 @@ END $antes$;
 -- decisao). workflow_stage_id nao e tocado: eles FICAM no quadro — o conserto e
 -- passarem a aparecer la, nao sairem.
 -- ---------------------------------------------------------------------------
+
+-- Snapshot da sombra ANTES da escrita. A intactude se confere comparando a
+-- coluna com ELA MESMA (antes x depois), nao com t.item_type_antes: este vale
+-- 'fase' para os 68, mas a sombra dos 11 concluidos e 'atividade' de proposito
+-- (o pacote_e_posicao). Comparar sombra com 'fase' acusava falso-positivo e
+-- abortava uma migration que nem toca na sombra.
+CREATE TEMP TABLE _sombra_antes ON COMMIT DROP AS
+  SELECT a.id, a.item_type_antes_congelar AS sombra
+    FROM public.activities a JOIN _alvo t ON t.id = a.id;
+
 UPDATE public.activities a
    SET item_type = 'atividade'
   FROM _alvo t
@@ -169,7 +199,7 @@ UPDATE public.activities a
 -- ---------------------------------------------------------------------------
 -- 3) O DEPOIS, e a falha alta
 -- ---------------------------------------------------------------------------
-SELECT '--- DEPOIS ---' AS "";
+SELECT '--- DEPOIS ---' AS " ";
 SELECT rpad(a.item_type, 12) AS "item_type", count(*) AS "linhas"
   FROM public.activities a JOIN _alvo t ON t.id = a.id
  GROUP BY 1;
@@ -188,10 +218,11 @@ BEGIN
   END IF;
 
   -- A SOMBRA TEM DE ESTAR INTACTA. Se esta migration a tocou, o rollback perde
-  -- a referencia e o registro do pacote_e_posicao se vai junto.
+  -- a referencia e o registro do pacote_e_posicao se vai junto. Confere contra
+  -- o snapshot de antes da escrita (nao contra t.item_type_antes).
   SELECT count(*) INTO v_sombra
-    FROM public.activities a JOIN _alvo t ON t.id = a.id
-   WHERE a.item_type_antes_congelar IS DISTINCT FROM t.item_type_antes;
+    FROM public.activities a JOIN _sombra_antes s ON s.id = a.id
+   WHERE a.item_type_antes_congelar IS DISTINCT FROM s.sombra;
   IF v_sombra > 0 THEN
     RAISE EXCEPTION 'a sombra foi alterada em % linhas — nao devia', v_sombra;
   END IF;
