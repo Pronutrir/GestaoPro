@@ -152,6 +152,55 @@ check(
   /ehPai && h === null/.test(backlog) && /ehPai && c === null/.test(backlog),
 );
 
+// ── A TABELA DO DESENHO: colunas, ordem e o que saiu ─────────────────────
+check(
+  "a coluna STATUS saiu — backlog e planejamento, nao execucao",
+  !/id: "status", label: "Status"/.test(backlog),
+);
+check(
+  "EAP e TIPO tem coluna propria no grid",
+  /68px 58px minmax/.test(backlog),
+);
+// O selo do código na FAIXA DE GRUPO continua — ali ele é o rótulo do grupo
+// ("1.1 Formalização"), e some-lo tiraria a posição da fase na EAP. O que saiu
+// é o selo dentro da linha de ATIVIDADE, que virou coluna própria.
+check(
+  "o código EAP saiu de dentro do título da ATIVIDADE",
+  !/\{\(activity as any\)\.wbs_code\}/.test(backlog),
+);
+check(
+  "o código passa por codigoParaExibir (marco mostra a âncora do pai)",
+  /codigoParaExibir\(/.test(backlog),
+);
+check(
+  "PREVISTO mostra a JANELA, não só o prazo",
+  /derived_start \?\? activity\.start_date/.test(backlog),
+);
+check(
+  "o vazio do responsavel e um BOTAO, nao o texto a definir",
+  /Sem responsavel|Sem responsável/.test(backlog) && /definirResponsavelDaLinha/.test(backlog),
+);
+check(
+  "e a escrita da linha LE o resultado (count exact)",
+  /count: "exact"/.test(backlog),
+);
+check(
+  "a faixa diz N no backlog, e continua dizendo quando recolhida",
+  /no backlog/.test(backlog) && /isCollapsed && <span/.test(backlog),
+);
+check(
+  "a barra de progresso saiu da faixa",
+  !/bg-success transition-all/.test(backlog),
+);
+check(
+  "os chips de recorte substituiram Todas/Incompletas",
+  /RecorteRapido/.test(backlog) && /alternarRecorte/.test(backlog),
+);
+check(
+  "e o rodape acompanha o recorte",
+  /recorteLigado/.test(backlog),
+);
+
 // ── Data sem fuso ─────────────────────────────────────────────────────────
 check(
   "o atraso usa diasAte (parseDataLocal), não new Date() na coluna date",
