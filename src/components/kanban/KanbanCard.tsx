@@ -1051,7 +1051,24 @@ function KanbanCardBase({
                     `empty:hidden` para a linha não reservar 6px de margem num
                     card sem subatividade nenhuma. */}
                 <div className="flex items-center gap-2 flex-wrap mt-1.5 empty:hidden empty:mt-0">
-                {(isPhase || cardFields.subCount) && subActivityCount && subActivityCount > 0 ? (
+                {/* O CONTADOR NÃO PASSA MAIS PELA PREFERÊNCIA (27/08/2026).
+
+                    Era `(isPhase || cardFields.subCount)`, e funcionava por
+                    ACIDENTE: até o item 4, uma atividade com filhas era
+                    `isPhase` pela regra estrutural, então o contador aparecia.
+                    Quando `ehAgrupadorDoQuadro` passou a ler o tipo, a
+                    atividade deixou de ser `isPhase` — e o contador caiu para
+                    trás de `subCount`, que vem DESLIGADA por padrão.
+
+                    O efeito, relatado pelo Raphael: promover uma atividade que
+                    tem filhas escondia as filhas sem dizer nada. Elas não viram
+                    cartão (correto, por desenho) e o cartão do pai não anunciava
+                    que existiam (defeito).
+
+                    Agora: cartão com filhas SEMPRE diz quantas. A preferência
+                    continua existindo para quem quiser esconder de propósito,
+                    mas não pode ser a razão de o dado sumir sozinho. */}
+                {subActivityCount && subActivityCount > 0 ? (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}

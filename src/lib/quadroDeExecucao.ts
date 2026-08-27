@@ -318,3 +318,46 @@ export function statusDerivadoDoAgrupador(
   if (filhas.length === 0) return item.status ?? "pending";
   return filhas.every((f) => f.status === "completed") ? "completed" : "pending";
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * A PORTA FECHADA: agrupador não se promove
+ *
+ * Fonte única da recusa, para as três vias — o botão do backlog, o menu de
+ * linha e o arraste do Kanban — dizerem a MESMA coisa. Antes o arraste recusava
+ * com uma frase e a promoção aceitava em silêncio: o mesmo gesto, dois
+ * comportamentos, e o usuário descobria pela ausência.
+ *
+ * POR QUE RECUSAR, e não só avisar: promover um agrupador põe no quadro algo
+ * que o quadro não desenha como cartão. O item some — está lá, ocupa coluna,
+ * e não aparece. Foi exatamente o que o incidente de 27/08 expôs: 68 folhas
+ * promovidas que ninguém via, em 17 projetos.
+ *
+ * A VERSÃO BOA — promover o pacote e trazer as atividades dele junto — está na
+ * fila (docs/FILA-DE-TRABALHO.md). Enquanto ela não existe, aceitar em silêncio
+ * é pior que recusar: recusar explica, o silêncio esconde.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Este item pode ir para o quadro? Marco e agrupador não. */
+export function podePromover(item: ItemDoQuadro): boolean {
+  if (item.is_milestone) return false;
+  return !ehAgrupadorDoQuadro(item);
+}
+
+/** O motivo da recusa, para a tela exibir. `null` quando pode promover. */
+export function motivoNaoPromove(
+  item: ItemDoQuadro,
+): { titulo: string; descricao: string } | null {
+  if (item.is_milestone) {
+    return {
+      titulo: "Marco não vai para o quadro",
+      descricao: "Marco é um ponto no tempo, não trabalho a executar. Ele aparece no Cronograma.",
+    };
+  }
+  if (ehAgrupadorDoQuadro(item)) {
+    return {
+      titulo: "Fases e pacotes não vão para o quadro",
+      descricao: "Eles aparecem como faixa sobre as atividades que contêm. Promova as atividades — a faixa acompanha, e o percentual da caixa vem delas.",
+    };
+  }
+  return null;
+}

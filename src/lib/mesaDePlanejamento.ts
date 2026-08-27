@@ -105,6 +105,27 @@ export interface ResumoDoGrupo {
 }
 
 /**
+ * "4 de 6 no backlog" — o texto da faixa quando parte do grupo já foi promovida.
+ *
+ * A DIFERENÇA ENTRE OS DOIS NÚMEROS É A INFORMAÇÃO. Dizer só "4 no backlog"
+ * esconde que existem 6, e que 2 já estão no quadro — e era assim que uma fase
+ * meio promovida parecia uma fase pequena.
+ *
+ * Quando ninguém foi promovido, volta a "6 no backlog": não há o que comparar,
+ * e "6 de 6" seria ruído. A faixa só fala o que tem a dizer — mesma regra da
+ * coluna SITUAÇÃO.
+ *
+ * `naFila` vem de fora porque a categoria da coluna não é campo do item: quem
+ * chama já tem `allStages` em mãos, e enfiar isso aqui obrigaria o módulo a
+ * conhecer workflow, que não é assunto dele.
+ */
+export function textoDaFaixa(total: number, naFila: number): string {
+  return naFila === total
+    ? `${total} no backlog`
+    : `${naFila} de ${total} no backlog`;
+}
+
+/**
  * O resumo de um grupo, para a faixa e para o subtotal.
  *
  * **Consome o agregado do servidor** (`lib/agregadoDoPai`), não recalcula.

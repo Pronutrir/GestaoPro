@@ -498,6 +498,10 @@ conferir.
 
 ## O que NÃO entra nesta leva
 
+> A fila completa do que está esperando, e esperando o quê:
+> [FILA-DE-TRABALHO.md](FILA-DE-TRABALHO.md).
+
+
 - **Fase 1, item 5** (recálculo da EAP na subárvore ao mover) — volta à fila
   depois de 24 horas de uso real sem incidente. O **item 4 entrou** e viaja
   dentro da entrega 3.

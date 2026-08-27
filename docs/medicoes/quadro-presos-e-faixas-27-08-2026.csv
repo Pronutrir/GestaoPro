@@ -1,0 +1,185 @@
+classificacao,id,projeto,wbs_code,nome,item_type,sombra,filhas,filhas_no_quadro,coluna,papel_exibido
+ALVO-preso,009775c7-a889-47c0-8396-37ecf5e47dc1,Estruturação do Gerenciamento de Projetos,2.1.5,Treinamento com Juliana Palacio (Posto de Enfermagem),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,01660b57-5642-4049-8512-f252cc8fe1a6,Revitalização do GLPI,2.1,Simulação do Ambiente em base teste,fase,atividade,0,0,Concluída,fase
+ALVO-preso,042d6c15-609c-428e-be96-5b73c17d9e36,Estruturação do Gerenciamento de Projetos,1.2.9,Pesquisa com Albertina Proença (Rh),fase,fase,0,0,Concluída,entrega
+ALVO-preso,0b22bddd-66a0-4e09-8c4d-15f63a7ca413,Estruturação do Gerenciamento de Projetos,2.1.3,Treinamento com Renata Ferreira (Comercial Particular),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,0b417297-60fd-41e9-bcae-2bd5963305b0,Projeto Escritório de Processos,2.1.3,Definir as ondas de mapeamento (críticos primeiro),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,0d06de54-8218-44fd-a235-b690a0893693,Projeto Escritório de Processos,2.1.5,Identificar o dono e o executor de cada processo,fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,1d6cbcfe-acc4-437c-886e-263d650c08d0,Estruturação do Gerenciamento de Projetos,1.1.1,Kick Off com Thayanne Matos (Marketing),fase,fase,0,0,Concluída,entrega
+ALVO-preso,233dea3d-1ef3-4bc1-bfe0-96015cf29123,Estruturação do Gerenciamento de Projetos,1.3.3,Apresentação executiva,fase,fase,0,0,Concluída,entrega
+ALVO-preso,295dc7b9-645c-4ff9-8f19-5ff4bae9c5f9,Estruturação do Gerenciamento de Projetos,1.1.2,Kick Off com Renata Ferreira (Comercial Particular),fase,fase,0,0,Concluída,entrega
+ALVO-preso,2a19a014-876b-4dcf-b136-e30f3db7a339,Estruturação do Gerenciamento de Projetos,2.1.8,Treinamento com Felipe Cavalcanti (TI),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,2af09aa1-c5ae-4448-8b5b-963604456ef9,Guia Jornada do Paciente - Pronutrir Onboard,2.1.2,Definir e travar versões das dependências,fase,fase,0,0,Concluída,entrega
+ALVO-preso,2c092a32-fe93-4fd3-9251-94224b8cbf64,Teste - Revitalização Tasy - 26/08/2026,1.1.3,Tasy Native,fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,2e58e6b5-ff0a-4ead-8aa8-bc608bf77d85,Guia Jornada do Paciente - Pronutrir Onboard,2.1.9,"Validar build, tipos e qualidade de código",fase,fase,0,0,Concluída,entrega
+ALVO-preso,2f676953-dd9b-4c2b-9f28-6d8fcefebbf1,Revitalização do GLPI,4.4,Encerramento do Projeto,fase,atividade,0,0,Concluída,fase
+ALVO-preso,2ffb4360-6c9b-403f-8d52-69447309d90f,Revitalização do GLPI,1.1,Instalação do GLPI (novo),fase,atividade,0,0,Concluída,fase
+ALVO-preso,325c067e-aeee-4e12-b664-bd66ef0de732,Estruturação do Gerenciamento de Projetos,2.1.2,Treinamento com Thayanne Matos (Marketing),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,35b72681-5af7-412c-8561-73b5ef55197a,Teste - processos ,1.1.2,1.1.2 Reunião de Kickoff,fase,fase,0,0,Concluída,entrega
+ALVO-preso,3d198128-6629-4925-a594-b7f69e54771f,Estruturação do Gerenciamento de Projetos,1.2.11,Pesquisa com Fábio Lima (Recepção),fase,fase,0,0,Concluída,entrega
+ALVO-preso,3ff80b13-17a3-4653-9418-8cf4d1e441ad,Guia Jornada do Paciente - Pronutrir Onboard,1.3.4,Obter aprovação do termo de imagem e voz das gravações com Albertina Proença,fase,fase,0,0,Concluída,entrega
+ALVO-preso,40b7cc84-f566-46db-b68a-dc17aa7232bb,Revitalização do GLPI,4.2,Acompanhamento pós produção,fase,atividade,0,0,Concluída,fase
+ALVO-preso,46e0a3dd-9033-4184-837b-86de05391a5f,Estruturação do Gerenciamento de Projetos,1.1.5,Kick Off com Felipe Cavalcanti (TI),fase,fase,0,0,Concluída,entrega
+ALVO-preso,46eeb672-6050-47c7-9b81-eea622505f35,Estruturação do Gerenciamento de Projetos,1.1.6,Kick Off com Fábio Lima (Recepção),fase,fase,0,0,Concluída,entrega
+ALVO-preso,4771cb4f-c5a1-4125-96c7-50b9a8979135,Estruturação do Gerenciamento de Projetos,1.3.2,Relatório de maturidade,fase,fase,0,0,Concluída,entrega
+ALVO-preso,49db6b11-1d69-4150-accc-34a4d69edd6f,Estruturação do Gerenciamento de Projetos,1.2.3,Pesquisa com Renata Ferreira (Comercial Particular),fase,fase,0,0,Concluída,entrega
+ALVO-preso,4c3083a9-260f-41d6-8e7f-3147e8c59d21,Teste - Revitalização Tasy - 26/08/2026,1.1.2,Reunião de Kickoff,fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,4e29e019-c438-4b06-8857-41819cbe66b4,Teste - processos ,1.1.3,1.1.3 Tasy Native,fase,fase,0,0,Concluída,entrega
+ALVO-preso,527cda82-2535-4608-ba4c-cf7fb7c6c5ed,Revitalização do GLPI,1.3,Configuração dos Setores e classificações,fase,atividade,0,0,Concluída,fase
+ALVO-preso,52a6b631-e358-4509-bd3d-f8d32e5a3162,Projeto Escritório de Processos,2.1.2,Classificar os setores por criticidade operacional,fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,551d2a12-c1eb-4cb3-a560-94a4b44f041c,Estruturação do Gerenciamento de Projetos,1.2.5,Pesquisa com Juliana Palacio (Posto de Enfermagem),fase,fase,0,0,Concluída,entrega
+ALVO-preso,57ed17a4-f659-4eda-8065-d7912a22b9ec,Estruturação do Gerenciamento de Projetos,1.1.9,Kick Off com Virginia Moreira (Pesquisa Clínica),fase,fase,0,0,Concluída,entrega
+ALVO-preso,5c34b97b-386f-4437-9aa2-9c21c6240168,Revitalização do GLPI,1.2,Analisar as duas plataformas de IA da Pronutrir,fase,atividade,0,0,Concluída,fase
+ALVO-preso,74de7ffe-63fb-4d81-b668-e6b4201adc08,Revitalização do GLPI,3.1,Planejar a Migração dos dados do GLPI atual (produção) para o GLPI novo,fase,atividade,0,0,Concluída,fase
+ALVO-preso,75e00f18-30c6-435a-b629-deff95c2a37a,Estruturação do Gerenciamento de Projetos,1.1.4,Kick Off com Ana Paula (Contratos),fase,fase,0,0,Concluída,entrega
+ALVO-preso,7877071f-a73a-4ca5-ad6b-27b70e5b4d0c,Projeto Escritório de Processos,2.1.6,Agendar as sessões com gestores e executores,fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,78ff79d0-caeb-4ebd-9659-8db17c559eed,Teste - Revitalização Tasy - 26/08/2026,1.1.1,Lançamento do Projeto,fase,fase,0,0,Não iniciado,entrega
+ALVO-preso,7b1f3379-8476-40d3-86b8-919f9e4bc40d,Revitalização do GLPI,3.2,Efetuar Migração dos dados,fase,atividade,0,0,Concluída,fase
+ALVO-preso,82413241-aa9c-49c8-b443-3da6f65b4acb,Estruturação do Gerenciamento de Projetos,2.1.1,Treinamento com Virginia Moreira (Pesquisa Clinica),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,8356fb33-2a71-40e4-b527-ca50b7fde7e1,Estruturação do Gerenciamento de Projetos,2.1.12,Treinamento Daniela Veras (Marketing - Estratégia),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,92833b62-6a6f-4699-bc0e-b8b2d8523eb6,Guia Jornada do Paciente - Pronutrir Onboard,2.1.7,Construir navegação inferior de 4 abas,fase,fase,0,0,Concluída,entrega
+ALVO-preso,9399a783-4ff8-450f-ac36-fd75c17fdc71,Guia Jornada do Paciente - Pronutrir Onboard,2.1.4,Criar design system tokenizado,fase,fase,0,0,Concluída,entrega
+ALVO-preso,97912db5-52a6-4378-8dde-33f75bc18eeb,Estruturação do Gerenciamento de Projetos,1.2.8,Pesquisa com Felipe Cavalcanti (TI),fase,fase,0,0,Concluída,entrega
+ALVO-preso,980dc376-b97c-4bf0-b6c9-6f17ff6bb2c7,Teste - processos ,1.1.1,1.1.1 Lançamento do Projeto,fase,fase,0,0,Concluída,entrega
+ALVO-preso,99368928-4cfc-47d4-bbb3-7b8f675d8a63,Estruturação do Gerenciamento de Projetos,1.1.3,Kick Off com Rochelle Peregrino (Financeiro),fase,fase,0,0,Concluída,entrega
+ALVO-preso,9b47f263-7c48-4289-8f6f-79053af92bc0,Estruturação do Gerenciamento de Projetos,1.2.6,Pesquisa com Antonio Ventura (Compras),fase,fase,0,0,Concluída,entrega
+ALVO-preso,9ed6bd4d-81d6-429f-baa8-9434328965c7,Estruturação do Gerenciamento de Projetos,1.1.11,Kick Off com Antonio Ventura (Compras),fase,fase,0,0,Concluída,entrega
+ALVO-preso,9fdc1400-2d14-41b8-b49a-c33454ebcae1,Gestão e Execução de Atividades de TI,,PESQUISA ÚNICA DE TRATAMENTO,fase,fase,0,0,Concluída,entrega
+ALVO-preso,a3c15c03-62b4-482e-b4f0-9c931a6bc96c,Guia Jornada do Paciente - Pronutrir Onboard,2.1.5,Documentar o design system para evolução,fase,fase,0,0,Concluída,entrega
+ALVO-preso,aaa12f4f-34e6-4197-83ec-23feb3ddcff5,Estruturação do Gerenciamento de Projetos,1.3.1,Análise dos dados,fase,fase,0,0,Concluída,entrega
+ALVO-preso,b3865c0d-0f21-412d-8af7-feb311ebdd12,Estruturação do Gerenciamento de Projetos,1.1.7,Kick Off com Juliana Ferreira (Rh),fase,fase,0,0,Concluída,entrega
+ALVO-preso,b7500871-0d03-4c74-b3b9-a4983112e99e,Estruturação do Gerenciamento de Projetos,2.1.7,Treinamento com Ana Paula (Contratos),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,bb663efc-5820-4e0c-8d11-97c5c7dd5893,Estruturação do Gerenciamento de Projetos,1.2.7,Pesquisa com Ana Paula (Contratos),fase,fase,0,0,Concluída,entrega
+ALVO-preso,c5feed07-4bfd-46f8-a3c7-d67b627b323e,Revitalização do GLPI,4.1,Go Live,fase,atividade,0,0,Concluída,fase
+ALVO-preso,c930901c-8ca1-41ca-8d02-428093d468ba,Estruturação do Gerenciamento de Projetos,1.1.10,Kick Off com Juliana Palácio (Posto de Enfermagem),fase,fase,0,0,Concluída,entrega
+ALVO-preso,cbb4c449-7d0c-4d16-b3ee-1a0801b0743b,Revitalização do GLPI,2.2,Ajustes e correções,fase,atividade,0,0,Concluída,fase
+ALVO-preso,cef446c8-f83b-4034-b4a7-48a59c63552b,Guia Jornada do Paciente - Pronutrir Onboard,2.1.3,Extrair paleta e tipografia do app antigo,fase,fase,0,0,Concluída,entrega
+ALVO-preso,d11cdd4a-7e3d-40eb-94a1-202e153331f8,Estruturação do Gerenciamento de Projetos,2.1.4,Treinamento com Rochelle Peregrino (Financeiro),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,dd756c09-ccaf-4e7e-8b7b-dbba5f8ce535,Guia Jornada do Paciente - Pronutrir Onboard,2.1.6,Construir cabeçalho do aplicativo,fase,fase,0,0,Concluída,entrega
+ALVO-preso,e2d5670a-0958-4215-a5e8-839a18e3429c,Estruturação do Gerenciamento de Projetos,2.1.9,Treinamento com Albertina Proença (Rh),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,eda695bd-cdd3-4c47-9bc2-742a57dfeeb6,Estruturação do Gerenciamento de Projetos,1.2.2,Pesquisa com Thayanne Matos (Marketing),fase,fase,0,0,Concluída,entrega
+ALVO-preso,eef4d4a0-d424-44dd-9948-411e20744699,Estruturação do Gerenciamento de Projetos,2.1.11,Treinamento Fábio Lima (Recepção),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,f02c5c0c-7b74-4f21-b5b1-617c736d0aa0,Revitalização do GLPI,3.3,Simulações Finais com dados migrados,fase,atividade,0,0,Concluída,fase
+ALVO-preso,f0c28c04-8046-4458-86c2-01bba361993f,Estruturação do Gerenciamento de Projetos,2.1.6,Treinamento com Antonio Ventura (Compras),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,f26b6e31-3b7e-48da-a79b-7c8951d404be,Estruturação do Gerenciamento de Projetos,2.1.10,Treinamento com Juliana Ferreira (Rh),fase,fase,0,0,Em Andamento,entrega
+ALVO-preso,f28e52f9-c433-4c7e-802c-d02ce3f19be7,Estruturação do Gerenciamento de Projetos,1.2.10,Pesquisa com Juliana Ferreira (Rh),fase,fase,0,0,Concluída,entrega
+ALVO-preso,f58b529f-5973-4c9d-9e9f-0776fc671e20,Estruturação do Gerenciamento de Projetos,1.2.4,Pesquisa com Rochelle Peregrino (Financeiro),fase,fase,0,0,Concluída,entrega
+ALVO-preso,f9d4d707-99c3-4481-9744-f0eeb0aa623a,Estruturação do Gerenciamento de Projetos,1.2.1,Pesquisa com Virginia Moreira (Pesquisa Clinica),fase,fase,0,0,Concluída,entrega
+ALVO-preso,fb8f4b95-3591-49a0-95d0-96be4b41b78c,Guia Jornada do Paciente - Pronutrir Onboard,2.1.8,Criar as 11 rotas navegáveis,fase,fase,0,0,Concluída,entrega
+ALVO-preso,fc2abd62-c937-48b7-9ad6-47e062dc5c7c,Estruturação do Gerenciamento de Projetos,1.1.8,Kick Off com Albertina Proença (Rh),fase,fase,0,0,Concluída,entrega
+FAIXA-correto,038f67d4-20ed-44bd-bb1d-aea20b9b3236,Gestão de Processos Tasy - Oficial,1.2.1.15,Cadastro de transações financeiras,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,0477839d-1a18-4b99-a56b-4c906764720c,Gestão de Processos Tasy - Oficial,1.3.8.1.1.1,Instrução de trabalho,fase,fase,5,5,Em Andamento,entrega
+FAIXA-correto,053e12b5-959f-431f-9970-92ddd6c9d19f,Projeto Escritório de Processos,2.1,Mapeamento preparado,fase,fase,6,5,Em Andamento,fase
+FAIXA-correto,082b2e53-e793-4c5d-81e4-0c5d3e6d1c3e,Gestão de Processos Tasy - excluir,,IT - ATUALIZACAO DO BRASINDICE NO TASY,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,0a2057fe-b913-4c14-b55c-f0ca424dc333,Gestão de Processos Tasy - Oficial,1.3.2.1.1.2,Fluxogramas,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,0a64ebae-cb16-485a-a91b-83e5b7dc3496,Gestão de Atividades da Thay,,Outubro Rosa,fase,fase,14,14,Em Andamento,entrega
+FAIXA-correto,0ba7fade-8510-4ba2-9f30-73e61d24864a,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.4.2,"Tela Conquistas mostra selos e pontos (ticket 09, M)",fase,fase,9,9,Concluída,entrega
+FAIXA-correto,0cb9d323-3941-4a14-adc4-b0a99a008bdc,Gestão de Processos Tasy - Oficial,1.3.2.1.1.1.2,Cadastro e importação de valores MAT MED tabela de preços,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,0d7289c3-3c1a-457f-9df1-f95514f29902,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.7,Pagina publica do video leva a marca da clinica,fase,fase,2,2,Concluída,entrega
+FAIXA-correto,0fb2ad25-eca3-466a-957f-9d4eaee5b6b9,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.1.2,"Sessao, proxy e protecao de rotas (tickets 03, 06)",fase,fase,3,3,Concluída,entrega
+FAIXA-correto,0fc01151-022e-4d4e-a614-63128fb0dad9,Gestão de Processos Tasy - excluir,,Função cargas,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,1184a700-26e4-4af9-8991-f02db5aec6de,Gestão de Processos Tasy - excluir,,Ajuste de prescrição,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,11bc6c1e-1791-4318-bc13-6030a3c28dbf,Gestão de Processos Tasy - Oficial,1.3,Validações / Testes / Ajustes / Documentações,fase,fase,24,2,Em Andamento,fase
+FAIXA-correto,11f91205-6be3-4949-9460-abdccdd2a791,Gestão de Processos Tasy - Oficial,1.3.8.2.1,Documentos,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,130b1078-bc53-46ea-9565-4168252e094c,Gestão de Processos Tasy - Oficial,1.3.8.1.1,Documentos,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,1364e590-4c21-4d79-bc61-b8d0b3d64c65,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.4,Jornada legivel sobre video e mais leve no celular,fase,fase,5,5,Concluída,entrega
+FAIXA-correto,16348ba9-7fd7-4e03-b9f7-adf49415f076,Gestão de Processos Tasy - Oficial,,Como gerar protocolo novamente,fase,fase,5,5,Em Andamento,entrega
+FAIXA-correto,177550dd-2acc-485e-beae-d2ccabd236a8,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.6,"Perfil do paciente, com CPF protegido",fase,fase,5,5,Concluída,entrega
+FAIXA-correto,1d69d5bb-2359-4ae8-b927-4fe735daef6b,Gestão de Processos Tasy - Oficial,,Instrução de trabalho,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,1d7fefb8-05be-4cc1-8199-8ebd161a62d5,Gestão de Processos Tasy - excluir,,IT - Como gerar protocolo novamente via tasy,fase,fase,7,7,Em Andamento,entrega
+FAIXA-correto,1fee322d-b368-4403-a4c5-00085e1182ab,Gestão de Processos Tasy - excluir,,"Processo de overfill, cadastro de estabilidade, sobras, diluição
+",fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,215a3862-7266-45ba-9a16-cc4f49f7cb1c,Gestão de Processos Tasy - excluir,,Módulo administração de contratos,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,219e15e7-5db2-467b-a2eb-75cef8fb456e,Gestão de Processos Tasy - excluir,,Módulo - Agendamento quimioterapia,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,231128ee-5926-4c6d-bc30-d4378a6138dc,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.9.2,Conquista e avaliacao param de disputar o mesmo momento,fase,fase,4,4,Concluída,entrega
+FAIXA-correto,24057dcd-7e1e-4c5d-894b-a889ef1fb0d1,Gestão de Processos Tasy - excluir,,IT – CADASTRO E IMPORTACAO DE VALORES MAT MED TABELA DE PREÇOS,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,2410e79e-9456-48c9-a7c7-233807fb9cf8,Gestão de Processos Tasy - excluir,,Fluxograma cadastro de taxas e tabela de preços,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,2579da6f-89fe-4764-bd38-576f25a5df0f,Gestão de Processos Tasy - excluir,,IT - CADASTRO DE VERSAO DA CBHPM NO TASY,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,2711d7b0-2ca0-4192-ac86-b2994e2fccc5,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.5.4,"Remover a rota orfa de video (ticket 14, P)",fase,fase,3,3,Concluída,entrega
+FAIXA-correto,2ae63aec-c7c9-499e-9b3a-8aac92cded72,Gestão de Processos Tasy - excluir,,IT - CADASTRAR NOVOS PROCEDIMENTOS NO TASY E INCLUSAO NA RLA,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,2b3a1ed6-ae62-44ac-93a0-febdf03a2bf0,Campanha de Divulgação da Radioterapia,,Planejamento das etapas após aprovação dos temas,fase,fase,4,4,Em Andamento,entrega
+FAIXA-correto,303388b3-3c60-4679-a7d5-2ceba3560ea7,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.9.1,O app vira atalho na tela do celular,fase,fase,4,4,Concluída,entrega
+FAIXA-correto,31a1a1bb-13b7-40db-94e3-7fa2befd6f63,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.2.1,"Catalogo real dos setores da clinica (ADR-0001, 0002, 0003)",fase,fase,3,3,Concluída,entrega
+FAIXA-correto,31cff92e-870f-40b0-b9bd-7e8ab9c1c689,Gestão de Processos Tasy - excluir,,Criar processo ,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,32823c95-9b50-44ea-aa35-2cc92961b312,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.9,Acessibilidade auditada em todas as telas,fase,fase,6,6,Concluída,entrega
+FAIXA-correto,34119dda-aae1-4fa2-840f-e3c3288219b3,Gestão de Processos Tasy - excluir,,IT - Cadastro de novo medicamento - CAF,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,3b427cce-16ec-46f9-b18c-4b2c4c084271,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.5.1,"Fechar a listagem publica do acervo de videos (ticket 17, P) (TAREFA DE INFRA)",fase,fase,4,4,Concluída,entrega
+FAIXA-correto,4390e40c-7a0f-4910-b5f0-10a5e8bb2084,Gestão de Processos Tasy - Oficial,,Documento enviado para correções,fase,fase,3,3,Concluída,entrega
+FAIXA-correto,44bf5052-90c9-4594-b0c0-f555ff14bb10,Gestão de Processos Tasy - Oficial,1.3.2.1.1.1,Instrução de trabalho,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,4e59787a-dc07-4e2c-953d-814ab8778e2b,Projeto Escritório de Processos,1.1.1,Elaborar o Termo de Abertura do Projeto,fase,fase,3,2,Em Andamento,entrega
+FAIXA-correto,50ce6e8b-9f99-467a-ac32-d7933075c477,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.3.3,"Modulo sem gravacao nao conta na jornada (ticket 11, P)",fase,fase,5,5,Concluída,entrega
+FAIXA-correto,5463f3c2-aae9-443a-b369-9e8d7ffca1bb,Gestão de Processos Tasy - Oficial,,Enviar para assinatura,fase,fase,2,2,Concluída,entrega
+FAIXA-correto,55c0dcf7-0725-46c3-99aa-5047baae5ed5,Gestão de Processos Tasy - Oficial,1.2.1.11.1,Documentos,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,55f614aa-fa69-44a8-a2bc-9b2efd6a5265,Teste 26/08/2026 - Tasy,1.2.3,Cargas,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,560b3c7f-ce21-4199-8da7-a8dad398c323,Projeto Escritório de Processos,1.1.1.2,Revisar documento,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,56473f18-f0ae-479d-8a67-7f35a209536d,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.6.1,"Avaliar o video com estrelas (ticket 18, M)",fase,fase,9,9,Concluída,entrega
+FAIXA-correto,57c9aec3-f5dc-4d03-b7c9-cfa5ab4d754b,Gestão de Processos Tasy - Oficial,1.2.1.11,Cargas,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,5c08ec4b-6c9f-4b24-9dfc-91434abee1f9,Gestão de Processos Tasy - Oficial,1.2.1,Cadastros e funções gerais,fase,fase,16,2,Em Andamento,entrega
+FAIXA-correto,5c395d0c-3cdb-4e08-acca-5712164769ae,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.9.3,O paciente troca a propria senha,fase,fase,5,5,Concluída,entrega
+FAIXA-correto,6044caad-824a-4ef2-85ee-2acd0a21bd44,Gestão de Processos Tasy - excluir,,IT - Cadastro de regras de convênio,fase,fase,5,5,Em Andamento,entrega
+FAIXA-correto,60e5cca4-05ef-4f58-8c6f-5448a8cd06be,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.7.2,"Limites de tamanho nos campos do cadastro (ticket 12, P)",fase,fase,6,6,Concluída,entrega
+FAIXA-correto,615c68b2-2ae1-44c0-940f-dc3b5e27c8dd,Gestão de Processos Tasy - excluir,,Módulo - Quimioterapia,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,61f8fc04-4177-4c1b-8118-1a1db93c9d34,Revitalização Tasy,1.3.24,Treinamento Integrações,fase,fase,8,3,Em Andamento,entrega
+FAIXA-correto,623e0b47-f391-47b1-8804-c0074cd4a0ed,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.2.2,"Player e conclusao confiavel do modulo (ADR-0007, 0009)",fase,fase,4,4,Concluída,entrega
+FAIXA-correto,62c073f5-5116-406e-9186-0f4dc0faa546,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.4.1,"Selos e pontos que nunca caem (ticket 08, G)",fase,fase,9,9,Concluída,entrega
+FAIXA-correto,67bd7cca-2d52-4075-b1ab-c387c3d5279b,Gestão de Processos Tasy - excluir,,Instrução de trabalho - registro de sobras e overfill cabine,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,69cb979d-9287-4845-9465-b2845bc5fc89,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.2,Login e cadastro no desenho da clinica,fase,fase,6,6,Concluída,entrega
+FAIXA-correto,6dde04fc-ca85-4a17-a716-a8ef2a5307d0,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.5.3,"Compartilhar video por link com contagem por origem (ticket 20, G)",fase,fase,10,10,Concluída,entrega
+FAIXA-correto,73046d7a-4762-4cea-bb3a-b4cb3baf5d4d,Campanha de Divulgação da Radioterapia,,Pré-produção,fase,fase,4,4,Em Andamento,entrega
+FAIXA-correto,76dd752d-b889-4a8e-8cc1-920e6b15ee8d,Gestão de Processos Tasy - Oficial,,Registrar sobras e overfill na cabine,fase,fase,4,4,Em Andamento,entrega
+FAIXA-correto,77a31f46-0184-46ea-999b-73766d706b62,Gestão de Processos Tasy - Oficial,,Enviar para assinatura,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,77ed5e20-e7fb-47bb-9d3c-9f9f0784a84f,Gestão de Processos Tasy - excluir,,IT  - Como alterar regra de protocolo via tasy,fase,fase,7,7,Em Andamento,entrega
+FAIXA-correto,78b4fd83-5905-4844-87fd-020f31a74127,Gestão de Processos Tasy - excluir,,Processo de ajuste prescrição,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,819f4c71-bc08-4ddc-8cbf-f1b616046991,Gestão de Processos Tasy - Oficial,1.3.2.1,Cadastro de convênios preços e regras,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,847969c6-e49b-40aa-a92f-4611f099d7a2,Gestão de Processos Tasy - excluir,,IT - ATENDER PACIENTE UNIMED COM BIOMETRIA,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,8b2f0f4e-f045-49fa-9ea1-36b3cf48f1ea,Serviço de Ultrassonografia,1.1,Iniciação,fase,fase,5,3,Em Andamento,fase
+FAIXA-correto,900d6f6e-5237-4ffa-a036-256688bf065f,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.5,"Conquistas com heroi, medalhas e linha do tempo",fase,fase,5,5,Concluída,entrega
+FAIXA-correto,90a75fb0-c969-4f20-acdf-555e842f8544,Serviço de Ultrassonografia,1.1.2,Identificação das partes interessadas,fase,fase,5,5,Em Andamento,entrega
+FAIXA-correto,90f2b2c0-8661-446c-ab62-af054e5de87f,Gestão de Processos Tasy - excluir,,Desenhar fluxograma de ajuste de prescrição,fase,fase,4,4,Em Andamento,entrega
+FAIXA-correto,93bed667-d9fb-4653-998a-8493279cba1f,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.3,"Casca do app: cabecalho, barra lateral e navegacao",fase,fase,4,4,Concluída,entrega
+FAIXA-correto,9507d3a7-6a4b-4409-a820-ebcf8ef4f1e1,Gestão de Processos Tasy - Oficial,,Como alterar regra de protocolo,fase,fase,4,4,Concluída,entrega
+FAIXA-correto,980af948-80f0-4fc6-8a3a-c1ca64381521,Gestão de Processos Tasy - excluir,,Criar fluxograma,fase,fase,5,5,Em Andamento,entrega
+FAIXA-correto,9a210ad9-59d7-4628-954b-4146ce4bfa3a,Gestão de Processos Tasy - excluir,,Criar processo - Autorização de biometria médica,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,a1f30df3-6e48-44b6-9125-b61764404f91,Gestão de Processos Tasy - Oficial,1.3.2.1.1.1.1,Cadastrar novos procedimentos no tasy e inclusão na RLA,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,a315e176-b6db-4f3e-a07f-1de5e0922083,Gestão de Processos Tasy - Oficial,1.3.2.1.1,Documentos,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,a47a3d09-d8d5-4689-ae93-6265201a57f9,Gestão de Processos Tasy - Oficial,,Enviar para assinatura,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,a639275d-5caa-4ac3-af28-ef9851f64078,Gestão de Processos Tasy - excluir,,Cadastro de taxas e tabela de preços,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,a6e87cd2-1ecc-4ffa-bfad-ec81113ca47a,Gestão de Processos Tasy - Oficial,1.2.1.11.1.2,Instrução de trabalho - Cadastro de versão da CBHPM no tasy,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,a7ec85fa-0762-489d-889d-3fb598350469,Gestão de Processos Tasy - excluir,,POP - cadastro de novos medicamentos via tasy,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,ac1f5d84-f267-45f6-adb9-1f00ff9a1a9b,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.1.1,"Fundacao Supabase e schema com isolamento por paciente (tickets 01, 02)",fase,fase,4,4,Concluída,entrega
+FAIXA-correto,ae723734-fa2e-413e-8d8a-c74b16fbb267,Projeto Escritório de Processos,1.1,Projeto formalmente iniciado,fase,fase,4,1,Em Andamento,fase
+FAIXA-correto,afae2199-9a5c-40aa-b8a0-31591ea6582e,Gestão de Processos Tasy - excluir,,Execução,fase,fase,8,3,Em Andamento,entrega
+FAIXA-correto,b064d881-6cdc-4cdc-a03e-293a3e1b233a,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.10,Acervo de video renovado com as gravacoes de 20/08,fase,fase,5,5,Concluída,entrega
+FAIXA-correto,b405bf55-17b9-4046-a744-3ccdf11820ff,Revitalização Tasy,1.3,3ª Fase - Validações / Testes /Ajustes/ Documentações,fase,fase,24,1,Em Andamento,fase
+FAIXA-correto,b68f28cd-55ae-400a-a464-c38be61024fd,Teste 26/08/2026 - Tasy,1.2,Fase de Cadastros e Funções Essenciais,fase,fase,7,1,Em Andamento,fase
+FAIXA-correto,b8f47d92-b27c-4846-a0e2-b88d69cad007,Agente de IA Tasy - Pops,,Fase 01 - Diagnóstico,fase,fase,2,2,Em Andamento,entrega
+FAIXA-correto,b8fd6d0e-6c59-43e3-b037-bc8025f60f3d,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.3.4,"Contagem de progresso a prova de duplicata (ticket 13, P)",fase,fase,3,3,Concluída,entrega
+FAIXA-correto,bc63b856-eb95-4468-b300-5eba53aaa571,Ambiente de Homologação (Teste),,teste teste,fase,fase,1,1,Em andamento,entrega
+FAIXA-correto,bcd6d53a-49e5-4687-a20d-1461f7c472fa,Gestão de Processos Tasy - Oficial,1.2,Cadastro e funções essenciais,fase,fase,3,1,Em Andamento,fase
+FAIXA-correto,c27e2754-4c54-4b0c-9bc5-3d1f0a6d8748,Gestão de Processos Tasy - Oficial,1.2.1.15.1.1,Plano de contas,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,c4322aaa-4b2b-43b5-a841-901d19efca72,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.9.5,Perfil reorganizado para caber numa tela,fase,fase,3,3,Concluída,entrega
+FAIXA-correto,c9b907c9-f130-4dba-a4ca-0d1666307cb0,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.7.1,"Data de nascimento no cadastro (ticket 19, M)",fase,fase,8,8,Concluída,entrega
+FAIXA-correto,ca4a4722-3225-4a51-bfc3-79c9d24de460,Gestão de Processos Tasy - Oficial,1.3.8.2,Quimioterapia,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,ca9011e0-712f-4690-ba39-d04d707e6b2d,Gestão de Processos Tasy - Oficial,1.3.8,Treinamento quimioterapia,fase,fase,5,2,Em Andamento,entrega
+FAIXA-correto,cd05256f-f618-46ec-996c-181f3b56b59e,Gestão de Processos Tasy - excluir,,Fluxograma - cadastro de novos medicamento via tasy,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,ceccebba-b60b-495e-a2d9-c7e42c8655cd,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.5.2,"O video so toca pelo nosso app (ticket 21, G)",fase,fase,10,10,Concluída,entrega
+FAIXA-correto,cf4165d3-1af3-4bd7-8244-23380089006b,Gestão de Processos Tasy - Oficial,1.3.8.2.1.1,Fluxogramas,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,d722573d-b7d9-4a8c-a00c-c2c386c01d91,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.9.4,Cadastro entra direto e quem tem sessao nao ve login,fase,fase,4,4,Concluída,entrega
+FAIXA-correto,da8c7eaf-868b-4e7c-b534-b3d4eeef63b0,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.8,Telas fora do escopo removidas,fase,fase,3,3,Concluída,entrega
+FAIXA-correto,dbdb374b-d5d4-4287-aa46-2488d8aaa1d6,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.7.3,"CPF obrigatorio tambem no banco (ticket 16, P)",fase,fase,4,4,Concluída,entrega
+FAIXA-correto,dbeaa675-a4fa-4395-8b66-67a77d5386be,Gestão de Processos Tasy - Oficial,1.2.1.15.1,Documentos,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,dc2782be-0724-4498-a5af-495ff9c3d9b5,Gestão de Processos Tasy - excluir,,IT - Cadastro assistencial de novo medicamento,fase,fase,7,7,Em Andamento,entrega
+FAIXA-correto,dfc46e74-31b9-4152-a96e-65f426336cd2,Gestão de Processos Tasy - Oficial,1.3.8.2.1.1.1,Ajuste prescrição por solicitação,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,e0ee0e2a-d434-4b32-bba7-75a240c8c8d6,Projeto Escritório de Processos,2.1.1,Confirmar o inventário de setores (base: 50 setores),fase,fase,7,7,Em Andamento,entrega
+FAIXA-correto,e3fc1e2a-6b36-4325-8ac1-fc448fa8385a,Estruturação do Gerenciamento de Projetos,2.1,Capacitação em Fundamentos da Gestão de Projetos,fase,fase,12,12,Em Andamento,fase
+FAIXA-correto,e6820715-4bb5-417b-8d47-219174da2b42,Gestão de Processos Tasy - Oficial,1.3.2.1.1.2.1,Criar fluxograma da revisão de novas taxas,fase,fase,3,3,Em Andamento,entrega
+FAIXA-correto,e9902be6-10b9-4ef2-8d6b-8688f5fce29f,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.8.1,"Identidade visual real: logo em vetor, favicon e cores da marca",fase,fase,6,6,Concluída,entrega
+FAIXA-correto,eaf47c46-495f-48e8-b00c-bd205d8ea424,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.3.2,"Progresso do paciente fica salvo na conta (ticket 07, G)",fase,fase,10,10,Concluída,entrega
+FAIXA-correto,ef066cfd-7374-41ff-8089-e8d9f0aaf52b,Gestão de Atividades da Thay,,Remoção do selo da ONA em Comunicações,fase,fase,13,13,Em Andamento,entrega
+FAIXA-correto,ef8121b7-936b-4e2f-b6a4-fdfc58069420,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.1.3,"Cadastro com CPF validado, login e logout (tickets 04, 05)",fase,fase,5,5,Concluída,entrega
+FAIXA-correto,f15c8be7-f7f5-4a97-b665-98dfb35df390,Gestão de Processos Tasy - Oficial,1.3.2,Treinamentos: administração de contratos,fase,fase,6,1,Em Andamento,entrega
+FAIXA-correto,f5863b3c-40b1-48c1-b6e1-d8d1381bc530,Gestão de Processos Tasy - Oficial,1.2.1.11.1.1,Instrução de trabalho - Atualização do Brasindice no tasy,fase,fase,6,6,Em Andamento,entrega
+FAIXA-correto,f99a61aa-93db-41c3-968f-f2ea215b9f43,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.2.3,"Progresso visivel e acolhimento (ADR-0004, 0005)",fase,fase,3,3,Concluída,entrega
+FAIXA-correto,fce86454-c01d-4aeb-a89e-3570d5054fd5,Gestão de Processos Tasy - Oficial,1.3.8.1,Agenda de quimioterapia,fase,fase,1,1,Em Andamento,entrega
+FAIXA-correto,fe46885e-efc1-47bf-9cb3-dc5bbdda7144,Guia Jornada do Paciente - Pronutrir Onboard - Desenvolvimento,1.3.1,"Corrigir a entrada do paciente novo (ticket 15, P)",fase,fase,3,3,Concluída,entrega
+FAIXA-correto,ffdd6396-7d1f-4221-b984-b7af37178b71,Teste - Revitalização Tasy - 26/08/2026,1.1,Fase de Planejamento e Lançamento,fase,fase,4,4,Em Andamento,fase

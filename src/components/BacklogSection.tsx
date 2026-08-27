@@ -42,6 +42,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { EAP_FASE_LEVEL, eapCanGroup, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { podePromover, motivoNaoPromove } from "@/lib/quadroDeExecucao";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import { ehBacklog } from "@/components/kanban/shared";
@@ -69,7 +70,7 @@ import {
   formatarHoras,
   formatarCusto,
   codigoParaExibir,
-
+  textoDaFaixa,
 } from "@/lib/mesaDePlanejamento";
 import { useAuth } from "@/contexts/AuthContext";
 import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
@@ -134,7 +135,7 @@ interface Activity {
 }
 
 /** Os chips de recorte rápido do topo. Combinam por E. */
-type RecorteRapido = "minhas" | "sem-resp" | "sem-data";
+type RecorteRapido = "minhas" | "sem-resp" | "sem-data" | "no-quadro";
 
 interface BacklogSectionProps {
   projectId: string;
@@ -357,10 +358,22 @@ export const BacklogSection = ({
   const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
     { id: "assigned_to", label: "Responsável", width: "minmax(96px,168px)", align: "left" },
     { id: "end_date", label: "Previsto", width: "minmax(104px,132px)", align: "left" },
+    /**
+     * SITUAÇÃO — onde o item está, e ela só fala quando tem o que dizer.
+     *
+     * A coluna Status tinha saído do desenho por uma premissa errada: a de que
+     * o backlog lista apenas itens da fila. Ele lista TODOS — medido no projeto
+     * de teste: 141 vivos, 5 já no quadro, misturados e indistinguíveis.
+     *
+     * Quem está na fila mostra VAZIO — sem traço, sem palavra, sem
+     * placeholder. Um traço em 136 de 141 linhas seria ruído, e o vazio já
+     * significa "na fila" por ser o estado normal desta tela.
+     */
+    { id: "situacao", label: "Situação", width: "minmax(92px,124px)", align: "left" },
     { id: "hours", label: "Esforço", width: "minmax(48px,68px)", align: "left" },
     { id: "priority", label: "GUT", width: "minmax(44px,64px)", align: "left" },
   ];
-  const BACKLOG_COLS_DEFAULT = ["assigned_to", "end_date", "hours", "priority"];
+  const BACKLOG_COLS_DEFAULT = ["assigned_to", "end_date", "situacao", "hours", "priority"];
   const backlogColsKey = `backlog-cols:${projectId}`;
   const [visibleCols, setVisibleCols] = useState<string[]>(() => {
     if (typeof window === "undefined") return BACKLOG_COLS_DEFAULT;
@@ -395,7 +408,10 @@ export const BacklogSection = ({
   // Quando o espaço aperta, some com as colunas menos essenciais em vez de
   // criar rolagem lateral. Ordem de descarte = da menos para a mais decisiva
   // na leitura do backlog; tarefa e ações nunca saem.
-  const DROP_ORDER = ["hours", "end_date", "assigned_to", "status", "priority"];
+  // situacao entra na ordem de descarte, mas TARDE: ela responde "isto já
+  // está sendo feito?", que é decisão, enquanto esforço e previsto são
+  // referência. Some antes de responsável e GUT, e depois de horas e datas.
+  const DROP_ORDER = ["hours", "end_date", "situacao", "assigned_to", "status", "priority"];
   const chosenCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
   const activeCols = (() => {
     // 0 = ainda não medido (primeiro render): mostra tudo e deixa o
@@ -716,6 +732,22 @@ export const BacklogSection = ({
    * Serve só ao RECORTE OPCIONAL "ver só o que não começou" — a aba mostra o
    * projeto inteiro por padrão, e nada some daqui por ter ido para o quadro.
    */
+  /**
+   * Quantos de um grupo ainda estão NA FILA — para a faixa dizer "4 de 6".
+   *
+   * Usa a categoria `backlog` da coluna, não o helper `naFila` abaixo: aquele
+   * conta "a_iniciar" como fila porque responde outra pergunta ("o que ainda
+   * não começou"). "Não iniciado" é coluna do quadro.
+   */
+  const contarNaFila = (itens: { workflow_stage_id?: string | null }[]): number =>
+    itens.filter((a) => {
+      const col = allStages.find((s2) => s2.id === a.workflow_stage_id);
+      if (!col) return true;
+      const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+        ?? categoryFromLegacyFlags(col as never);
+      return cat === "backlog";
+    }).length;
+
   const naFila = (a: Activity): boolean => {
     if (!a.workflow_stage_id) return true;
     const col = allStages.find((s) => s.id === a.workflow_stage_id);
@@ -827,6 +859,16 @@ export const BacklogSection = ({
           if ((a.assigned_to ?? "").trim()) return false;
         }
         if (recortesAtivos.has("sem-data") && a.end_date) return false;
+        // "No quadro": o que já foi promovido. Deriva da coluna, como a coluna
+        // SITUAÇÃO — e pela mesma razão não usa o helper `naFila`, que conta
+        // "a_iniciar" como fila.
+        if (recortesAtivos.has("no-quadro")) {
+          const col = allStages.find((s2) => s2.id === a.workflow_stage_id);
+          if (!col) return false;
+          const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+            ?? categoryFromLegacyFlags(col as never);
+          if (cat === "backlog") return false;
+        }
         return true;
       };
       const passaram = new Set(vivas.filter(atende).map((a) => a.id));
@@ -1318,7 +1360,47 @@ export const BacklogSection = ({
           return a ? !ehMinha(a) : false;
         })
       : [];
-    const ids = idsBrutos.filter((id) => !semPermissao.includes(id));
+
+    /**
+     * AGRUPADOR NÃO VAI PARA O QUADRO — a porta fechada (27/08/2026).
+     *
+     * Promover um agrupador punha no quadro algo que o quadro não desenha como
+     * cartão: o item sumia — estava lá, ocupando coluna, e não aparecia. O
+     * incidente de 27/08 mediu o estrago: 68 folhas promovidas que ninguém via,
+     * em 17 projetos.
+     *
+     * O arraste do Kanban já recusava; aqui aceitava em silêncio. Mesmo gesto,
+     * dois comportamentos — e o usuário descobria pela ausência.
+     *
+     * Segue o padrão desta função: MOVE O QUE PODE e nomeia o resto. Recusar a
+     * seleção inteira por causa de uma fase marcada junto obrigaria a refazer a
+     * seleção.
+     *
+     * A versão boa — promover o pacote e trazer as atividades dele — está na
+     * fila. Até lá, recusar explica; aceitar esconde.
+     */
+    const naoPromoviveis = idsBrutos.filter((id) => {
+      const a = activities.find((x) => x.id === id);
+      return a ? !podePromover(a as never) : false;
+    });
+
+    const ids = idsBrutos.filter(
+      (id) => !semPermissao.includes(id) && !naoPromoviveis.includes(id),
+    );
+
+    // Só agrupador/marco selecionado: não há o que mover, e o motivo vem da
+    // fonte única — a mesma frase que o arraste do Kanban usa.
+    if (ids.length === 0 && naoPromoviveis.length > 0 && semPermissao.length === 0) {
+      const a = activities.find((x) => x.id === naoPromoviveis[0]);
+      const motivo = a ? motivoNaoPromove(a as never) : null;
+      setIsMoving(false);
+      toast({
+        title: motivo?.titulo ?? "Este item não vai para o quadro",
+        description: motivo?.descricao,
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (ids.length === 0) {
       setIsMoving(false);
@@ -1523,6 +1605,12 @@ export const BacklogSection = ({
         // antes — a tela anunciando um movimento que não aconteceu.
         semPermissao.length > 0
           ? `${semPermissao.length} não ${semPermissao.length === 1 ? "foi" : "foram"}: você não é responsável nem participante.`
+          : null,
+        // E o que ficou de fora por ser caixa. Mesmo motivo do anterior:
+        // silenciar faria a tela anunciar um movimento que não aconteceu — foi
+        // assim que 68 itens foram parar no quadro sem ninguém ver.
+        naoPromoviveis.length > 0
+          ? `${naoPromoviveis.length} não ${naoPromoviveis.length === 1 ? "foi" : "foram"}: fase, pacote e marco não vão para o quadro.`
           : null,
       ].filter(Boolean).join(" ") || undefined,
     });
@@ -2116,6 +2204,45 @@ export const BacklogSection = ({
             title={`GUT ${gutScore} — ${GUT_META[gutLevel].label}`}
           >
             {gutScore}
+          </span>
+        );
+      }
+      /**
+       * SITUAÇÃO — vazia na fila, ponto + palavra no quadro.
+       *
+       * A pergunta que ela responde é "isto já está sendo feito?". Para quem
+       * está na fila a resposta é "não", e o VAZIO já diz isso: é o estado
+       * normal desta tela, e um traço em 136 de 141 linhas seria ruído.
+       *
+       * O estágio deriva da COLUNA, via `ehColunaDeBacklog` — nunca do campo
+       * `estagio`, que existe no banco mas nasceu como espelho e ninguém lê.
+       * Ler dois lugares recria a divergência.
+       *
+       * O ponto é o mesmo de 7px do status, com a cor da coluna; a palavra é o
+       * título real da coluna do projeto ("Não iniciado", "Em Andamento",
+       * "Pendências", "Concluída"), não um enum traduzido no componente.
+       */
+      if (colId === "situacao") {
+        // NÃO usa o helper `naFila` daqui de cima: ele conta "a_iniciar" como
+        // fila, porque responde "o que ainda não começou" — outra pergunta.
+        // "Não iniciado" É coluna do quadro, e um item lá foi promovido.
+        // Só a categoria `backlog` significa fila.
+        const cat = stg
+          ? parseWorkflowCategory((stg as { categoria?: string }).categoria)
+            ?? categoryFromLegacyFlags(stg as never)
+          : null;
+        const estaNaFila = !stg || cat === "backlog";
+        if (estaNaFila) return <span key="situacao" aria-hidden="true" />;
+        return (
+          <span key="situacao" className="min-w-0 flex items-center gap-1.5">
+            <span
+              className="w-[7px] h-[7px] rounded-full shrink-0"
+              style={{ backgroundColor: stg.color }}
+              aria-hidden="true"
+            />
+            <span className="truncate text-muted-foreground" title={`No quadro: ${stg.title}`}>
+              {stg.title}
+            </span>
           </span>
         );
       }
@@ -2865,7 +2992,7 @@ export const BacklogSection = ({
                   className="text-[11px] text-muted-foreground tabular-nums"
                   title="Somado no servidor a partir das subatividades"
                 >
-                  {resumo.itens} no backlog
+                  {textoDaFaixa(resumo.itens, contarNaFila(acts))}
                   {horas && <> · {horas}</>}
                   {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                 </span>
@@ -3088,7 +3215,7 @@ export const BacklogSection = ({
                   className="text-[11px] text-muted-foreground tabular-nums"
                   title="Somado no servidor a partir das subatividades"
                 >
-                  {resumo.itens} no backlog
+                  {textoDaFaixa(resumo.itens, contarNaFila(subs))}
                   {horas && <> · {horas}</>}
                   {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                 </span>
@@ -3220,6 +3347,15 @@ export const BacklogSection = ({
       minhas: ehMinha ? folhas.filter((a) => ehMinha(a)).length : 0,
       semResponsavel: folhas.filter((a) => !a.is_milestone && !(a.assigned_to ?? "").trim()).length,
       semData: folhas.filter((a) => !a.end_date).length,
+      // Promovidos: o que já saiu da fila. Conta folhas, como os outros
+      // recortes — um agrupador no quadro é faixa, não trabalho promovido.
+      noQuadro: folhas.filter((a) => {
+        const col = allStages.find((s2) => s2.id === a.workflow_stage_id);
+        if (!col) return false;
+        const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+          ?? categoryFromLegacyFlags(col as never);
+        return cat !== "backlog";
+      }).length,
     };
   })();
 
@@ -3341,6 +3477,7 @@ export const BacklogSection = ({
               ehMinha ? { id: "minhas" as const, lab: "Minhas", n: recortes.minhas } : null,
               { id: "sem-resp" as const, lab: "Sem responsável", n: recortes.semResponsavel },
               { id: "sem-data" as const, lab: "Sem data", n: recortes.semData },
+              { id: "no-quadro" as const, lab: "No quadro", n: recortes.noQuadro },
             ].filter(Boolean) as { id: RecorteRapido; lab: string; n: number }[])
               .filter((c) => c.n > 0)
               .map((c) => {
@@ -3974,7 +4111,7 @@ export const BacklogSection = ({
                         className="text-[11px] text-muted-foreground tabular-nums"
                         title="Somado no servidor a partir das subatividades"
                       >
-                        {resumo.itens} no backlog
+                        {textoDaFaixa(resumo.itens, contarNaFila(lane.items))}
                         {horas && <> · {horas}</>}
                         {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                       </span>
@@ -4090,13 +4227,39 @@ export const BacklogSection = ({
          * propriedade que o desenho pede, e ela sai de graça por o rodapé
          * consumir a mesma fonte que a tabela.
          *
-         * `total.itens` conta as RAÍZES visíveis, não a árvore inteira: as
-         * horas já sobem por `derived_hours`, e contar tudo faria "141 itens ·
-         * 24h" para um projeto onde só 6 estão no primeiro nível.
+         * A CONTAGEM E OS AGREGADOS VÊM DE FONTES DIFERENTES, de propósito
+         * (corrigido em 27/08/2026).
+         *
+         * Era `total.itens` para os dois, e o rótulo dizia "Total do projeto"
+         * enquanto o número contava só as RAÍZES — "6 no backlog" num projeto
+         * com 141 itens. Quem lia via um total que não era total.
+         *
+         * Mas somar horas sobre a árvore inteira DUPLICARIA: `derived_hours`
+         * do pai já contém as das filhas. As duas coisas não saem da mesma
+         * lista, e é por isso que agora são duas:
+         *
+         *   contagem  → toda a lista visível (`itensVisiveis`)
+         *   horas/custo → só as raízes, via `derived_*` do servidor
+         *
+         * O rótulo de cada número diz de onde ele vem, no `title`.
          *
          * Não some mais quando não há horas: com filtro ligado e zero horas, um
          * rodapé ausente parece tela quebrada. Some só quando não há nada.
          */
+        /**
+         * Todos os itens à vista, não só as raízes — e sem contar agrupador:
+         * faixa não é trabalho, e somá-la ao número faria a mesma inflação que
+         * o Kanban evita ao não desenhá-la como cartão.
+         */
+        const folhasVisiveis = (() => {
+          const comFilho = new Set(
+            activities.filter((a) => a.parent_id).map((a) => a.parent_id as string),
+          );
+          const vivas = activities.filter((a) => !a.is_trashed);
+          const naLista = mostrarTudo ? vivas : soAFila(vivas);
+          return naLista.filter((a) => !comFilho.has(a.id));
+        })();
+
         const recorteLigado = recortesAtivos.size > 0 || prontidaoFilter !== "all";
         return (
           <div className="sticky bottom-0 z-10 flex items-center gap-4 px-3 py-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -4104,8 +4267,10 @@ export const BacklogSection = ({
               {recorteLigado ? "Total do recorte" : "Total do projeto"}
             </span>
             <span className="ml-auto flex items-center gap-4 text-[12px] tabular-nums text-foreground/80">
-              <span title="Itens de primeiro nível na lista atual">
-                {total.itens} no backlog
+              <span title="Itens de trabalho na lista atual (agrupadores não contam: faixa não é trabalho)">
+                {/* Os dois números saem da MESMA lista: contar o total numa e
+                    a fila noutra faria "4 de 6" com 6 que não é o 6 exibido. */}
+                {textoDaFaixa(folhasVisiveis.length, contarNaFila(folhasVisiveis))}
               </span>
               {horas && <span title="Somado no servidor a partir das subatividades">{horas}</span>}
               {custo && <span title="Somado no servidor a partir das subatividades">{custo}</span>}
