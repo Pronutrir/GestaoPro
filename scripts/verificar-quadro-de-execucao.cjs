@@ -401,5 +401,45 @@ const fotoCompleta = (ctx) =>
 }
 
 
+// ── 10. RECUSAR PROMOVER NÃO É RECUSAR MOVER ─────────────────────────────
+//
+// Relatado com captura em 27/08: o aviso "Fases e pacotes não vão para o
+// quadro" aparecia para o item `1.1`, que JÁ ESTAVA em "Em Andamento". Ele
+// ficava preso — não dava para movê-lo nem para outra coluna, nem de volta
+// para o backlog.
+//
+// A primeira versão da guarda tratava "mudar status" como se fosse sempre
+// promover. São duas operações no mesmo botão:
+//
+//   PROMOVER  fila → coluna do quadro     ← a regra barra agrupador aqui
+//   MOVER     quadro → outra coluna/fila  ← e não diz nada sobre isto
+//
+// Pior: a guarda trancava justamente a via que TIRA do quadro os itens presos.
+{
+  const bl = fs.readFileSync(path.join(raiz, "src/components/BacklogSection.tsx"), "utf8");
+
+  check(
+    "a recusa só vale quando o destino é o QUADRO",
+    /const destinoEhQuadro = !!destino && catDestino !== "backlog";/.test(bl),
+  );
+  check(
+    "quem JÁ está no quadro não é barrado — isso é mover, não promover",
+    /if \(jaNoQuadro\) return false;/.test(bl),
+  );
+  check(
+    "e mandar de volta para a fila nunca é barrado",
+    /!destinoEhQuadro \? \[\]/.test(bl),
+  );
+  check(
+    "a recusa fecha o diálogo — sem aviso sobre formulário aberto",
+    /setMoveDialogOpen\(false\);[\s\S]{0,220}title: motivo\?\.titulo/.test(bl),
+  );
+  check(
+    "o botão 'Mudar status' NÃO tem guarda própria — ela mediria a operação errada",
+    /onClick=\{\(\) => setMoveDialogOpen\(true\)\}>\s*\n\s*<ArrowRight/.test(bl),
+  );
+}
+
+
 console.log(`\n  ${ok} passaram, ${falhou} falharam\n`);
 process.exit(falhou > 0 ? 1 : 0);

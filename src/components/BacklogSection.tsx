@@ -1379,9 +1379,45 @@ export const BacklogSection = ({
      * A versão boa — promover o pacote e trazer as atividades dele — está na
      * fila. Até lá, recusar explica; aceitar esconde.
      */
-    const naoPromoviveis = idsBrutos.filter((id) => {
+    /**
+     * RECUSAR PROMOVER NÃO É RECUSAR MOVER — e confundir os dois quebra a tela.
+     *
+     * Este botão chama-se "Mudar status" e faz DUAS coisas:
+     *
+     *   PROMOVER  fila → coluna do quadro
+     *   MOVER     coluna do quadro → outra coluna, ou de volta para a fila
+     *
+     * A regra de 27/08 barra a PRIMEIRA: agrupador não vai para o quadro,
+     * porque lá ele não vira cartão e some. Ela não diz nada sobre a segunda.
+     *
+     * A primeira versão desta guarda ignorou a distinção e barrava as duas —
+     * e o efeito foi relatado com captura: uma fase que JÁ ESTAVA em "Em
+     * Andamento" não podia ser movida nem para outra coluna nem de volta para
+     * o backlog. Ficava presa, e o aviso dizia "não vão para o quadro" sobre
+     * um item que já estava nele.
+     *
+     * Pior: era exatamente a via que tira do quadro os 68 itens presos. A
+     * guarda trancava a porta de saída.
+     */
+    const destino = allStages.find((s2) => s2.id === targetStageId);
+    const catDestino = destino
+      ? parseWorkflowCategory((destino as { categoria?: string }).categoria)
+        ?? categoryFromLegacyFlags(destino as never)
+      : null;
+    const destinoEhQuadro = !!destino && catDestino !== "backlog";
+
+    const naoPromoviveis = !destinoEhQuadro ? [] : idsBrutos.filter((id) => {
       const a = activities.find((x) => x.id === id);
-      return a ? !podePromover(a as never) : false;
+      if (!a) return false;
+      // Já está no quadro? Então isto é MOVER, e mover é permitido.
+      const atual = allStages.find((s2) => s2.id === a.workflow_stage_id);
+      const catAtual = atual
+        ? parseWorkflowCategory((atual as { categoria?: string }).categoria)
+          ?? categoryFromLegacyFlags(atual as never)
+        : null;
+      const jaNoQuadro = !!atual && catAtual !== "backlog";
+      if (jaNoQuadro) return false;
+      return !podePromover(a as never);
     });
 
     const ids = idsBrutos.filter(
@@ -1394,6 +1430,10 @@ export const BacklogSection = ({
       const a = activities.find((x) => x.id === naoPromoviveis[0]);
       const motivo = a ? motivoNaoPromove(a as never) : null;
       setIsMoving(false);
+      // FECHA O DIÁLOGO. Sem isto o aviso aparece por cima de um formulário que
+      // continua aberto, com o botão "Confirmar" convidando a tentar de novo —
+      // a tela dizendo "não vai funcionar" e oferecendo o botão ao mesmo tempo.
+      setMoveDialogOpen(false);
       toast({
         title: motivo?.titulo ?? "Este item não vai para o quadro",
         description: motivo?.descricao,
