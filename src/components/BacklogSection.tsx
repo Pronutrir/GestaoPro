@@ -70,7 +70,7 @@ import {
   formatarHoras,
   formatarCusto,
   codigoParaExibir,
-
+  textoDaFaixa,
 } from "@/lib/mesaDePlanejamento";
 import { useAuth } from "@/contexts/AuthContext";
 import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
@@ -135,7 +135,7 @@ interface Activity {
 }
 
 /** Os chips de recorte rápido do topo. Combinam por E. */
-type RecorteRapido = "minhas" | "sem-resp" | "sem-data";
+type RecorteRapido = "minhas" | "sem-resp" | "sem-data" | "no-quadro";
 
 interface BacklogSectionProps {
   projectId: string;
@@ -358,10 +358,22 @@ export const BacklogSection = ({
   const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
     { id: "assigned_to", label: "Responsável", width: "minmax(96px,168px)", align: "left" },
     { id: "end_date", label: "Previsto", width: "minmax(104px,132px)", align: "left" },
+    /**
+     * SITUAÇÃO — onde o item está, e ela só fala quando tem o que dizer.
+     *
+     * A coluna Status tinha saído do desenho por uma premissa errada: a de que
+     * o backlog lista apenas itens da fila. Ele lista TODOS — medido no projeto
+     * de teste: 141 vivos, 5 já no quadro, misturados e indistinguíveis.
+     *
+     * Quem está na fila mostra VAZIO — sem traço, sem palavra, sem
+     * placeholder. Um traço em 136 de 141 linhas seria ruído, e o vazio já
+     * significa "na fila" por ser o estado normal desta tela.
+     */
+    { id: "situacao", label: "Situação", width: "minmax(92px,124px)", align: "left" },
     { id: "hours", label: "Esforço", width: "minmax(48px,68px)", align: "left" },
     { id: "priority", label: "GUT", width: "minmax(44px,64px)", align: "left" },
   ];
-  const BACKLOG_COLS_DEFAULT = ["assigned_to", "end_date", "hours", "priority"];
+  const BACKLOG_COLS_DEFAULT = ["assigned_to", "end_date", "situacao", "hours", "priority"];
   const backlogColsKey = `backlog-cols:${projectId}`;
   const [visibleCols, setVisibleCols] = useState<string[]>(() => {
     if (typeof window === "undefined") return BACKLOG_COLS_DEFAULT;
@@ -396,7 +408,10 @@ export const BacklogSection = ({
   // Quando o espaço aperta, some com as colunas menos essenciais em vez de
   // criar rolagem lateral. Ordem de descarte = da menos para a mais decisiva
   // na leitura do backlog; tarefa e ações nunca saem.
-  const DROP_ORDER = ["hours", "end_date", "assigned_to", "status", "priority"];
+  // situacao entra na ordem de descarte, mas TARDE: ela responde "isto já
+  // está sendo feito?", que é decisão, enquanto esforço e previsto são
+  // referência. Some antes de responsável e GUT, e depois de horas e datas.
+  const DROP_ORDER = ["hours", "end_date", "situacao", "assigned_to", "status", "priority"];
   const chosenCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
   const activeCols = (() => {
     // 0 = ainda não medido (primeiro render): mostra tudo e deixa o
@@ -717,6 +732,22 @@ export const BacklogSection = ({
    * Serve só ao RECORTE OPCIONAL "ver só o que não começou" — a aba mostra o
    * projeto inteiro por padrão, e nada some daqui por ter ido para o quadro.
    */
+  /**
+   * Quantos de um grupo ainda estão NA FILA — para a faixa dizer "4 de 6".
+   *
+   * Usa a categoria `backlog` da coluna, não o helper `naFila` abaixo: aquele
+   * conta "a_iniciar" como fila porque responde outra pergunta ("o que ainda
+   * não começou"). "Não iniciado" é coluna do quadro.
+   */
+  const contarNaFila = (itens: { workflow_stage_id?: string | null }[]): number =>
+    itens.filter((a) => {
+      const col = allStages.find((s2) => s2.id === a.workflow_stage_id);
+      if (!col) return true;
+      const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+        ?? categoryFromLegacyFlags(col as never);
+      return cat === "backlog";
+    }).length;
+
   const naFila = (a: Activity): boolean => {
     if (!a.workflow_stage_id) return true;
     const col = allStages.find((s) => s.id === a.workflow_stage_id);
@@ -828,6 +859,16 @@ export const BacklogSection = ({
           if ((a.assigned_to ?? "").trim()) return false;
         }
         if (recortesAtivos.has("sem-data") && a.end_date) return false;
+        // "No quadro": o que já foi promovido. Deriva da coluna, como a coluna
+        // SITUAÇÃO — e pela mesma razão não usa o helper `naFila`, que conta
+        // "a_iniciar" como fila.
+        if (recortesAtivos.has("no-quadro")) {
+          const col = allStages.find((s2) => s2.id === a.workflow_stage_id);
+          if (!col) return false;
+          const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+            ?? categoryFromLegacyFlags(col as never);
+          if (cat === "backlog") return false;
+        }
         return true;
       };
       const passaram = new Set(vivas.filter(atende).map((a) => a.id));
@@ -2166,6 +2207,45 @@ export const BacklogSection = ({
           </span>
         );
       }
+      /**
+       * SITUAÇÃO — vazia na fila, ponto + palavra no quadro.
+       *
+       * A pergunta que ela responde é "isto já está sendo feito?". Para quem
+       * está na fila a resposta é "não", e o VAZIO já diz isso: é o estado
+       * normal desta tela, e um traço em 136 de 141 linhas seria ruído.
+       *
+       * O estágio deriva da COLUNA, via `ehColunaDeBacklog` — nunca do campo
+       * `estagio`, que existe no banco mas nasceu como espelho e ninguém lê.
+       * Ler dois lugares recria a divergência.
+       *
+       * O ponto é o mesmo de 7px do status, com a cor da coluna; a palavra é o
+       * título real da coluna do projeto ("Não iniciado", "Em Andamento",
+       * "Pendências", "Concluída"), não um enum traduzido no componente.
+       */
+      if (colId === "situacao") {
+        // NÃO usa o helper `naFila` daqui de cima: ele conta "a_iniciar" como
+        // fila, porque responde "o que ainda não começou" — outra pergunta.
+        // "Não iniciado" É coluna do quadro, e um item lá foi promovido.
+        // Só a categoria `backlog` significa fila.
+        const cat = stg
+          ? parseWorkflowCategory((stg as { categoria?: string }).categoria)
+            ?? categoryFromLegacyFlags(stg as never)
+          : null;
+        const estaNaFila = !stg || cat === "backlog";
+        if (estaNaFila) return <span key="situacao" aria-hidden="true" />;
+        return (
+          <span key="situacao" className="min-w-0 flex items-center gap-1.5">
+            <span
+              className="w-[7px] h-[7px] rounded-full shrink-0"
+              style={{ backgroundColor: stg.color }}
+              aria-hidden="true"
+            />
+            <span className="truncate text-muted-foreground" title={`No quadro: ${stg.title}`}>
+              {stg.title}
+            </span>
+          </span>
+        );
+      }
       // ── Decisão 2 — status é um ponto de 7px, não uma pílula ─────────────
       //
       // Em 200 linhas, pílula colorida vira listra: a cor deixa de destacar e
@@ -2912,7 +2992,7 @@ export const BacklogSection = ({
                   className="text-[11px] text-muted-foreground tabular-nums"
                   title="Somado no servidor a partir das subatividades"
                 >
-                  {resumo.itens} no backlog
+                  {textoDaFaixa(resumo.itens, contarNaFila(acts))}
                   {horas && <> · {horas}</>}
                   {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                 </span>
@@ -3135,7 +3215,7 @@ export const BacklogSection = ({
                   className="text-[11px] text-muted-foreground tabular-nums"
                   title="Somado no servidor a partir das subatividades"
                 >
-                  {resumo.itens} no backlog
+                  {textoDaFaixa(resumo.itens, contarNaFila(subs))}
                   {horas && <> · {horas}</>}
                   {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                 </span>
@@ -3267,6 +3347,15 @@ export const BacklogSection = ({
       minhas: ehMinha ? folhas.filter((a) => ehMinha(a)).length : 0,
       semResponsavel: folhas.filter((a) => !a.is_milestone && !(a.assigned_to ?? "").trim()).length,
       semData: folhas.filter((a) => !a.end_date).length,
+      // Promovidos: o que já saiu da fila. Conta folhas, como os outros
+      // recortes — um agrupador no quadro é faixa, não trabalho promovido.
+      noQuadro: folhas.filter((a) => {
+        const col = allStages.find((s2) => s2.id === a.workflow_stage_id);
+        if (!col) return false;
+        const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+          ?? categoryFromLegacyFlags(col as never);
+        return cat !== "backlog";
+      }).length,
     };
   })();
 
@@ -3388,6 +3477,7 @@ export const BacklogSection = ({
               ehMinha ? { id: "minhas" as const, lab: "Minhas", n: recortes.minhas } : null,
               { id: "sem-resp" as const, lab: "Sem responsável", n: recortes.semResponsavel },
               { id: "sem-data" as const, lab: "Sem data", n: recortes.semData },
+              { id: "no-quadro" as const, lab: "No quadro", n: recortes.noQuadro },
             ].filter(Boolean) as { id: RecorteRapido; lab: string; n: number }[])
               .filter((c) => c.n > 0)
               .map((c) => {
@@ -4021,7 +4111,7 @@ export const BacklogSection = ({
                         className="text-[11px] text-muted-foreground tabular-nums"
                         title="Somado no servidor a partir das subatividades"
                       >
-                        {resumo.itens} no backlog
+                        {textoDaFaixa(resumo.itens, contarNaFila(lane.items))}
                         {horas && <> · {horas}</>}
                         {isCollapsed && <span className="text-muted-foreground/60"> · recolhido</span>}
                       </span>

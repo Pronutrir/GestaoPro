@@ -207,5 +207,44 @@ check(
   /diasAte\(activity\.end_date\)/.test(backlog),
 );
 
+// ── A COLUNA SITUAÇÃO, O CHIP E A FAIXA (27/08/2026) ─────────────────────
+//
+// A coluna Status tinha saído do desenho por uma premissa errada: a de que o
+// backlog lista só a fila. Ele lista TODOS — 141 vivos no projeto de teste, 5
+// já no quadro, indistinguíveis.
+{
+  const mesa = ler("src/lib/mesaDePlanejamento.ts");
+  const bl = backlog;
+
+  // A regra da faixa mora na lib, não na tela — é o que esta suíte cobra.
+  check("textoDaFaixa vive em lib/mesaDePlanejamento",
+    /export function textoDaFaixa/.test(mesa));
+  check("a faixa diz 'N de M' só quando parte foi promovida",
+    mesa.includes("naFila === total") && mesa.includes("de ${total} no backlog"));
+  check("e a tela CONSOME textoDaFaixa em vez de montar a frase",
+    bl.includes("textoDaFaixa(resumo.itens, contarNaFila(")
+    && !bl.includes("{resumo.itens} no backlog"));
+
+  check("a coluna SITUAÇÃO existe, entre PREVISTO e ESFORÇO",
+    /\{ id: "end_date"[\s\S]{0,900}\{ id: "situacao"[\s\S]{0,200}\{ id: "hours"/.test(bl));
+  check("e vem visível por padrão",
+    /BACKLOG_COLS_DEFAULT = \[[^\]]*"situacao"/.test(bl));
+
+  // O vazio é decisão, não omissão: um traço em 136 de 141 linhas é ruído.
+  check("quem está na fila mostra célula VAZIA — sem traço, sem palavra",
+    /if \(estaNaFila\) return <span key="situacao" aria-hidden="true" \/>;/.test(bl));
+
+  // Não pode usar o helper `naFila`: ele conta "a_iniciar" como fila, e "Não
+  // iniciado" é coluna do QUADRO. Um item lá foi promovido.
+  check('a situação usa a categoria "backlog", não o helper naFila',
+    /const estaNaFila = !stg \|\| cat === "backlog";/.test(bl));
+
+  check("o chip 'No quadro' entra junto dos outros recortes",
+    /id: "no-quadro" as const, lab: "No quadro"/.test(bl));
+  check("e o recorte filtra de verdade",
+    /recortesAtivos\.has\("no-quadro"\)/.test(bl));
+}
+
+
 console.log(`\n  ${ok} passaram, ${falhou} falharam\n`);
 process.exit(falhou > 0 ? 1 : 0);
