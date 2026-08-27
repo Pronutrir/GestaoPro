@@ -286,51 +286,45 @@ são a mesma família — **o sistema deixou de mostrar onde as coisas estão**.
 
 ---
 
-## 6 · A tela da atividade — BLOQUEADA pelo desenho, não por código
+## 6 · A tela da atividade — CONSTRUÍDA (parcial)
 
-**Pedida em 27/08. Não foi construída, e o motivo é verificável.**
+**Feita em 27/08.** A rota `/project/:id/atividade/:activityId` deixou de
+redirecionar e passou a abrir a tela nova.
 
-A instrução era: *"Referência: docs/design/GESTAO-PRO-DESENHO.html. Seção 02 é a
-principal."* Fui ler a seção 02 e ela **não tem conteúdo**:
+### Correção do que este documento dizia antes
 
-| seção | conteúdo |
+Registrei aqui que a seção 02 tinha 23 caracteres e estava cortada, e por isso
+não construí. **Eu media errado** — extraía do `<h2>` até o `<h2>` seguinte, e
+o conteúdo vive num `<div class="palco">` depois do cabeçalho. Medida pelos ids
+das seções: **02 tem 2.236 caracteres, completa**, com layout, blocos e feed.
+
+### O que está pronto
+
+| | |
 |---|---|
-| 01 · Atividade — como é hoje | 28 caracteres |
-| **02 · Atividade — editar** | **23 caracteres** |
-| 03 · Atividade — criar | 22 caracteres |
-| 04 · Atividade — visualizar | 8.846 (é a única com corpo) |
-| 07 · Tipo e hierarquia da EAP | 2.514 |
+| rota própria | `/project/[id]/atividade/[activityId]`, no build (12,5 kB) |
+| uma tela, três estados | `editar` · `visualizar` · `criar` no mesmo componente |
+| trilha | lê `activity_breadcrumb`, que nenhuma tela usava |
+| resumo | responsáveis no plural, participantes, previsto, realizado, esforço, GUT, fase, pacote, origem, custo |
+| subatividades | com total vindo de `derived_*` |
+| o sino | feed com evento e comentário, marcando "na subatividade" |
+| edição no lugar | sem modo Editar; campo sem permissão vira **texto** |
+| botões | sem permissão **não aparecem** — nunca apagados |
 
-A 02 termina em `Proposto · tela inteira rota própria ·
-/project/[id]/atividade/[id] <div style="display` — HTML cru, cortado no meio.
+Travado por 23 asserções em `verificar-tela-da-atividade-v2.cjs`, incluindo uma
+que conta as colunas da trilha e falha se alguma proibida entrar.
 
-**O próprio documento registra isso**, na última seção:
+### O que falta nela
 
-> *"O envio integral foi cortado no meio da seção 04, nas duas tentativas.
-> Estas seis ainda não chegaram, e nada foi inventado no lugar delas."*
-
-### O que existe e serve
-
-- os **tokens de produção** (cores, raios, fonte) — completos;
-- as **regras não negociáveis** — completas;
-- a seção **07**, pré-requisito da 03 — completa.
-
-### O que falta, e por que não dá para suprir
-
-O **layout**: onde cada bloco fica, a proporção das colunas, o comportamento dos
-quatro estados de um campo (seção 06), os três estados lado a lado (seção 05), e
-de onde se cria (seção 08). São exatamente as seções que não chegaram.
-
-Construir sem elas seria inventar o desenho e chamar de implementação — e a
-instrução do dia em que o desenho foi entregue era explícita: *"Se algum valor do
-desenho conflitar com o que já existe, PARE e me pergunte em vez de escolher
-sozinho."* Inventar o layout inteiro é mais que escolher um valor.
-
-### Para destravar
-
-Reenviar as seções **02, 05, 06 e 08**. A observação do próprio pedido continua
-valendo: *"arrastar o arquivo direto para a pasta docs/design/ no VS Code evita
-o corte por completo."*
+- **descrição rica** — hoje é texto multilinha; falta lista de conferência,
+  link e @menção (o desenho mostra as três);
+- **o feed ligado ao banco** — a coluna existe e desenha, mas recebe `[]`:
+  falta consumir `feed_da_subarvore`;
+- **estado "criar" ligado** — o componente aceita `estado="criar"` e tem
+  "Criar e continuar criando", mas nenhuma rota o aciona ainda;
+- **lição aprendida** — o formulário de 4 campos não foi feito;
+- **seções 05, 06 e 08** do desenho continuam ausentes, e são o que descreve
+  os quatro estados de um campo e de onde se cria.
 
 ---
 
