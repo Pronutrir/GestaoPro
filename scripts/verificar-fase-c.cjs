@@ -100,17 +100,21 @@ check("a tela de editar carrega o feed de verdade — não recebe []",
   /carregarFeed\(activityId\)/.test(editar) && !/feed=\{\[\]\}/.test(editar));
 check("marca lido e zera o contador",
   /marcarFeedVisto\(activityId/.test(editar));
-check("comentar registra evento e recarrega",
-  /tipo: "comentou"/.test(editar));
-check("gravar campo gera a linha do feed — a confirmação é ela",
-  /tipo: "mudou_campo"/.test(editar));
+// Estas quatro descreviam o desenho ANTERIOR — o da tabela de eventos que eu
+// ia criar. Ao conferir o banco, a fase 08 já tinha o feed pronto, e o desenho
+// mudou: os eventos vêm da view, e o que a tela faz é ler e traduzir.
+check("comentar grava em activity_comments — de onde a view lê",
+  editar.includes('from("activity_comments")'),
+  "uma segunda tabela de comentários faria a conversa existir em dois lugares");
 check(
-  "o evento só é registrado DEPOIS de o count confirmar a escrita",
-  /if \(!count\) throw[\s\S]{0,900}registrarEvento/.test(editar),
-  "um feed que anuncia o que o banco recusou é pior que feed nenhum",
+  "a gravação NÃO registra evento à mão — o histórico já é trigger",
+  !editar.includes("registrarEvento"),
+  "registrar de novo produziria a mesma mudança duas vezes na coluna",
 );
 check("o que subiu da filha é marcado como 'na subatividade'",
-  /naSubatividade: e\.activity_id !== e\.feed_de/.test(editar));
+  editar.includes("naSubatividade: !e.ehraiz"));
+check("a frase vem de fraseDoEvento — o de-para num lugar só",
+  editar.includes("texto: fraseDoEvento(e)"));
 
 /* ── 5. LIÇÃO APRENDIDA ──────────────────────────────────────────────────── */
 check("quatro campos, e nenhum a mais",

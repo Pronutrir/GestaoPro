@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { registrarEvento } from "@/lib/telaDaAtividadeDados";
 
 /**
  * TRANSFORMAR EM LIÇÃO APRENDIDA — seção 08 do desenho.
@@ -95,12 +94,20 @@ export function LicaoAprendida({
       } as never);
       if (error) throw new Error(error.message);
 
-      await registrarEvento({
-        activityId,
-        tipo: "licao",
-        texto: `${autorNome} registrou uma lição aprendida: “${problema.slice(0, 80)}”`,
-        autorId, autorNome,
-      }).catch(() => {});
+      /**
+       * A LINHA NO FEED vem de um comentário, não de um evento próprio.
+       *
+       * A view `activity_feed_events` lê conversa + histórico. Um comentário
+       * dizendo o que foi registrado aparece no feed pelo caminho que já
+       * existe — e fica legível para quem abrir a atividade meses depois, sem
+       * precisar de um tipo de evento novo que só este fluxo produz.
+       */
+      await supabase.from("activity_comments").insert({
+        activity_id: activityId,
+        content: `Lição aprendida registrada: "${problema.slice(0, 120)}"`,
+        author: autorNome,
+        created_by: autorId ?? null,
+      } as never);
 
       // A CONCLUSÃO VEM DEPOIS, e só se pedida. Se ela falhar, a lição já está
       // gravada — e é melhor ter a lição sem a conclusão do que perder as duas.

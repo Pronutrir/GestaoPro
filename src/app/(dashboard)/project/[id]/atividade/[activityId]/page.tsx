@@ -18,7 +18,7 @@ import {
   carregarFeed,
   contarNaoLidos,
   marcarFeedVisto,
-  registrarEvento,
+  fraseDoEvento,
   agruparPorDia,
   type DegrauDaTrilha,
   type PessoaDaAtividade,
@@ -183,32 +183,15 @@ export default function PaginaDaAtividade() {
     if (!count) throw new Error("o banco recusou a alteração — você tem permissão sobre esta atividade?");
 
     /**
-     * A CONFIRMAÇÃO É A LINHA NO FEED.
+     * A CONFIRMAÇÃO É A LINHA NO FEED — e ela é automática.
      *
-     * Não há "salvo com sucesso": sair do campo grava, e o que diz que gravou é
-     * o evento aparecendo na coluna da direita. Sem isso, gravar ao sair seria
-     * gravação silenciosa — e a regra do "sucesso sem escrita não é sucesso"
-     * exige que a pessoa VEJA o resultado, não que confie nele.
+     * Não registro evento à mão aqui: o histórico de alterações já é gravado
+     * por trigger, e a view `activity_feed_events` o lê como tipo 'alteracao'.
+     * Registrar de novo produziria a mesma mudança duas vezes na coluna.
      *
-     * O evento só é registrado DEPOIS de o count confirmar a escrita: um feed
-     * que anuncia o que o banco recusou é pior que feed nenhum.
-     *
-     * A frase é montada AQUI, onde se sabe o que mudou — nunca na leitura.
+     * Foi o que a conferência do banco mostrou antes de eu aplicar: a fase 08
+     * já tinha entregue conversa + histórico numa linha do tempo só.
      */
-    const rotulo: Record<string, string> = {
-      title: "o nome", description: "a descrição", hours: "as horas previstas",
-    };
-    await registrarEvento({
-      activityId,
-      tipo: "mudou_campo",
-      texto: `${nomeDeQuemFez} alterou ${rotulo[campo] ?? campo}`,
-      dados: { campo, valor },
-      autorId: user?.id ?? null,
-      autorNome: nomeDeQuemFez,
-    }).catch(() => {
-      // O evento é registro, não a operação. Se ele falhar, a alteração já
-      // aconteceu — e esconder isso seria pior que um feed com um buraco.
-    });
 
     await carregar();
   }, [activityId, carregar, user?.id, nomeDeQuemFez]);
@@ -298,15 +281,15 @@ export default function PaginaDaAtividade() {
         feed={agruparPorDia(eventos, new Date().toISOString()).map((d) => ({
           rotulo: d.rotulo,
           eventos: d.eventos.map((e) => ({
-            id: e.id,
-            autor: e.autor_nome,
-            texto: e.texto,
-            hora: new Date(e.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-            // O evento que subiu de uma filha traz activity_id ≠ feed_de. É o
-            // que o desenho marca como "na subatividade".
-            naSubatividade: e.activity_id !== e.feed_de,
-            marco: e.tipo === "marco_pronto",
-            ehComentario: e.tipo === "comentou",
+            id: e.evento_id,
+            autor: e.autor,
+            // A frase vem de fraseDoEvento — o de-para mora num lugar só.
+            texto: fraseDoEvento(e),
+            hora: new Date(e.ocorrido_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            // `ehraiz: false` é o que a função devolve para o que veio de uma
+            // filha. É o "na subatividade" do desenho.
+            naSubatividade: !e.ehraiz,
+            ehComentario: e.tipo === "comentario",
           })),
         }))}
         naoLidos={naoLidos}
@@ -322,10 +305,14 @@ export default function PaginaDaAtividade() {
           setNaoLidos(0);
         } : undefined}
         aoComentar={caps.canComment ? async (texto: string) => {
-          await registrarEvento({
-            activityId, tipo: "comentou", texto,
-            autorId: user?.id ?? null, autorNome: nomeDeQuemFez,
-          });
+          // Grava em activity_comments, que é de onde a view do feed lê. Uma
+          // segunda tabela de comentários faria a conversa existir em dois
+          // lugares e divergir.
+          const { error } = await supabase.from("activity_comments").insert({
+            activity_id: activityId, content: texto,
+            author: nomeDeQuemFez, created_by: user?.id ?? null,
+          } as never);
+          if (error) throw new Error(error.message);
           await carregar();
         } : undefined}
         aoCancelar={() => router.push(`/project/${projectId}`)}

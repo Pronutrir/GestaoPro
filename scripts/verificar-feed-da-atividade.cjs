@@ -1,14 +1,28 @@
 #!/usr/bin/env node
 /**
- * O FEED DA ATIVIDADE — o que ACONTECEU, não o que disseram.
+ * O FEED DA ATIVIDADE — e a tabela que eu ia criar e NÃO precisava.
  *
- * Fase D. Era o primeiro pedido do Raphael e o único item da lista sem
- * estrutura nenhuma no banco.
+ * ============================================================================
+ * O ERRO QUE ESTE ARQUIVO REGISTRA
  *
- * O que este arquivo trava é a diferença que o diagnóstico da seção 01 aponta:
- * *"o histórico é um chat, não um feed."* Chat mostra o que as pessoas
- * digitaram; feed mostra o que aconteceu — inclusive o que ninguém digitou, e
- * inclusive o que aconteceu nas filhas.
+ * A Fase D pedia "crie a tabela de eventos da atividade". Eu criei — com
+ * trigger para subir o evento da filha para o pai, RLS, tudo.
+ *
+ * Era REDUNDANTE. Ao conferir o banco antes de aplicar, o próprio Postgres deu
+ * a dica: sugeriu `activity_feed_events`, que já existia. A fase 08 (migration
+ * 20260826170000) tinha entregue:
+ *
+ *   activity_feed_events   view que une CONVERSA + HISTÓRICO
+ *   feed_da_subarvore()    junta a subárvore, ordenada, com o código EAP
+ *
+ * "O que acontece nas subatividades aparece no feed da atividade principal"
+ * JÁ FUNCIONAVA. Confirmado com dado real: a função devolve eventos com
+ * `ehraiz: false`, que são os das filhas.
+ *
+ * O que faltava era UMA coisa: o não-lido, que precisa de um sujeito.
+ *
+ * A lição: "criar a tabela X" não é o pedido — o pedido é o EFEITO. Conferir o
+ * banco antes evitou duplicar o feed inteiro.
  */
 const { execFileSync } = require("child_process");
 const fs = require("fs");
@@ -27,110 +41,74 @@ try {
 
 let ok = 0, falhou = 0;
 const check = (nome, cond, extra) => {
-  console.log(`  ${cond ? "\x1b[32m✓" : "\x1b[31m✗"}\x1b[0m ${nome}`);
+  console.log(`  ${cond ? "[32m✓" : "[31m✗"}[0m ${nome}`);
   if (!cond && extra) console.log(`      ${extra}`);
   cond ? ok++ : falhou++;
 };
 
-console.log("\nO FEED DA ATIVIDADE — o que aconteceu, agrupado por dia\n");
+console.log("\nO FEED — consome o que a fase 08 já entregou\n");
 
 const mig = fs.readFileSync(
-  path.join(raiz, "supabase/migrations/20260827150000_feed_da_atividade.sql"), "utf8");
+  path.join(raiz, "supabase/migrations/20260827150000_feed_visitas.sql"), "utf8");
 const lib = fs.readFileSync(path.join(raiz, "src/lib/telaDaAtividadeDados.ts"), "utf8");
 
-/* ── 1. A ESTRUTURA ──────────────────────────────────────────────────────── */
-check("existe tabela de eventos", /CREATE TABLE IF NOT EXISTS public\.activity_feed_eventos/.test(mig));
-check("e tabela de visitas, separada — o não-lido é por pessoa",
-  /CREATE TABLE IF NOT EXISTS public\.activity_feed_visitas/.test(mig));
-check("a visita tem chave (pessoa, atividade) — uma marca por par",
-  /PRIMARY KEY \(user_id, activity_id\)/.test(mig));
+/* ── 1. NÃO DUPLICAR ─────────────────────────────────────────────────────── */
+// A migração MENCIONA `activity_feed_eventos` no comentário que explica por
+// que ela não a cria — e essa menção deve ficar. O que não pode existir é o
+// CREATE. Foi a primeira versão deste teste que confundiu os dois.
+check("a migration NÃO cria tabela de eventos — a fase 08 já tem",
+  !mig.includes("CREATE TABLE IF NOT EXISTS public.activity_feed_eventos"));
+check("e diz por quê, para ninguém tentar de novo",
+  mig.includes("REDUNDANTE") && mig.includes("fase 08"));
+check("o módulo consome feed_da_subarvore, não uma tabela própria",
+  lib.includes("rpc(\"feed_da_subarvore\""));
 
-/* ── 2. O EVENTO SOBE PARA O PAI ─────────────────────────────────────────
+/* ── 2. O QUE FALTAVA: O NÃO-LIDO ───────────────────────────────────────── */
+check("cria a tabela de visitas", mig.includes("CREATE TABLE IF NOT EXISTS public.activity_feed_visitas"));
+check("uma marca por (pessoa, atividade)", mig.includes("PRIMARY KEY (user_id, activity_id)"));
+check("a visita é da pessoa — ninguém lê a marca de outro",
+  mig.includes("user_id = auth.uid()"));
+check("e a migration FALHA se a policy não existir",
+  mig.includes("a policy da visita nao foi criada"));
+check("sem visita registrada, o não-lido é ZERO — não 'tudo'",
+  lib.includes("if (!desde) return 0;"));
+
+/* ── 3. O QUE SUBIU DA FILHA É MARCADO ──────────────────────────────────── */
+check("`ehraiz` distingue o que veio da subatividade",
+  lib.includes("ehraiz: boolean"));
+
+/* ── 4. A FRASE, NUM LUGAR SÓ ───────────────────────────────────────────── */
+check("o de-para de campos mora em fraseDoEvento",
+  lib.includes("export function fraseDoEvento"));
+check("tipo desconhecido não vira enum em inglês na tela",
+  lib.includes("registrou uma alteração"));
+
+/* ── 5. O AGRUPAMENTO POR DIA ───────────────────────────────────────────── */
+/* `agruparPorDia` é pura, mas mora num módulo que importa o cliente Supabase —
+ * e "@/" não resolve fora do bundler. Isolo a função compilada.
  *
- * É o coração da fase: "o que acontece nas subatividades aparece no feed da
- * atividade principal". Sem isso o trabalho das filhas fica invisível nos dois
- * lugares — elas não viram cartão, e o que fazem não chega a ninguém.
- */
-check("`feed_de` existe e é diferente de `activity_id` quando o evento sobe",
-  /feed_de\s+uuid NOT NULL/.test(mig));
-check("há trigger que sobe o evento para o pai",
-  /CREATE TRIGGER trg_feed_evento_sobe/.test(mig));
-check(
-  "e ela NÃO re-sobe o que já subiu — senão a fase teria a mesma linha N vezes",
-  /IF NEW\.activity_id IS DISTINCT FROM NEW\.feed_de THEN\s*\n\s*RETURN NEW;/.test(mig),
-);
-check(
-  "sobe UM nível, não até a raiz — o feed da fase encheria de horas de netas",
-  /SELECT parent_id INTO v_pai/.test(mig) && !/WITH RECURSIVE/.test(mig),
-);
-
-/* ── 3. HISTÓRICO LEGÍVEL: SEM UUID, SEM ENUM EM INGLÊS ─────────────────── */
-check("o texto é NOT NULL e vem pronto do banco",
-  /texto\s+text NOT NULL/.test(mig));
-check(
-  "a frase é montada na ORIGEM, não com de-para na leitura",
-  /Resolver o rótulo na origem/.test(lib) || /montada na ORIGEM/.test(lib),
-);
-check("o nome do autor é guardado junto — o histórico sobrevive ao perfil sumir",
-  /autor_nome\s+text/.test(mig));
-
-/* ── 4. O NÃO-LIDO ───────────────────────────────────────────────────────── */
-check("conta desde a última visita", /gt\("created_at", desde\)/.test(lib));
-check(
-  "sem visita registrada, o não-lido é ZERO — não 'tudo'",
-  /if \(!desde\) return 0;/.test(lib),
-  "marcar tudo como novo faria o sino gritar em toda atividade nunca aberta",
-);
-
-/* ── 5. O AGRUPAMENTO POR DIA ────────────────────────────────────────────── */
-/* `agruparPorDia` é função PURA, mas mora num módulo que importa o cliente
- * Supabase — e o alias "@/" não resolve fora do bundler. Em vez de carregar o
- * módulo inteiro (que falha no import), isolo a função compilada e a avalio
- * sozinha. Assim o teste roda o CÓDIGO REAL sem arrastar a infraestrutura. */
+ * O corte para na PRÓXIMA declaração, não no fim do arquivo: quando
+ * `fraseDoEvento` entrou depois dela, cortar no último `}` arrastava as duas e
+ * o eval falhava com "Unexpected token 'function'". */
 const agruparPorDia = (() => {
   const js = fs.readFileSync(path.join(saida, "telaDaAtividadeDados.js"), "utf8");
   const i = js.indexOf("function agruparPorDia");
   if (i < 0) throw new Error("agruparPorDia não encontrada no compilado");
-  // até o fecha-chaves da função, que é a última do arquivo
-  const corpo = js.slice(i);
-  const fim = corpo.lastIndexOf("}");
-  // eslint-disable-next-line no-eval
-  return eval("(" + corpo.slice(0, fim + 1) + ")");
+  const resto = js.slice(i);
+  const proxima = resto.indexOf("\nfunction ", 1);
+  const corpo = proxima > 0 ? resto.slice(0, proxima) : resto;
+  return eval("(" + corpo.slice(0, corpo.lastIndexOf("}") + 1) + ")");
 })();
-const ev = (id, iso) => ({ id, tipo: "x", texto: "t", autor_nome: null, created_at: iso, activity_id: "a", feed_de: "a" });
-const grupos = agruparPorDia(
-  [ev("1", "2026-08-27T14:12:00Z"), ev("2", "2026-08-27T11:40:00Z"), ev("3", "2026-08-26T17:22:00Z"), ev("4", "2026-08-20T09:00:00Z")],
-  "2026-08-27T18:00:00Z",
-);
-check("agrupa em Hoje / Ontem / data",
-  grupos.map((g) => g.rotulo).join("|") === "Hoje|Ontem|20/08/2026",
-  grupos.map((g) => g.rotulo).join("|"));
-check("o dia mais recente vem primeiro", grupos[0].rotulo === "Hoje");
-check("e os eventos do dia ficam juntos", grupos[0].eventos.length === 2);
-check(
-  "`hojeISO` entra por parâmetro — senão é impossível testar a virada do dia",
-  /hojeISO: string/.test(lib),
-);
+const ev = (id, iso) => ({ evento_id: id, ocorrido_em: iso, tipo: "alteracao", autor: null, ehraiz: true });
+const g = agruparPorDia(
+  [ev("1", "2026-08-27T14:12:00Z"), ev("2", "2026-08-27T11:40:00Z"), ev("3", "2026-08-26T17:22:00Z")],
+  "2026-08-27T18:00:00Z");
+check("agrupa em Hoje / Ontem", g.map((x) => x.rotulo).join("|") === "Hoje|Ontem");
+check("e os do dia ficam juntos", g[0].eventos.length === 2);
+check("`hojeISO` é parâmetro — senão a virada do dia não se testa",
+  lib.includes("hojeISO: string"));
 
-/* ── 6. O FEED NÃO É PORTA LATERAL ──────────────────────────────────────── */
-//
-// Toda lista que atravessa atividades consome a MESMA camada de acesso. Um
-// feed com RLS própria seria uma segunda regra, e ela divergiria.
-check("RLS ligada nas duas tabelas",
-  /ALTER TABLE public\.activity_feed_eventos ENABLE ROW LEVEL SECURITY/.test(mig)
-  && /ALTER TABLE public\.activity_feed_visitas ENABLE ROW LEVEL SECURITY/.test(mig));
-check("a leitura delega para a RLS de activities — não inventa regra",
-  /EXISTS \(SELECT 1 FROM public\.activities a WHERE a\.id = activity_feed_eventos\.feed_de\)/.test(mig));
-check("a visita é da pessoa: ninguém lê a marca de outro",
-  /user_id = auth\.uid\(\)/.test(mig));
-
-/* ── 7. O ROLLBACK AVISA DO QUE APAGA ───────────────────────────────────── */
-const rb = fs.readFileSync(
-  path.join(raiz, "supabase/migrations/20260827150001_feed_da_atividade_rollback.sql"), "utf8");
-check("o rollback avisa que apaga histórico que não existe em outro lugar",
-  /nao existem em outro lugar/.test(rb));
-check("e oferece a saída menor: derrubar só a trigger",
-  /derrube a TRIGGER e deixe/.test(rb));
-
-console.log(`\n  ${ok} passaram, ${falhou} falharam\n`);
+console.log(`
+  ${ok} passaram, ${falhou} falharam
+`);
 process.exit(falhou === 0 ? 0 : 1);

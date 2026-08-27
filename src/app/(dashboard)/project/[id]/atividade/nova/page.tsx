@@ -5,11 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { TelaDaAtividade, type DadosDaTela } from "@/components/atividade/TelaDaAtividade";
-import {
-  carregarTrilha,
-  registrarEvento,
-  type DegrauDaTrilha,
-} from "@/lib/telaDaAtividadeDados";
+import { carregarTrilha, type DegrauDaTrilha } from "@/lib/telaDaAtividadeDados";
 import {
   resolveEapKind,
   eapTiposQuePodeCriar,
@@ -145,13 +141,9 @@ export default function PaginaCriarAtividade() {
       if (error) throw new Error(error.message);
       const novoId = String((data as Record<string, unknown>).id);
 
-      await registrarEvento({
-        activityId: novoId,
-        tipo: "criou",
-        texto: `${nomeDeQuemFez} criou esta atividade`,
-        autorId: user?.id ?? null,
-        autorNome: nomeDeQuemFez,
-      }).catch(() => {});
+      // O "Raphael criou esta atividade" NÃO é escrito aqui: o histórico de
+      // alterações já é gravado por trigger, e a view do feed o lê. Registrar
+      // à mão produziria a linha duas vezes.
 
       if (continuar) {
         // Reabre em branco, no MESMO pacote, com o código já avançado.
