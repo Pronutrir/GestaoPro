@@ -376,6 +376,11 @@ export interface Activity {
   updated_at?: string;
   assigned_to: string | null;
   start_date: string | null;
+  /** Datas REAIS. Existem na tabela desde sempre e o tipo da tela não as
+   *  declarava — por isso o painel mostrava só o previsto, que é o
+   *  "uma data só, sem realizado" do diagnóstico da seção 01. */
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
   end_date: string | null;
   cost: number;
   hours: number;
