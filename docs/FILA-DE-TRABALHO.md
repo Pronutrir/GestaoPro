@@ -199,6 +199,21 @@ assim; em **C** o build pode subir.
 
 ---
 
+## 4 · O marco promovido no projeto de teste
+
+**Achado durante o incidente de 27/08, e não causado por ele.**
+
+`904fbbf3` — *Milestone 1 - Lançamento do Projeto* — está com
+`estagio='quadro'`, na coluna "Em Andamento", **mas marco nunca vira cartão**.
+Alguém o promoveu em algum momento e o quadro simplesmente nunca o desenhou.
+
+Provavelmente deve voltar para a fila, mas é decisão de quem cuida do projeto.
+Ficou **de fora** do script de incidente de propósito: consertar de passagem o
+que o incidente não causou é como se perde a fronteira do que foi mexido e por
+quê.
+
+---
+
 ## Esperando gente, não código
 
 - **Quem publicou** em 26/08 18:01 e em 27/08 12:08 — e qual `APP_VERSION`.
