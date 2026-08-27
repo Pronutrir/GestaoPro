@@ -18,16 +18,18 @@
 -- novo.
 --
 -- ============================================================================
--- ALCANCE REAL: 60 LINHAS, NAO 13
+-- ALCANCE REAL: 60 LINHAS, NAO 11
 --
--- As 13 sao as VIVAS. Ha 49 marcos na lixeira igualmente sujos, e lixeira nao e
+-- As 11 sao as VIVAS. Ha 49 marcos na lixeira igualmente sujos, e lixeira nao e
 -- destino final: restaurar um deles devolveria o dado sujo. Limpar so o vivo
 -- seria consertar a metade que da para ver.
 --
---   marcos na tabela ... 200   (49 vivos, 151 na lixeira)
+-- Contado em 27/08/2026, direto da tabela:
+--
+--   marcos na tabela ... 220   (57 vivos, 163 na lixeira)
+--   sujos .............. 60    (11 vivos, 49 na lixeira)
 --   com assigned_to .... 60
---   com GUT ............ 3
---   linhas distintas ... 60
+--   com GUT ............ 3     (subconjunto dos 60, nao soma)
 --
 -- ROLLBACK: 20260827120001 — devolve os valores a partir da sombra.
 -- ============================================================================
