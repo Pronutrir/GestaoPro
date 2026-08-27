@@ -2,6 +2,10 @@
 
 > Relatado com captura: `1.1 · 1ª. Fase - Planejamento e Lançamento` aparece
 > **duas vezes seguidas** — uma sem ID, outra com `8277fd5`.
+>
+> Confirmado no projeto `dcf977e9` (Revitalização Tasy):
+> `phases` tem `"1.1 1ª. Fase - Planejamento e Lançamento"` (id `54cee826`) e
+> `activities` tem `"1ª. Fase - Planejamento e Lançamento"` (id `8277fd50`).
 
 ---
 
@@ -41,9 +45,33 @@ coluna certa. Comparando texto cru, são strings diferentes; para quem lê a tel
 |---|---|
 | fases em `phases` | **64** |
 | atividades com `item_type='fase'` | **837** |
-| **duplicadas** (mesmo título, normalizado) | **34**, em **6 projetos** |
+| **duplicadas** (mesmo título, normalizado) | **60**, em **10 projetos** |
 | atividades que apontam para uma `phase` | 2.218 de 3.209 |
 | projetos com linhas em `phases` | 14 de 45 |
+
+| duplicatas | projeto |
+|---|---|
+| **16** | **Revitalização Tasy** ← o da captura |
+| 13 | Serviço de Ultrassonografia |
+| 9 | Guia Jornada do Paciente — Desenvolvimento |
+| 5 | Projeto Escritório de Processos |
+| ≤4 | e mais 6 projetos (quase todos "Teste …") |
+
+Lista completa, com os dois ids de cada par, em
+[fase-duplicada-27-08-2026.csv](fase-duplicada-27-08-2026.csv).
+
+### ⚠ A primeira contagem foi baixa, e o erro era meu
+
+Contei **34 em 6 projetos** antes de corrigir a normalização. O regex que
+removia o código do início do título era `^s*[d.]+s*` — e ele comia o
+`1` de `"1ª. Fase"`, produzindo `"ª. fase…"` de um lado e `"1ª. fase…"` do
+outro. Os pares não casavam.
+
+Pior: **"Revitalização Tasy" ficava de fora** — justamente o projeto da captura.
+Um número que não inclui o caso relatado está errado, e foi isso que denunciou.
+
+Corrigido para `^s*d+(.d+)*s+` — só remove código seguido de **espaço**.
+"1ª" não é código EAP.
 
 `phases` **não é vestigial** — 2.218 atividades dependem dela. O problema é a
 sobreposição: em 6 projetos alguém criou a fase nos dois lugares.
