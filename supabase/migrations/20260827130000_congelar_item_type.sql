@@ -334,6 +334,58 @@ BEGIN
 END $ponto_fixo$;
 
 -- ---------------------------------------------------------------------------
+-- 4c) O TRIGGER DE ANINHAMENTO PRECISA APRENDER OS VALORES NOVOS
+--
+-- Isto nao e detalhe: sem este passo, o congelamento QUEBRA A ARVORE.
+--
+-- `eap_is_group` (migration 20260722160000) decide quem pode ter filhos, e a
+-- lista dela e ('fase', 'pacote', 'historia_usuario'). O congelamento passa a
+-- gravar 'entrega' e 'projeto', que nao estao la. O efeito, medido antes de
+-- aplicar:
+--
+--   PAIS que o trigger passaria a RECUSAR ... 1.272
+--     item_type = 'entrega' ................. 1.256
+--     item_type = 'projeto' .................    16
+--
+-- Ninguem conseguiria criar nem mover uma subatividade sob nenhum deles. O
+-- erro apareceria como "Aninhamento EAP invalido: uma entrega nao pode conter
+-- subitens" — uma frase que, depois desta migration, seria simplesmente falsa.
+--
+-- O teste de ponto fixo NAO pega isto: o trigger so dispara em escrita, e o
+-- backfill nao insere nem move nada. So aparece quando um usuario tenta
+-- trabalhar — que e o pior momento para descobrir.
+--
+-- 'projeto' entra na lista pelo mesmo motivo que 'fase': e a raiz da EAP, e a
+-- raiz tem filhas por definicao.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.eap_is_group(_item_type text, _is_milestone boolean)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $grp$
+  SELECT (NOT COALESCE(_is_milestone, false))
+     AND _item_type IN ('projeto', 'fase', 'entrega', 'pacote', 'historia_usuario');
+$grp$;
+
+COMMENT ON FUNCTION public.eap_is_group(text, boolean) IS
+  'Quem pode ter filhos. Ganhou projeto e entrega em 27/08/2026, quando o congelamento de item_type passou a gravar esses valores — sem isso, 1.272 pais existentes viravam invalidos.';
+
+DO $conf_grp$
+DECLARE v_ruins int;
+BEGIN
+  -- Nenhum pai existente pode estar fora da regra depois do congelamento.
+  SELECT count(*) INTO v_ruins
+    FROM public.activities p
+   WHERE EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = p.id)
+     AND NOT public.eap_is_group(p.item_type, p.is_milestone);
+
+  IF v_ruins > 0 THEN
+    RAISE EXCEPTION '% pais ficariam invalidos para o trigger de aninhamento', v_ruins;
+  END IF;
+  RAISE NOTICE 'aninhamento: todos os pais existentes continuam validos';
+END $conf_grp$;
+
+-- ---------------------------------------------------------------------------
 -- 5) O DEPOIS, e a falha alta
 -- ---------------------------------------------------------------------------
 DO $depois$

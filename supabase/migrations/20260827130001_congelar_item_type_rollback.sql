@@ -45,6 +45,32 @@ BEGIN
   END LOOP;
 END $conf$;
 
+-- `eap_is_group` volta a lista antiga, na ORDEM CERTA: depois de os valores
+-- terem sido revertidos. Derrubar 'entrega'/'projeto' da lista enquanto ainda
+-- houvesse pai gravado assim deixaria 1.272 pais invalidos — exatamente o
+-- estrago que o passo 4c da migration existe para evitar, so que ao contrario.
+CREATE OR REPLACE FUNCTION public.eap_is_group(_item_type text, _is_milestone boolean)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $grp$
+  SELECT (NOT COALESCE(_is_milestone, false))
+     AND _item_type IN ('fase', 'pacote', 'historia_usuario');
+$grp$;
+
+DO $conf_grp$
+DECLARE v_ruins int;
+BEGIN
+  SELECT count(*) INTO v_ruins
+    FROM public.activities p
+   WHERE EXISTS (SELECT 1 FROM public.activities f WHERE f.parent_id = p.id)
+     AND NOT public.eap_is_group(p.item_type, p.is_milestone);
+
+  IF v_ruins > 0 THEN
+    RAISE EXCEPTION 'apos reverter, % pais ficaram invalidos para o trigger — a reversao dos valores nao foi completa', v_ruins;
+  END IF;
+END $conf_grp$;
+
 ALTER TABLE public.activities DROP COLUMN IF EXISTS item_type_antes_congelar;
 
 DO $fim$
