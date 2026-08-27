@@ -95,37 +95,68 @@ export PGPASSWORD=...
 
 ## Como saber o que está no ar
 
-### O jeito que funciona
+São **duas perguntas diferentes**, e cada uma tem a sua resposta:
+
+| pergunta | como responder |
+|---|---|
+| **Quando** foi construído? | ETag dos assets — de fora, em 5 segundos |
+| **Qual commit** está no ar? | só a versão carimbada no deploy |
+
+### A DATA — de fora, sem acesso à VM
+
+```bash
+node scripts/data-do-build-no-ar.cjs
+```
+
+O openresty devolve `ETag: "<tamanho>-<mtime>"` em hexadecimal, e o **mtime é o
+instante em que o arquivo foi gravado na imagem** — a hora do build.
+
+```
+BUILD NO AR: 26/08/2026, 18:01:08 (Fortaleza)
+```
+
+Conferido em oito assets: todos com o mesmo instante, que é o esperado num
+build só. Se aparecerem instantes **diferentes**, é sinal de cache do proxy
+servindo arquivo velho — o script mostra em vez de esconder numa média.
+
+À mão, se preferir:
+
+```bash
+curl -sI https://gestaopro.pronutrir.com.br/_next/static/chunks/webpack-*.js | grep -i etag
+# "e19-1a03fe06e20"  ->  0x1a03fe06e20 = 1756242068000 ms  ->  26/08/2026 18:01
+```
+
+### O COMMIT — e o que NÃO funciona
 
 ```bash
 # na VM
 docker compose -f docker-compose.prod.yml ps
 ```
 
-O label da imagem traz a `APP_VERSION`, e é a **única** resposta confiável.
+O label traz a `APP_VERSION`. É a resposta confiável para *qual código*.
 
-### O jeito que NÃO funciona — e por quê
-
-Comparar o hash dos chunks servidos com um build local **não identifica o
-commit**. Foi tentado em 27/08 e falha por construção:
+**Comparar o hash dos chunks com um build local não serve**, e não é por pouco:
 
 - o Docker constrói em **`node:22-alpine`**;
 - a máquina de desenvolvimento roda **node 24.18**;
-- versões diferentes de Node produzem hashes diferentes **para o mesmo código**.
+- Node diferente produz hash diferente **para o mesmo código**.
 
-Conferido: até `app/(auth)/login/page-*.js` — arquivo que ninguém tocou na
-sessão — tem hash diferente entre produção e o build local, tanto no commit
-mais recente quanto no anterior à sessão. O hash mede o ambiente de build, não
-o conteúdo.
+Conferido: até `app/(auth)/login/page-*.js` — que ninguém tocou — difere entre
+produção e o build local, no commit atual e no anterior à sessão. O hash
+identifica o **conteúdo** e depende do ambiente; o ETag carrega o **instante** e
+não depende de nada. São perguntas diferentes, e por um tempo tratei as duas
+como uma só: cheguei a concluir "não dá para saber de fora", quando o que eu
+tinha descartado era só um dos caminhos.
 
-> **Para a próxima:** anote a versão e o commit ao publicar. Uma linha em
-> `docs/deploys.md` resolve o que nenhuma investigação técnica resolve depois.
+> **A resposta definitiva continua sendo carimbar.** Anote versão e commit ao
+> publicar — uma linha em `docs/deploys.md`. A data diz *quando*; só o carimbo
+> diz *o quê*.
 
 ### Um marcador melhor, se quiser um dia
 
-O `Dockerfile` já aceita `APP_VERSION` como build-arg e a grava como label
-OCI. Expor isso numa rota (`/api/version`) tornaria a pergunta respondível sem
-entrar na VM. **Não foi feito** — é mudança de código, e o pedido aqui era
+O `Dockerfile` já aceita `APP_VERSION` como build-arg e a grava como label OCI.
+Expor isso numa rota (`/api/version`) responderia as duas perguntas de uma vez,
+sem entrar na VM. **Não foi feito** — é mudança de código, e o pedido aqui era
 descobrir e documentar.
 
 ---
@@ -195,14 +226,50 @@ devolve sucesso. Só filtrar por ela (`?<coluna>=not.is.null`) força o erro
 
 **As duas fontes concordam.** Oito aplicadas, uma faltando.
 
-**A P00 está aplicada** — e isso importa, porque a orientação era não aplicá-la
-antes de falar com o Bruno e o Williame. Ela já está valendo em produção.
-
 Conferido em execução, chamando as próprias funções: numa atividade atribuída
-ao nome ambíguo e **não criada** pelo perfil hotmail,
-`is_activity_actor_v2` devolve `false` para ele e `true` para o corporativo —
-que é exatamente o desenho. (Numa atividade que ele criou, devolve `true` pelo
-`created_by`, que é identificador e via legítima.)
+ao nome ambíguo e **não criada** pelo perfil hotmail, `is_activity_actor_v2`
+devolve `false` para ele e `true` para o corporativo — que é exatamente o
+desenho. (Numa atividade que ele criou, devolve `true` pelo `created_by`, que é
+identificador e via legítima.)
+
+---
+
+## ⚠ A P00 ENTROU SEM DECISÃO — e há gente afetada agora
+
+A orientação era **não aplicar** a P00 antes de falar com o Bruno e o Williame.
+Ela foi junto no lote de migrations e **está valendo em produção desde
+26/08**.
+
+**Não é caso de reverter.** A mudança está certa — fecha um furo real de
+confidencialidade —, faz mais de um dia que está no ar e ninguém reclamou.
+Reverter reabriria o vazamento para consertar um erro de processo, não de
+código.
+
+**Mas seis pessoas perderam parte da lista, e uma delas de forma drástica:**
+
+| pessoa | via antes | vê agora |
+|---|---|---|
+| **Bruno Gabriel** | 55 | **1** |
+| Williame Correia (3 projetos) | 39 | 14 |
+| Tiago Moreira | 15 | 1 |
+| Raphael Luis Gomes Telles | 14 | 4 |
+| Liana Lopes | 15 | 11 |
+
+E o agravante: a `activity_breadcrumb` existe no banco **justamente para dar
+contexto a quem ficou com pouco** — e **nenhuma tela a lê ainda**. Quem entrava
+por atribuição ficou com a própria atividade e sem a trilha do pai.
+
+> **O que fazer hoje, e não depois:** falar com o **Bruno** e o **Williame**.
+> A sonda mediu edição, não leitura — se algum deles usava aquela lista para se
+> situar, está trabalhando às cegas agora **e não sabe por quê**.
+>
+> A pergunta é uma só: *"você usa a lista de atividades do projeto para se
+> situar, ou só a sua atividade?"*
+>
+> Rollback pronto em `20260826150001_p00_rollback.sql`, se a resposta for que a
+> lista fazia falta e a trilha na tela ainda vai demorar.
+
+Medição completa em `docs/projeto-v2/sonda-p00-26-08-2026.md`.
 
 ---
 
