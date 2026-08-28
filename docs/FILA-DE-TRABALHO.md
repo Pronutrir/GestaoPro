@@ -328,6 +328,54 @@ que conta as colunas da trilha e falha se alguma proibida entrar.
 
 ---
 
+## 7 · Cor por data — vermelho no que já acabou
+
+**Origem:** conferência de tela do Raphael, 28/08/2026.
+
+### O defeito
+
+Item **concluído** continua vermelho. Item **parado no backlog** também. A cor
+sai de *"a data passou"* sem perguntar se ainda há o que fazer.
+
+Confirmado no código: `estaAtrasado` (`lib/dataLocal.ts:88`) é
+
+```ts
+return parseDataLocal(valor).getTime() < hojeLocal().getTime();
+```
+
+Só compara datas. Não olha status, não olha estágio. E **44 pontos** do código
+decidem "atrasado" a partir dela ou de `isOverdue` — cada um livre para pintar
+como quiser.
+
+### A regra
+
+| situação | cor | texto |
+|---|---|---|
+| **concluída** | verde, sempre | — |
+| **em execução** e vencida | vermelho | com contagem de dias |
+| **no backlog** e vencida | âmbar | "vencida", **sem** contagem de dias |
+| **sem data** | sem cor | — |
+
+O âmbar sem contagem é a parte que importa: um item na fila com prazo velho não
+está atrasado — **está por começar**. Contar dias ali transforma planejamento
+antigo em dívida, e a tela passa a gritar sobre coisa que ninguém prometeu.
+
+### Como fazer
+
+**Uma função só decide**, e todas as telas leem dela. Hoje são 44 lugares — a
+mesma família das duas listas de "quem agrupa" e das três fórmulas de progresso,
+que já custaram caro aqui.
+
+A função precisa dos três: **data**, **status** e **estágio**. Uma que receba só
+a data não consegue responder — e é por isso que `estaAtrasado` não serve como
+base: ela responde a pergunta errada com precisão.
+
+`estaAtrasado` **continua existindo** para quem pergunta literalmente "esta data
+já passou?" (a coluna Previsto do backlog, por exemplo). O que muda é quem
+decide **cor**.
+
+---
+
 ## Esperando gente, não código
 
 - **Quem publicou** em 26/08 18:01 e em 27/08 12:08 — e qual `APP_VERSION`.
