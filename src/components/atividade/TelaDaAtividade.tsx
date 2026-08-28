@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Diamond, Plus, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EAP_LABELS, type EapKind } from "@/lib/eapModel";
@@ -63,6 +63,7 @@ export interface CapacidadesDaTela {
   editarDatas?: boolean;
   editarEsforco?: boolean;
   editarGut?: boolean;
+  editarCusto?: boolean;
   editarPessoas?: boolean;
   criarSubatividade?: boolean;
   concluir?: boolean;
@@ -94,6 +95,7 @@ export interface DadosDaTela {
   pacoteRotulo: string | null;
   origemRotulo: string | null;
   custoRotulo: string | null;
+  custoValor: number | null;
 }
 
 export interface SubatividadeNaTela {
@@ -128,6 +130,7 @@ export function TelaDaAtividade({
   aoRemoverPessoa,
   buscarPessoas,
   aoAbrirEditorAntigo,
+  secaoDependencias,
   aoCriar,
   aoCriarEContinuar,
   aoCancelar,
@@ -155,6 +158,9 @@ export function TelaDaAtividade({
   /** A PORTA ANTIGA: abre o formulário completo (13 campos). Temporária, até a
    *  tela editar tudo no lugar. */
   aoAbrirEditorAntigo?: () => void;
+  /** A seção de Dependências, montada pela rota (que consulta) — a tela só a
+   *  posiciona, para continuar pura. */
+  secaoDependencias?: ReactNode;
   aoCriar?: () => Promise<void>;
   aoCriarEContinuar?: () => Promise<void>;
   aoCancelar?: () => void;
@@ -313,12 +319,13 @@ export function TelaDaAtividade({
               dica="horas previstas — só o número"
               aoGravar={gravador("hours", capacidades.editarEsforco)}
             />
-            {/* GUT é três fatores (G×U×T); o editor de prioridade dedicado ainda
-                não veio — por ora é leitura, não um input que salva NaN. */}
-            <CampoNoLugar
-              rotulo="GUT"
-              valor={dados.gut ? `${dados.gut.g} × ${dados.gut.u} × ${dados.gut.t} = ${dados.gut.total}` : null}
-              vazio={dados.ehMarco ? "não se aplica" : "sem prioridade"}
+            <EditorGut
+              g={dados.gut?.g ?? null}
+              u={dados.gut?.u ?? null}
+              t={dados.gut?.t ?? null}
+              total={dados.gut?.total ?? null}
+              ehMarco={dados.ehMarco}
+              aoGravar={capacidades.editarGut && aoGravarCampo ? aoGravarCampo : undefined}
             />
             {/* Fase, Pacote e Origem são LEITURA sempre: mudam pela EAP, não
                 por digitação. Editá-los aqui abriria uma segunda via de mover
@@ -326,7 +333,14 @@ export function TelaDaAtividade({
             <CampoNoLugar rotulo="Fase" valor={dados.faseRotulo} vazio="na raiz" />
             <CampoNoLugar rotulo="Pacote" valor={dados.pacoteRotulo} vazio="—" />
             <CampoNoLugar rotulo="Origem" valor={dados.origemRotulo} vazio="criada aqui" />
-            <CampoNoLugar rotulo="Custo" valor={dados.custoRotulo} vazio="sem taxa cadastrada" />
+            <CampoNoLugar
+              rotulo="Custo"
+              valor={dados.custoRotulo}
+              valorEdicao={dados.custoValor != null ? String(dados.custoValor) : ""}
+              vazio="sem custo"
+              dica="valor em reais — só o número"
+              aoGravar={gravador("cost", capacidades.editarCusto)}
+            />
           </div>
         </div>
 
@@ -384,6 +398,13 @@ export function TelaDaAtividade({
             {capacidades.criarSubatividade && aoCriarSubatividade && (
               <NovaSubatividade aoCriar={aoCriarSubatividade} />
             )}
+          </div>
+        )}
+
+        {/* ── DEPENDÊNCIAS — a rota monta (consulta), a tela só posiciona ── */}
+        {!criando && secaoDependencias && (
+          <div className="rounded-[6px] border border-border bg-card p-4">
+            {secaoDependencias}
           </div>
         )}
 
@@ -678,6 +699,83 @@ function EditorDeJanela({
         <span className="text-[13px] text-amber-600 dark:text-amber-500">{vazioVerbo}</span>
       )}
     </button>
+  );
+}
+
+/* ── EDITOR DE GUT — três fatores (Gravidade × Urgência × Tendência) ──────────
+ * Cada fator (1 a 5) grava ao mudar; o total recomputa no servidor. Marco não
+ * tem GUT ("não se aplica"). Vazio é convite discreto (não trava trabalho). */
+function EditorGut({
+  g, u, t, total, ehMarco, aoGravar,
+}: {
+  g: number | null;
+  u: number | null;
+  t: number | null;
+  total: number | null;
+  ehMarco: boolean;
+  aoGravar?: (campo: string, valor: string) => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const pode = typeof aoGravar === "function" && !ehMarco;
+  const temValor = g != null && u != null && t != null;
+  const texto = temValor ? `${g} × ${u} × ${t} = ${total}` : null;
+
+  if (!pode) {
+    return (
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-[11px] text-muted-foreground">GUT</span>
+        <span className={cn("text-[13px]", temValor ? "text-foreground" : "text-muted-foreground/60")}>
+          {temValor ? texto : ehMarco ? "não se aplica" : "sem prioridade"}
+        </span>
+      </div>
+    );
+  }
+
+  const fatores: [string, string, number | null][] = [
+    ["gravity", "Gravidade", g],
+    ["urgency", "Urgência", u],
+    ["tendency", "Tendência", t],
+  ];
+
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0 relative">
+      <span className="text-[11px] text-muted-foreground">GUT</span>
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="text-left rounded-[4px] -mx-1 px-1 py-0.5 hover:bg-muted/60 transition-colors"
+        title="Clique para dar prioridade"
+      >
+        {temValor ? (
+          <span className="text-[13px] text-foreground">{texto}</span>
+        ) : (
+          <span className="text-[13px] text-primary">+ dar prioridade</span>
+        )}
+      </button>
+      {aberto && (
+        <>
+          <button className="fixed inset-0 z-10 cursor-default" onClick={() => setAberto(false)} aria-hidden tabIndex={-1} />
+          <div className="absolute z-20 top-full left-0 mt-1 w-56 rounded-[6px] border border-border bg-card shadow-md p-2 flex flex-col gap-2">
+            {fatores.map(([campo, rot, val]) => (
+              <label key={campo} className="flex items-center justify-between gap-2 text-[12.5px]">
+                <span className="text-muted-foreground">{rot}</span>
+                <select
+                  value={val ?? ""}
+                  onChange={(e) => void aoGravar!(campo, e.target.value)}
+                  className="h-7 px-1.5 rounded-[4px] border border-border bg-background text-[12.5px] outline-none focus:border-primary"
+                >
+                  <option value="">—</option>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <p className="text-[10.5px] text-muted-foreground/70">Gravidade × Urgência × Tendência (1 a 5 cada)</p>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

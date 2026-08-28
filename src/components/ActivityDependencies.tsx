@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 interface ActivityDependenciesProps {
   activityId: string;
   projectId: string;
+  /** Sem isto, os controles de adicionar/remover SOMEM (viram leitura) — a regra
+   *  do CLAUDE.md: campo sem permissão vira texto, não botão desabilitado. */
+  podeEditar?: boolean;
 }
 
 interface DepRow {
@@ -29,7 +32,7 @@ const TYPE_LABEL: Record<string, string> = {
   start_to_finish: "SF (termina após a predecessora começar)",
 };
 
-export const ActivityDependencies = ({ activityId, projectId }: ActivityDependenciesProps) => {
+export const ActivityDependencies = ({ activityId, projectId, podeEditar = true }: ActivityDependenciesProps) => {
   const { toast } = useToast();
   const [deps, setDeps] = useState<DepRow[]>([]);
   const [activities, setActivities] = useState<ActivityOpt[]>([]);
@@ -138,14 +141,16 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
       {justSavedId === d.id && (
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
       )}
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100"
-        onClick={() => handleDelete(d.id)}
-      >
-        <X className="w-3.5 h-3.5" />
-      </Button>
+      {podeEditar && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100"
+          onClick={() => handleDelete(d.id)}
+        >
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      )}
     </div>
   );
 
@@ -155,7 +160,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-          <Link2 className="w-4 h-4 text-primary" /> Tarefas vinculadas
+          <Link2 className="w-4 h-4 text-primary" /> Dependências
           {total > 0 && (
             <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
               {total} vínculo{total > 1 ? "s" : ""}
@@ -176,19 +181,21 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label>Predecessoras (esta depende de)</Label>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1 text-xs"
-            onClick={() => {
-              setAdding(adding === "pred" ? null : "pred");
-              setSelectedId("");
-              setSearch("");
-            }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Predecessora
-          </Button>
+          {podeEditar && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 text-xs"
+              onClick={() => {
+                setAdding(adding === "pred" ? null : "pred");
+                setSelectedId("");
+                setSearch("");
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Predecessora
+            </Button>
+          )}
         </div>
         {predecessors.length === 0 && adding !== "pred" && (
           <p className="text-[11px] text-muted-foreground italic">Nenhuma</p>
@@ -200,19 +207,21 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label>Sucessoras (dependem desta)</Label>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1 text-xs"
-            onClick={() => {
-              setAdding(adding === "succ" ? null : "succ");
-              setSelectedId("");
-              setSearch("");
-            }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Sucessora
-          </Button>
+          {podeEditar && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 text-xs"
+              onClick={() => {
+                setAdding(adding === "succ" ? null : "succ");
+                setSelectedId("");
+                setSearch("");
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Sucessora
+            </Button>
+          )}
         </div>
         {successors.length === 0 && adding !== "succ" && (
           <p className="text-[11px] text-muted-foreground italic">Nenhuma</p>

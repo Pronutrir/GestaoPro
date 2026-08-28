@@ -191,6 +191,7 @@ export default function PaginaCriarAtividade() {
     pacoteRotulo: pai ? String(pai.title ?? "") : null,
     origemRotulo: null,
     custoRotulo: null,
+    custoValor: null,
   };
 
   return (

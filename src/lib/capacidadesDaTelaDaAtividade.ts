@@ -44,6 +44,8 @@ export function capacidadesDaTela(c: {
     // própria e não passa por aqui.
     editarEsforco: c.canEditPlanejamento,
     editarGut: c.canEditPlanejamento,
+    // Custo é planejamento (CLAUDE.md: previsto, GUT, custo, posição na EAP).
+    editarCusto: c.canEditPlanejamento,
     editarPessoas: c.canAssign,
     // Criar subatividade é decidir escopo: quebra o trabalho em partes.
     criarSubatividade: c.canEditPlanejamento,

@@ -11,6 +11,7 @@ import {
   type SubatividadeNaTela,
 } from "@/components/atividade/TelaDaAtividade";
 import { capacidadesDaTela } from "@/lib/capacidadesDaTelaDaAtividade";
+import { ActivityDependencies } from "@/components/ActivityDependencies";
 import {
   carregarTrilha,
   carregarPessoas,
@@ -329,6 +330,7 @@ export default function PaginaDaAtividade() {
         : null,
       origemRotulo: (a.origem as string) ?? null,
       custoRotulo: (a.cost as number) ? `R$ ${a.cost}` : null,
+      custoValor: (a.cost as number) ?? null,
     };
   }, [atividade, coluna, trilha, projectId]);
 
@@ -404,6 +406,7 @@ export default function PaginaDaAtividade() {
         aoRemoverPessoa={aoRemoverPessoa}
         buscarPessoas={buscarPessoas}
         aoAbrirEditorAntigo={soLeitura ? undefined : () => router.push(`/project/${projectId}?activity=${activityId}`)}
+        secaoDependencias={<ActivityDependencies activityId={activityId} projectId={projectId} podeEditar={!soLeitura} />}
         aoMarcarLido={user?.id ? async () => {
           await marcarFeedVisto(activityId, user.id).catch(() => {});
           setNaoLidos(0);
