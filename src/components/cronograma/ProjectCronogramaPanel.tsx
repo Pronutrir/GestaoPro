@@ -57,6 +57,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateScheduleSlack } from "@/lib/criticalPath";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useToast } from "@/hooks/use-toast";
@@ -286,6 +287,10 @@ export function ProjectCronogramaPanel({
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
+  // As dependências são AUXILIARES (setas, folga CPM). Se falharem, o cronograma
+  // ainda lista as atividades — este flag liga o aviso em vez de deixar a tela
+  // em branco (o defeito antigo: o erro do fetch de deps sumia com tudo).
+  const [depsErro, setDepsErro] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
   /** A mesma gente, em lista — é o formato que `PersonCombobox` consome. */
   const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
@@ -560,12 +565,24 @@ export function ProjectCronogramaPanel({
     setProjectsMap(pm);
     setProjectDeadlines(pdl);
 
+    // DEPENDÊNCIAS PELA RPC (POST), uma por projeto do escopo — sem a lista de
+    // ids na URL que estourava 15 KB e voltava 502. E DEGRADA: se falhar, as
+    // atividades continuam listadas; só as setas/folga ficam de fora, com aviso.
     const ids = (acts || []).map((a: any) => a.id);
     if (ids.length) {
-      const { data: d } = await supabase.from("task_dependencies").select("*")
-        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`);
-      setDeps(d || []);
-    } else setDeps([]);
+      try {
+        const listas = await Promise.all(scopedProjectIds.map((pid) => fetchTaskDependencias(pid)));
+        const vistos = new Set<string>();
+        setDeps(listas.flat().filter((dep) => (vistos.has(dep.id) ? false : (vistos.add(dep.id), true))));
+        setDepsErro(false);
+      } catch (err) {
+        // Falhar em silêncio aqui apagava a tela inteira. Agora: log com
+        // contexto, deps vazio (a tela degrada) e o aviso liga.
+        console.error("task_dependencies (cronograma):", err);
+        setDeps([]);
+        setDepsErro(true);
+      }
+    } else { setDeps([]); setDepsErro(false); }
   }, [projectIds, accessLoading, filterProjects]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -3533,6 +3550,25 @@ export function ProjectCronogramaPanel({
   return (
     <div className="space-y-4">
       {Toolbar}
+
+      {/* DEPENDÊNCIAS NÃO CARREGARAM — degrada, não some. As atividades e datas
+          seguem na tela; faltam só as setas e a folga do CPM. Antes isto apagava
+          o cronograma inteiro em silêncio. */}
+      {depsErro && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px]">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-muted-foreground">
+            As dependências não carregaram — o cronograma está sem as setas e a folga do caminho crítico. As atividades e datas estão corretas.
+          </span>
+          <button
+            type="button"
+            onClick={() => void fetchData()}
+            className="ml-auto shrink-0 h-6 px-2 rounded-[4px] border border-border text-[11.5px] hover:bg-muted"
+          >
+            Tentar de novo
+          </button>
+        </div>
+      )}
 
       {/* Avisos do cálculo. Só aparece quando há o que avisar — em cronograma
           saudável não ocupa espaço. Antes, tudo isto falhava em silêncio: a
