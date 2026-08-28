@@ -15,6 +15,7 @@
 
 | data/hora (Fortaleza) | APP_VERSION | commit | quem publicou | o que entrou |
 |---|---|---|---|---|
+| 28/08/2026 11:51:33 | `2026-08-28-01` | `f1d1ee7b` | William | Tela da atividade (FASE C), E2 (nível não decide papel — 67 folhas viram cartão), erro do banco em português, `incluir_e_atribuir` (sem o passo 3 do `activity_feed_eventos`) + `feed_visitas`. Migrations 150000/160000 aplicadas ANTES do build. Barreira passou (estado C, sem `PULAR_BARREIRA`). |
 | 27/08/2026 15:55:33 | *desconhecida* | *desconhecido* | **a registrar** | correção parcial do incidente (a linha precisa ser completada por quem publicou) |
 | **27/08/2026 12:08:31** | *desconhecida* | *desconhecido* | **a descobrir** | **INCIDENTE** — leitura de item_type sem o backfill; ver abaixo |
 | 26/08/2026 18:01:08 | *desconhecida* | *desconhecido* | **a descobrir** | migrations da leva + código até ~17:33 |
