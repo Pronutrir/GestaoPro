@@ -786,8 +786,51 @@ export function ProjectCronogramaPanel({
       // para agrupar e indentar, com as datas derivando dos filhos como no
       // resto do sistema.
       const usadas = new Set(filtered.map((a: any) => a.phase_id).filter(Boolean));
+
+      /**
+       * A FASE NÃO APARECE DUAS VEZES (27/08/2026).
+       *
+       * Relatado com captura: "1.1 · 1ª. Fase - Planejamento e Lançamento"
+       * aparecia em duas linhas seguidas — uma sem ID (a sintética, daqui) e
+       * outra com id de verdade.
+       *
+       * A causa é dado: em 10 projetos a mesma fase existe nas DUAS tabelas —
+       * 60 pares, 16 só em "Revitalização Tasy". Ver
+       * docs/medicoes/fase-duplicada-no-cronograma-27-08-2026.md.
+       *
+       * Consertar o DADO é decisão de quem cuida de cada projeto: qual das
+       * duas é "a de verdade" muda caso a caso, e apagar a errada quebra ou o
+       * `phase_id` de quem aponta para ela, ou as filhas da atividade.
+       *
+       * Mas a TELA não precisa esperar por isso. Duplicar na exibição é
+       * defeito de tela, e a regra de desempate é clara: **a atividade vence**.
+       * Ela tem id, EAP, responsável, histórico — a linha sintética é só um
+       * agrupador desenhado em memória. Some a que não existe, fica a que é.
+       *
+       * O TÍTULO PRECISA SER NORMALIZADO para casar. Na `phases` o código foi
+       * digitado dentro do nome ("1.1 1ª. Fase…"); na `activities` ele mora em
+       * `wbs_code` ("1ª. Fase…"). Comparando texto cru, nunca batem — foi o que
+       * escondeu isto até agora.
+       *
+       * O regex só remove código seguido de ESPAÇO: `1ª` não é código EAP, e
+       * um `[\d.]+` guloso comeria o "1" e faria a comparação falhar de novo
+       * (aconteceu na primeira medição, e subestimou 60 para 34).
+       */
+      const semCodigo = (t: string) =>
+        String(t || "").replace(/^\s*\d+(\.\d+)*\s+/, "").trim().toLowerCase();
+
+      const fasesJaComoAtividade = new Set(
+        filtered
+          // Tipado em vez de `any`: são dois campos, e declará-los custa uma
+          // linha. O `any` do resto do arquivo é dívida antiga — não vale
+          // aumentá-la por preguiça de escrever duas propriedades.
+          .filter((a: { item_type?: string | null }) => String(a.item_type || "").toLowerCase() === "fase")
+          .map((a: { title?: string | null }) => semCodigo(a.title ?? "")),
+      );
+
       const linhasFase = (phases || [])
         .filter((p: any) => usadas.has(p.id))
+        .filter((p: { title?: string | null }) => !fasesJaComoAtividade.has(semCodigo(p.title ?? "")))
         .map((p: any) => ({
           id: `phase:${p.id}`,
           title: p.title,
