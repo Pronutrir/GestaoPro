@@ -1992,6 +1992,10 @@ export default function ProjectDetailsPage() {
                 projectIds={[id!]}
                 defaultMode="table"
                 onEditActivity={(activity) => openEditActivity(activity)}
+                /* FONTE ÚNICA: o Cronograma usa as MESMAS atividades da página
+                   (já filtradas por visibilidade, atualizadas nas mutações) — não
+                   carrega as próprias. Fim do "Backlog cheio / Cronograma vazio". */
+                activitiesExternas={activities}
               />
             </TabsContent>
 

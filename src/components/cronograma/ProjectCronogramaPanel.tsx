@@ -84,6 +84,14 @@ interface Props {
   defaultMode?: CronogramaMode;
   showProjectColumn?: boolean;
   onEditActivity?: (activity: any) => void;
+  /**
+   * FONTE ÚNICA (passo 5): quando a página já carregou as atividades (filtradas
+   * por visibilidade, atualizadas nas mutações), passa-as aqui — e o Cronograma
+   * usa ESSAS em vez de buscar as próprias. É o que impede "Backlog com 208 e
+   * Cronograma com 0" na mesma tela, e faz editar no Backlog refletir aqui sem
+   * F5. Sem isto (Cronograma Geral, multi-projeto), ele carrega sozinho.
+   */
+  activitiesExternas?: any[];
 }
 
 const LINK_TYPES: Record<string, { short: string; label: string; desc: string }> = {
@@ -265,6 +273,7 @@ export function ProjectCronogramaPanel({
   defaultMode = "gantt",
   showProjectColumn = false,
   onEditActivity,
+  activitiesExternas,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -494,12 +503,16 @@ export function ProjectCronogramaPanel({
       return;
     }
 
-    const actsQ = supabase
-      .from("activities")
-      .select("*")
-      .eq("is_trashed", false)
-      .in("project_id", scopedProjectIds)
-      .order("display_order", { ascending: true });
+    // FONTE ÚNICA: se a página passou as atividades, usa ELAS — sem re-buscar
+    // (é o que impede "Backlog 208 / Cronograma 0" na mesma tela).
+    const actsQ = activitiesExternas
+      ? Promise.resolve({ data: activitiesExternas })
+      : supabase
+          .from("activities")
+          .select("*")
+          .eq("is_trashed", false)
+          .in("project_id", scopedProjectIds)
+          .order("display_order", { ascending: true });
 
     // `*` em vez da lista explícita: traz `categoria` onde a migration já
     // rodou e continua funcionando onde ainda não rodou.
@@ -592,6 +605,14 @@ export function ProjectCronogramaPanel({
   }, [projectIds, accessLoading, filterProjects]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // A página atualiza suas atividades (edição in-place, reorder, arquivar) —
+  // reflete aqui NA HORA, sem re-buscar fases/deps. É o "editar no Backlog
+  // aparece no Cronograma sem F5". Numa edição os ids não mudam, então as deps
+  // já carregadas continuam válidas.
+  useEffect(() => {
+    if (activitiesExternas) setActivities(activitiesExternas);
+  }, [activitiesExternas]);
 
   // ===== Mock estável (para colunas ainda não persistidas) =====
   /**
