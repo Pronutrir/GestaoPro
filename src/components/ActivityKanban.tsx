@@ -157,7 +157,7 @@ import {
 import { VisoesMenu } from "./kanban/VisoesMenu";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 import { selectInChunks } from "@/lib/chunkedIn";
-import { fetchTaskDependencias } from "@/lib/taskDependencias";
+import { fetchTaskDependencias, fetchTaskRelations } from "@/lib/taskDependencias";
 import { rotaDaAtividade } from "@/lib/telaDaAtividade";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
@@ -1273,17 +1273,10 @@ export const ActivityKanban = ({
           setAttachmentCounts(map);
         })
         .catch(() => setAttachmentCounts(new Map()));
-      // Este era o pior caso: o `.or()` monta a lista de ids DUAS vezes na mesma
-      // URL, então estourava o limite do proxy com metade das atividades. Em
-      // lotes, cada requisição carrega no máximo 2×50 ids.
-      selectInChunks<{ id: string; source_activity_id: string; target_activity_id: string; relation_type: string }>(
-        ids,
-        (batch) =>
-          supabase
-            .from("task_relations")
-            .select("id, source_activity_id, target_activity_id, relation_type")
-            .or(`source_activity_id.in.(${batch.join(",")}),target_activity_id.in.(${batch.join(",")})`),
-      )
+      // Era o pior caso: o `.or()` montava a lista de ids DUAS vezes na mesma URL
+      // e estourava o proxy (502). Agora pela RPC (POST) — o filtro vai no corpo,
+      // não na URL. Mesmo conserto do task_dependencies.
+      fetchTaskRelations(projectId)
         .then((data) => {
           const titleById = new Map<string, string>();
           activities.forEach((a) => titleById.set(a.id, a.title));

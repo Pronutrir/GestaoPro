@@ -282,6 +282,12 @@ export function ProjectCronogramaPanel({
     ]).then(([hols, sched]) => {
       setHolidays((hols.data || []) as Holiday[]);
       if (sched && (sched as any).data) setWorkSchedule((sched as any).data as WorkSchedule);
+    }).catch((err) => {
+      // O CALENDÁRIO É AUXILIAR (sombreia o Gantt, ajusta duração). Se falhar —
+      // p.ex. user_work_schedules ausente —, o Cronograma usa a jornada PADRÃO
+      // (workCalendar já trata schedule undefined) e segue listando as
+      // atividades. Nunca derrubar a lista inteira por uma chamada de calendário.
+      console.error("calendário (holidays/user_work_schedules):", err);
     });
   }, [profile?.id]);
   const [activities, setActivities] = useState<any[]>([]);

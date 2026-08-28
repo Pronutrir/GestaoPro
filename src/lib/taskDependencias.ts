@@ -33,3 +33,25 @@ export async function fetchTaskDependencias(projectId: string): Promise<TaskDepe
   if (error) throw new Error(error.message);
   return (data ?? []) as TaskDependency[];
 }
+
+export type TaskRelation = {
+  id: string;
+  source_activity_id: string;
+  target_activity_id: string;
+  relation_type: string;
+  note: string | null;
+};
+
+/**
+ * As RELAÇÕES do projeto (bloqueio, em espera, vinculada) por RPC — mesmo
+ * conserto do task_dependencies. O chunking era "a mesma armadilha, só fatiada":
+ * cada lote ainda ia por URL. `get_task_relations` leva o filtro no corpo do POST.
+ */
+export async function fetchTaskRelations(projectId: string): Promise<TaskRelation[]> {
+  if (!projectId) return [];
+  const { data, error } = await supabase.rpc("get_task_relations" as never, {
+    p_project_id: projectId,
+  } as never);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TaskRelation[];
+}
