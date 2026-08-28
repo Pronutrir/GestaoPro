@@ -100,5 +100,42 @@ check("a fase COM par some", restantes.length === 1);
 check("e a fase SEM par continua — senão as filhas ficam soltas na raiz",
   restantes[0].title.includes("só em phases"));
 
+/* ── 6. UM PONTO DE MONTAGEM SÓ ─────────────────────────────────────────
+ *
+ * Tabela detalhada e Gantt consomem a MESMA lista. Se alguém criar um segundo
+ * lugar que monta `phase:<uuid>`, o conserto vale numa aba e não na outra — e
+ * o defeito volta pela metade, que é pior que voltar inteiro: ninguém acredita
+ * que foi corrigido.
+ */
+/*
+ * O teste acusou DOIS, e o segundo é legítimo — vale registrar a distinção,
+ * porque ela é o que separa "duplica na tela" de "existe em memória".
+ *
+ *   linha ~835  monta `linhasFase`, que É DESENHADA. Duplicar aqui aparece.
+ *   linha ~967  monta `activityById`, um MAPA DE CONSULTA para o cálculo de
+ *               profundidade subir pelo pai e parar na fase. Nunca é iterado
+ *               para render — entrar duas vezes num Map com a mesma chave
+ *               sobrescreve, não duplica.
+ *
+ * Então o que importa não é "quantos lugares constroem o objeto", é **quantos
+ * produzem lista renderizada**. Medir o primeiro dava um falso positivo.
+ */
+const listasRenderizadas = (cron.match(/const linhasFase\s*=/g) || []).length;
+check("há UMA única lista de fases desenhada — Tabela e Gantt consomem a mesma",
+  listasRenderizadas === 1, `achei ${listasRenderizadas}`);
+check("o mapa de consulta por id existe e é outra coisa — não duplica na tela",
+  cron.includes("const activityById"));
+
+/* ── 7. O FILTRO VEM ANTES DO .map ──────────────────────────────────────
+ *
+ * Filtrar depois de montar funcionaria, mas desenharia e descartaria 60 objetos
+ * por render. Antes é de graça.
+ */
+const posFiltro = cron.indexOf("fasesJaComoAtividade.has");
+const posMapa = cron.indexOf("id: `phase:");
+check("o filtro roda antes de montar o objeto",
+  posFiltro > 0 && posMapa > 0 && posFiltro < posMapa);
+
+
 console.log(`\n  ${ok} passaram, ${falhou} falharam\n`);
 process.exit(falhou === 0 ? 0 : 1);
