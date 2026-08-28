@@ -157,6 +157,7 @@ import {
 import { VisoesMenu } from "./kanban/VisoesMenu";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 import { selectInChunks } from "@/lib/chunkedIn";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { rotaDaAtividade } from "@/lib/telaDaAtividade";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
@@ -1204,20 +1205,11 @@ export const ActivityKanban = ({
     // Fetch task dependencies for badge counters
     const ids = activities.map((a) => a.id);
     if (ids.length > 0) {
-      // Em lotes de 50: com muitas atividades a lista de ids na URL estoura o
-      // limite do proxy e volta 502 (ver lib/chunkedIn) — era o único fetch
-      // deste efeito que faltava lotear. O chunking pode repetir uma dependência
-      // que casa em dois lotes (predecessora num, sucessora noutro), então
-      // DEDUPLICA por id antes de contar.
-      selectInChunks<{ id: string; predecessor_id: string; successor_id: string }>(ids, (batch) =>
-        supabase
-          .from("task_dependencies")
-          .select("id, predecessor_id, successor_id")
-          .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
-      )
-        .then((linhas) => {
-          const vistos = new Set<string>();
-          const data = linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
+      // Uma chamada POST (rpc get_task_dependencies), sem lista de ids na URL —
+      // é o que tira o 502 do proxy. Volta as dependências do projeto inteiro; o
+      // que não casar com uma atividade carregada simplesmente não entra no mapa.
+      fetchTaskDependencias(projectId)
+        .then((data) => {
           const map = new Map<string, { pred: number; succ: number }>();
           data.forEach((d) => {
             const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
