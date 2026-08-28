@@ -52,7 +52,7 @@ import {
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
 } from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
-import { mutateInChunks } from "@/lib/chunkedIn";
+import { mutateInChunks, selectInChunks } from "@/lib/chunkedIn";
 import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 // As sete decisões visuais da mesa de planejamento, como regras testáveis —
@@ -481,13 +481,20 @@ export const BacklogSection = ({
       setDependencyCounts(new Map());
       return;
     }
-    supabase
-      .from("task_dependencies")
-      .select("predecessor_id, successor_id")
-      .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
-      .then(({ data }) => {
+    // Em lotes de 50: a lista de ids na URL estoura o limite do proxy e volta
+    // 502 com projeto grande (ver lib/chunkedIn). Dedup por id porque uma
+    // dependência pode casar em dois lotes.
+    selectInChunks<{ id: string; predecessor_id: string; successor_id: string }>(ids, (batch) =>
+      supabase
+        .from("task_dependencies")
+        .select("id, predecessor_id, successor_id")
+        .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
+    )
+      .then((linhas) => {
+        const vistos = new Set<string>();
+        const data = linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
         const map = new Map<string, { pred: number; succ: number }>();
-        (data || []).forEach((d: any) => {
+        data.forEach((d) => {
           const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
           p.pred += 1;
           map.set(d.successor_id, p);
@@ -496,8 +503,12 @@ export const BacklogSection = ({
           map.set(d.predecessor_id, s);
         });
         setDependencyCounts(map);
+      })
+      .catch((err) => {
+        console.error("task_dependencies (backlog):", err);
+        toast({ title: "Dependências não carregaram", description: "Os contadores de dependência podem faltar. Recarregue a página.", variant: "destructive" });
       });
-  }, [activities]);
+  }, [activities, toast]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
