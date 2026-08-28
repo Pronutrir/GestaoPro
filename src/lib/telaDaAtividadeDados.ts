@@ -380,17 +380,36 @@ export function fraseDoEvento(e: EventoDoBanco): string {
   const onde = e.ehraiz ? "" : ` em ${e.wbs_code || e.titulo}`;
   if (e.tipo === "comentario") return e.resumo || "(comentário vazio)";
   if (e.tipo === "alteracao") {
-    const campos = (e.campo || "").split(",").map((c) => c.trim()).filter(Boolean);
+    // CAMPOS INTERNOS NÃO VAZAM PARA O FEED. `stage_entered_at`, `story_points`
+    // e os carimbos/derivados são ruído de máquina — não decisão de gente. Antes
+    // apareciam crus ("alterou stage_entered_at"), que é UUID/enum em inglês na
+    // cara do usuário, o que o CLAUDE.md proíbe.
+    const internos = new Set([
+      "stage_entered_at", "story_points", "updated_at", "created_at",
+      "updated_by", "created_by", "search_vector", "display_order",
+      "consumed_hours_manual", "derived_hours", "derived_cost", "derived_start",
+      "derived_end", "derived_progress", "derived_children",
+    ]);
     const rotulos: Record<string, string> = {
       title: "o nome", description: "a descrição", hours: "as horas",
       status: "o status", workflow_stage_id: "a coluna", estagio: "o estágio",
       end_date: "o prazo", start_date: "o início", assigned_to: "o responsável",
+      cost: "o custo", gravity: "a prioridade", urgency: "a prioridade",
+      tendency: "a prioridade", item_type: "o tipo", is_milestone: "o marco",
+      actual_start_date: "o início real", actual_end_date: "a conclusão",
+      parent_id: "a posição na EAP", is_blocked: "o bloqueio",
     };
-    const nomes = campos.map((c) => rotulos[c] ?? c);
+    const campos = (e.campo || "")
+      .split(",").map((c) => c.trim()).filter(Boolean)
+      .filter((c) => !internos.has(c));
+    // Campo desconhecido vira "um campo", NUNCA o nome cru da coluna. Dedup: os
+    // três fatores do GUT viram "a prioridade" uma vez só.
+    const nomes = [...new Set(campos.map((c) => rotulos[c] ?? "um campo"))];
+    if (nomes.length === 0) return `${quem} atualizou a atividade${onde}`;
     const lista = nomes.length > 2
       ? `${nomes.slice(0, 2).join(", ")} e mais ${nomes.length - 2}`
       : nomes.join(" e ");
-    return `${quem} alterou ${lista || "um campo"}${onde}`;
+    return `${quem} alterou ${lista}${onde}`;
   }
   return `${quem} registrou uma alteração${onde}`;
 }
