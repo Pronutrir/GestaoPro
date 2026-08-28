@@ -4,6 +4,8 @@ export type TaskDependency = {
   id: string;
   predecessor_id: string;
   successor_id: string;
+  dependency_type: string;
+  lag_days: number | null;
 };
 
 /**
