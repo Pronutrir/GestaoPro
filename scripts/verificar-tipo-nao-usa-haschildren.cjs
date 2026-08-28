@@ -30,25 +30,34 @@ function corpoDaFuncao(fonte, nome) {
   return m ? m[1] : null;
 }
 
+// Tira comentários (/* */ e //) antes de procurar uso REAL. Um comentário que
+// EXPLICA a dedução removida (ex.: "a mesma cirurgia do `OR hasChildren`") não
+// é uso — e falso-positivo aqui esconderia uma regressão de verdade no ruído.
+function semComentarios(s) {
+  return s
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+}
+
 // ── 1) resolveEapKind (a regra daqui pra frente) NÃO pode consultar hasChildren.
 //      O parâmetro sobrevive como `_hasChildren` (prefixo _ = não usado, só
 //      documenta a saída da dedução); o corpo tem de ignorá-lo.
 const corpoResolve = corpoDaFuncao(eapModel, 'resolveEapKind');
 if (corpoResolve === null) {
   falhas.push('resolveEapKind não encontrado em src/lib/eapModel.ts — atualize o teste');
-} else if (/hasChildren/.test(corpoResolve)) {
+} else if (/hasChildren/.test(semComentarios(corpoResolve))) {
   falhas.push('resolveEapKind consulta hasChildren no corpo — o tipo deve vir de item_type, não da presença de filhas');
 }
 
 // ── 2) eapToPersisted (a ponte de armazenamento) é agnóstica a estrutura.
 const corpoPersist = corpoDaFuncao(eapModel, 'eapToPersisted');
-if (corpoPersist !== null && /hasChildren/.test(corpoPersist)) {
+if (corpoPersist !== null && /hasChildren/.test(semComentarios(corpoPersist))) {
   falhas.push('eapToPersisted consulta hasChildren — a tradução de armazenamento não pode depender de estrutura');
 }
 
 // ── 3) Nenhuma OUTRA função em eapModel.ts pode devolver EapKind decidindo por
 //      hasChildren num ternário/condicional (o padrão do OR que saiu).
-for (const m of eapModel.matchAll(/_?hasChildren[^\n]*\?[^\n]*(fase|entrega|atividade|projeto|marco)/g)) {
+for (const m of semComentarios(eapModel).matchAll(/_?hasChildren[^\n]*\?[^\n]*(fase|entrega|atividade|projeto|marco)/g)) {
   falhas.push(`eapModel.ts: "${m[0].trim()}" — decide EapKind por hasChildren`);
 }
 

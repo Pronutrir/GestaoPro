@@ -55,7 +55,6 @@ DECLARE
   v_pode       boolean;
   v_ja_membro  boolean;
   v_nome_alvo  text;
-  v_nome_quem  text;
   v_criou      boolean := false;
 BEGIN
   IF v_quem IS NULL THEN
@@ -85,7 +84,6 @@ BEGIN
   END IF;
 
   SELECT full_name INTO v_nome_alvo FROM public.profiles WHERE id = p_user_id;
-  SELECT full_name INTO v_nome_quem FROM public.profiles WHERE id = v_quem;
   IF v_nome_alvo IS NULL THEN
     RAISE EXCEPTION 'pessoa nao encontrada';
   END IF;
@@ -114,30 +112,24 @@ BEGIN
   VALUES (p_activity_id, p_user_id, 'participante', v_quem)
   ON CONFLICT DO NOTHING;
 
-  -- ── 3) O HISTORICO, COM A FRASE INTEIRA ─────────────────────────────────
-  -- "grava no historico a frase inteira" -- nao "usuario X adicionado", que
-  -- obriga quem le a reconstruir o que foi decidido.
-  INSERT INTO public.activity_feed_eventos
-    (activity_id, feed_de, tipo, texto, dados, autor_id, autor_nome)
-  VALUES (
-    p_activity_id, p_activity_id, 'atribuiu',
-    CASE WHEN v_criou
-      THEN format('%s incluiu %s na equipe do projeto como %s, com acesso %s, e atribuiu a esta atividade',
-                  COALESCE(v_nome_quem, 'alguem'), v_nome_alvo,
-                  CASE p_papel WHEN 'visualizar_comentar' THEN 'Visualizar e comentar'
-                               WHEN 'editar' THEN 'Editar'
-                               WHEN 'gerenciar' THEN 'Gerenciar'
-                               ELSE p_papel END,
-                  CASE p_escopo WHEN 'atividade_e_trilha' THEN 'so a esta atividade e a trilha'
-                                WHEN 'projeto' THEN 'ao projeto inteiro'
-                                ELSE p_escopo END)
-      ELSE format('%s atribuiu %s a esta atividade',
-                  COALESCE(v_nome_quem, 'alguem'), v_nome_alvo)
-    END,
-    jsonb_build_object('user_id', p_user_id, 'papel', p_papel,
-                       'escopo', p_escopo, 'criou_vinculo', v_criou),
-    v_quem, v_nome_quem
-  );
+  -- ── 3) O HISTORICO — REMOVIDO EM 28/08/2026 ─────────────────────────────
+  -- O passo original gravava a frase inteira em public.activity_feed_eventos.
+  -- Essa tabela foi DESCARTADA no commit ad38feb e NAO existe no banco: a
+  -- funcao ate se criava (plpgsql adia a resolucao de nomes), mas ABORTAVA em
+  -- runtime a CADA chamada, revertendo o incluir+atribuir e devolvendo erro
+  -- cru do Postgres — o oposto do que esta leva conserta.
+  --
+  -- Removido para o critico voltar a funcionar: o vinculo e a atribuicao na
+  -- mesma transacao (a regra inviolavel), e a recusa em portugues.
+  --
+  -- CUSTO MEDIDO (28/08): a acao NAO fica no feed por enquanto. activity_
+  -- assignees nao tem gatilho de auditoria (audit_log tem 0 linhas dela) e a
+  -- view activity_feed_events so mostra audit de table_name='activities'. Nao
+  -- ha fallback de texto seco — a acao some do historico ate haver sink.
+  --
+  -- O evento de texto rico virou item de fila, com a pergunta em aberto: por
+  -- que activity_feed_eventos foi descartada em ad38feb? Responder ANTES de
+  -- restaurar qualquer tabela. Ver docs/FILA-DE-TRABALHO.md.
 
   RETURN jsonb_build_object(
     'criou_vinculo', v_criou,
