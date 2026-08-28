@@ -15,8 +15,14 @@ import {
   carregarTrilha,
   carregarPessoas,
   lerTotaisDerivados,
+  carregarFeed,
+  contarNaoLidos,
+  marcarFeedVisto,
+  fraseDoEvento,
+  agruparPorDia,
   type DegrauDaTrilha,
   type PessoaDaAtividade,
+  type EventoDoBanco,
 } from "@/lib/telaDaAtividadeDados";
 import { capacidadesNaAtividade } from "@/lib/activityAccess";
 import { resolveEapKind, EAP_LABELS } from "@/lib/eapModel";
@@ -56,6 +62,10 @@ export default function PaginaDaAtividade() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
 
+  /** O nome que vai para o feed. Nunca UUID: o histórico é para gente ler. */
+  const nomeDeQuemFez =
+    ((profile as Record<string, unknown>)?.full_name as string) || user?.email || "alguém";
+
   const projectId = typeof params?.id === "string" ? params.id : "";
   const activityId = typeof params?.activityId === "string" ? params.activityId : "";
 
@@ -67,6 +77,8 @@ export default function PaginaDaAtividade() {
   const [pessoas, setPessoas] = useState<PessoaDaAtividade[]>([]);
   const [filhas, setFilhas] = useState<Record<string, unknown>[]>([]);
   const [coluna, setColuna] = useState<Record<string, unknown> | null>(null);
+  const [eventos, setEventos] = useState<EventoDoBanco[]>([]);
+  const [naoLidos, setNaoLidos] = useState(0);
 
   const carregar = useCallback(async () => {
     if (!projectId || !activityId) return;
@@ -93,9 +105,21 @@ export default function PaginaDaAtividade() {
       // A trilha e as pessoas têm módulo próprio — e SOBEM o erro em vez de
       // devolver vazio. Uma trilha vazia por falha silenciosa faria o item
       // parecer de raiz, que é informação errada, não informação ausente.
-      const [t, ps] = await Promise.all([
+      /**
+       * O FEED entra aqui, e a falha dele NÃO derruba a tela.
+       *
+       * A trilha e as pessoas sobem o erro porque sem elas a tela mente — um
+       * item sem trilha parece de raiz. O feed é diferente: sem ele a tela
+       * fica incompleta, não errada. Derrubar a atividade inteira porque o
+       * histórico não carregou seria trocar uma falha pequena por uma grande.
+       *
+       * A coluna do sino mostra o que houver; se não houver nada, diz isso.
+       */
+      const [t, ps, evs, nl] = await Promise.all([
         carregarTrilha(activityId),
         carregarPessoas(activityId),
+        carregarFeed(activityId).catch(() => [] as EventoDoBanco[]),
+        user?.id ? contarNaoLidos(activityId, user.id).catch(() => 0) : Promise.resolve(0),
       ]);
 
       setAtividade(a as Record<string, unknown>);
@@ -104,12 +128,14 @@ export default function PaginaDaAtividade() {
       setColuna((col ?? null) as Record<string, unknown> | null);
       setTrilha(t);
       setPessoas(ps);
+      setEventos(evs);
+      setNaoLidos(nl);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "não foi possível abrir a atividade");
     } finally {
       setCarregando(false);
     }
-  }, [projectId, activityId]);
+  }, [projectId, activityId, user?.id]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -156,8 +182,19 @@ export default function PaginaDaAtividade() {
     if (error) throw new Error(error.message);
     if (!count) throw new Error("o banco recusou a alteração — você tem permissão sobre esta atividade?");
 
+    /**
+     * A CONFIRMAÇÃO É A LINHA NO FEED — e ela é automática.
+     *
+     * Não registro evento à mão aqui: o histórico de alterações já é gravado
+     * por trigger, e a view `activity_feed_events` o lê como tipo 'alteracao'.
+     * Registrar de novo produziria a mesma mudança duas vezes na coluna.
+     *
+     * Foi o que a conferência do banco mostrou antes de eu aplicar: a fase 08
+     * já tinha entregue conversa + histórico numa linha do tempo só.
+     */
+
     await carregar();
-  }, [activityId, carregar]);
+  }, [activityId, carregar, user?.id, nomeDeQuemFez]);
 
   /* ── TRADUÇÃO PARA O VOCABULÁRIO DA TELA ───────────────────────────────── */
   const dados: DadosDaTela | null = useMemo(() => {
@@ -241,8 +278,21 @@ export default function PaginaDaAtividade() {
         pessoas={pessoas}
         totais={lerTotaisDerivados(atividade as never)}
         subatividades={subatividades}
-        feed={[]}
-        naoLidos={0}
+        feed={agruparPorDia(eventos, new Date().toISOString()).map((d) => ({
+          rotulo: d.rotulo,
+          eventos: d.eventos.map((e) => ({
+            id: e.evento_id,
+            autor: e.autor,
+            // A frase vem de fraseDoEvento — o de-para mora num lugar só.
+            texto: fraseDoEvento(e),
+            hora: new Date(e.ocorrido_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            // `ehraiz: false` é o que a função devolve para o que veio de uma
+            // filha. É o "na subatividade" do desenho.
+            naSubatividade: !e.ehraiz,
+            ehComentario: e.tipo === "comentario",
+          })),
+        }))}
+        naoLidos={naoLidos}
         capacidades={capacidadesDaTela(caps)}
         avisoDePapel={
           soLeitura
@@ -250,6 +300,21 @@ export default function PaginaDaAtividade() {
             : null
         }
         aoGravarCampo={gravarCampo}
+        aoMarcarLido={user?.id ? async () => {
+          await marcarFeedVisto(activityId, user.id).catch(() => {});
+          setNaoLidos(0);
+        } : undefined}
+        aoComentar={caps.canComment ? async (texto: string) => {
+          // Grava em activity_comments, que é de onde a view do feed lê. Uma
+          // segunda tabela de comentários faria a conversa existir em dois
+          // lugares e divergir.
+          const { error } = await supabase.from("activity_comments").insert({
+            activity_id: activityId, content: texto,
+            author: nomeDeQuemFez, created_by: user?.id ?? null,
+          } as never);
+          if (error) throw new Error(error.message);
+          await carregar();
+        } : undefined}
         aoCancelar={() => router.push(`/project/${projectId}`)}
       />
     </div>

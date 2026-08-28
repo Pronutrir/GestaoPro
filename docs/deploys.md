@@ -15,6 +15,7 @@
 
 | data/hora (Fortaleza) | APP_VERSION | commit | quem publicou | o que entrou |
 |---|---|---|---|---|
+| 27/08/2026 15:55:33 | *desconhecida* | *desconhecido* | **a registrar** | correção parcial do incidente (a linha precisa ser completada por quem publicou) |
 | **27/08/2026 12:08:31** | *desconhecida* | *desconhecido* | **a descobrir** | **INCIDENTE** — leitura de item_type sem o backfill; ver abaixo |
 | 26/08/2026 18:01:08 | *desconhecida* | *desconhecido* | **a descobrir** | migrations da leva + código até ~17:33 |
 | 25/08/2026 17:57 | *desconhecida* | *desconhecido* | *desconhecido* | — |

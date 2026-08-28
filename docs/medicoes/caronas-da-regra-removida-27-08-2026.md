@@ -88,3 +88,43 @@ nomes parecidos e **não** consomem esta regra:
 
 **Método:** `grep` por `isPhase`, `ehAgrupadorDoQuadro` e `eapCanGroup` em
 `src/`, seguido de leitura do contexto de cada ocorrência. Nada foi alterado.
+
+---
+
+# Segunda varredura — os caronas da DEDUÇÃO POR NÍVEL (27/08, à noite)
+
+A cirurgia do nível é irmã da do `OR hasChildren`, então merece a mesma
+varredura: quem lia `eapLevel` para **decidir papel** quebrou; quem lia para
+**saber posição** continua certo.
+
+## Resultado: 6 leitores, nenhum quebrado
+
+| onde | o que faz | veredito |
+|---|---|---|
+| `BacklogSection:1015` | decide se é "fase virtual" da lista | posição ✓ |
+| `BacklogSection:1947` | filtra códigos de nível de fase | posição ✓ |
+| `BacklogSection:2189` | calcula a **indentação** da linha | posição ✓ |
+| `BacklogSection:4206` | acha fases vazias para não repetir | posição ✓ |
+| `EditActivityDialog:2004` | monta o aviso *"pela estrutura seria X"* | posição ✓ |
+| `eapModel:500,518` | `eapRoleForImport` — importação | posição ✓ |
+
+**Nenhum decidia papel exibido.** O único que fazia isso era o bloco dentro de
+`resolveEapKind`, e ele saiu.
+
+### Por que a importação continua usando o nível — e está certa
+
+`eapRoleForImport` (linhas 500 e 518) decide por posição de propósito: **ao
+importar uma EAP colada, o campo ainda não existe.** A posição é a única
+informação disponível naquele instante. É o oposto do defeito — ali a
+heurística supre uma ausência real, não uma que já foi preenchida.
+
+### E o aviso âmbar continua fazendo sentido
+
+`EditActivityDialog:2004` lê o nível para dizer *"pela estrutura, este item
+seria Atividade"*. Ele **compara** a posição com o campo, e é justamente a
+comparação que dá valor ao aviso. Com o nível fora da decisão, ele deixou de
+ser redundante e passou a ser a única voz que discorda do campo — o que o torna
+mais útil, não menos.
+
+É o que registra a decisão de mantê-lo mesmo depois da correção em massa: **a
+correção resolve o passado, o aviso resolve o futuro.**

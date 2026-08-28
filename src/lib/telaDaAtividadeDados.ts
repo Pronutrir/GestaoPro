@@ -241,3 +241,152 @@ export function resumoDasSubatividades(
   if (t.termino) partes.push(`término ${formatarData(t.termino)}`);
   return partes.length > 0 ? partes.join(" · ") : null;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * O FEED — o que ACONTECEU, agrupado por dia
+ *
+ * ============================================================================
+ * OS EVENTOS JÁ EXISTIAM, E EU IA DUPLICÁ-LOS
+ *
+ * A primeira versão deste bloco criava uma tabela de eventos com trigger para
+ * subir o que acontece na filha para o feed do pai. Ao conferir o banco antes
+ * de aplicar, apareceu que a fase 08 já tinha entregue exatamente isso:
+ *
+ *   activity_feed_events  view que une CONVERSA + HISTÓRICO, com autor
+ *                         resolvido e resumo
+ *   feed_da_subarvore()   junta a subárvore inteira, ordenada, com o código
+ *                         EAP da filha — `ehraiz: false` marca o que subiu
+ *
+ * Conferido com dado real: a função devolve eventos de filhas. O que faltava
+ * era só o NÃO-LIDO, que precisa de um sujeito e por isso é tabela à parte.
+ * ============================================================================ */
+
+export interface EventoDoBanco {
+  activity_id: string;
+  wbs_code: string | null;
+  titulo: string;
+  ehraiz: boolean;
+  tipo: string;
+  evento_id: string;
+  ocorrido_em: string;
+  autor: string | null;
+  autor_id: string | null;
+  campo: string | null;
+  resumo: string | null;
+}
+
+/**
+ * O feed de uma atividade, já com o que aconteceu nas filhas.
+ *
+ * `feed_da_subarvore` faz a junção no banco. Fazer aqui exigiria carregar a
+ * subárvore inteira — e a subárvore passa pela RLS, o que devolveria um feed
+ * diferente para cada pessoa pelo motivo errado.
+ */
+export async function carregarFeed(
+  activityId: string,
+  limite = 60,
+): Promise<EventoDoBanco[]> {
+  const { data, error } = await supabase.rpc("feed_da_subarvore" as never, {
+    _raiz: activityId,
+    _limit: limite,
+  } as never);
+  if (error) throw new Error(`não foi possível ler o feed: ${error.message}`);
+  return (data ?? []) as unknown as EventoDoBanco[];
+}
+
+/**
+ * Quantos eventos entraram desde a última visita desta pessoa.
+ *
+ * Sem visita registrada, o não-lido é ZERO — não "tudo". Quem abre uma
+ * atividade pela primeira vez não tem 40 pendências para ler; tem um histórico
+ * para consultar. Marcar tudo como novo faria o sino gritar em toda atividade
+ * que a pessoa nunca abriu.
+ */
+export async function contarNaoLidos(
+  activityId: string,
+  userId: string,
+): Promise<number> {
+  const { data: visita } = await tabela("activity_feed_visitas")
+    .select("visto_em")
+    .eq("user_id", userId)
+    .eq("activity_id", activityId)
+    .maybeSingle();
+
+  const desde = (visita as { visto_em?: string } | null)?.visto_em;
+  if (!desde) return 0;
+
+  const eventos = await carregarFeed(activityId, 200).catch(() => [] as EventoDoBanco[]);
+  return eventos.filter((e) => e.ocorrido_em > desde).length;
+}
+
+/** Marca o feed como visto agora. */
+export async function marcarFeedVisto(activityId: string, userId: string): Promise<void> {
+  const { error } = await tabela("activity_feed_visitas")
+    .upsert(
+      { user_id: userId, activity_id: activityId, visto_em: new Date().toISOString() } as never,
+      { onConflict: "user_id,activity_id" } as never,
+    );
+  if (error) throw new Error(`não foi possível marcar como lido: ${error.message}`);
+}
+
+/**
+ * Agrupa por dia, com os rótulos que uma pessoa usa: "Hoje", "Ontem", data.
+ *
+ * `hojeISO` entra por parâmetro para o agrupamento ser testável — e porque
+ * `new Date()` dentro de uma função de formatação torna impossível provar o que
+ * ela faz na virada do dia.
+ */
+export function agruparPorDia(
+  eventos: EventoDoBanco[],
+  hojeISO: string,
+): { rotulo: string; eventos: EventoDoBanco[] }[] {
+  const dia = (iso: string) => iso.slice(0, 10);
+  const hoje = dia(hojeISO);
+  const ontem = (() => {
+    const d = new Date(`${hoje}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const porDia = new Map<string, EventoDoBanco[]>();
+  for (const e of eventos) {
+    const k = dia(e.ocorrido_em);
+    if (!porDia.has(k)) porDia.set(k, []);
+    porDia.get(k)!.push(e);
+  }
+
+  return [...porDia.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([k, evs]) => ({
+      rotulo: k === hoje ? "Hoje" : k === ontem ? "Ontem" : k.split("-").reverse().join("/"),
+      eventos: evs,
+    }));
+}
+
+/**
+ * A FRASE de um evento, em português.
+ *
+ * O de-para mora AQUI, num lugar só, e não em cada componente — é a regra do
+ * CLAUDE.md: *"Resolver o rótulo na origem, não com um de-para no componente."*
+ * O tipo desconhecido cai no próprio texto do banco em vez de virar enum na
+ * tela; se nem isso houver, diz "registrou uma alteração", que é verdade.
+ */
+export function fraseDoEvento(e: EventoDoBanco): string {
+  const quem = e.autor || "alguém";
+  const onde = e.ehraiz ? "" : ` em ${e.wbs_code || e.titulo}`;
+  if (e.tipo === "comentario") return e.resumo || "(comentário vazio)";
+  if (e.tipo === "alteracao") {
+    const campos = (e.campo || "").split(",").map((c) => c.trim()).filter(Boolean);
+    const rotulos: Record<string, string> = {
+      title: "o nome", description: "a descrição", hours: "as horas",
+      status: "o status", workflow_stage_id: "a coluna", estagio: "o estágio",
+      end_date: "o prazo", start_date: "o início", assigned_to: "o responsável",
+    };
+    const nomes = campos.map((c) => rotulos[c] ?? c);
+    const lista = nomes.length > 2
+      ? `${nomes.slice(0, 2).join(", ")} e mais ${nomes.length - 2}`
+      : nomes.join(" e ");
+    return `${quem} alterou ${lista || "um campo"}${onde}`;
+  }
+  return `${quem} registrou uma alteração${onde}`;
+}
