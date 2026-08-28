@@ -9,7 +9,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen, CircleDashed, UserCheck,
   ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
-  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
+  Rows3, MoreHorizontal, Pencil, Maximize2, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X, Network,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -143,6 +143,9 @@ interface BacklogSectionProps {
   activities: Activity[];
   phases: Phase[];
   onEditActivity: (activity: Activity) => void;
+  /** A PORTA ANTIGA: abre o EditActivityDialog completo. Em paralelo à tela nova
+   *  (que ainda não edita tudo). Sai quando a tela tiver os 13 campos. */
+  onEditarNoDialogo?: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onDataChanged: () => void;
@@ -182,7 +185,7 @@ interface BacklogSectionProps {
 
 export const BacklogSection = ({
   projectId, activities, phases,
-  onEditActivity, onDeleteActivity, onToggleActivity,
+  onEditActivity, onEditarNoDialogo, onDeleteActivity, onToggleActivity,
   onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters, ehMinha,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
@@ -2844,8 +2847,16 @@ export const BacklogSection = ({
                 >
                   <Plus className="w-3.5 h-3.5 mr-2" /> Adicionar subitem
                 </DropdownMenuItem>
+                {/* EDITAR abre o diálogo antigo completo (13 campos). Fica ao
+                    lado de "Abrir detalhes" (a tela nova, ainda em construção)
+                    até a tela editar tudo. */}
+                {onEditarNoDialogo && (
+                  <DropdownMenuItem onSelect={() => onEditarNoDialogo(activity)}>
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
-                  <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                  <Maximize2 className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
                 </DropdownMenuItem>
                 {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban
                     (isAdmin). Desabilitado COM o motivo em vez de oculto —

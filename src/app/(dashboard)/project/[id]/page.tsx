@@ -351,6 +351,32 @@ export default function ProjectDetailsPage() {
     if (!activity?.id || !id) return;
     router.push(rotaDaAtividade(id, activity.id));
   }, [id, router]);
+
+  // A PORTA ANTIGA, EM PARALELO — devolvida em 28/08 depois que a tela nova
+  // aposentou o editor antes de saber editar. O EditActivityDialog completo
+  // continua no git e edita os 13 campos; a tela nova ainda não. Até ela ter
+  // tudo, "Editar" reabre o diálogo. Quando o último campo entrar na tela, este
+  // handler e o botão saem. Mantém os guards de edição do fluxo original.
+  const onEditarNoDialogo = useCallback((
+    activity: any,
+    initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
+  ) => {
+    if (isSyntheticPhaseRow(activity)) return;
+    if (isProjectConcluded) { showProjectLockedToast("editar atividades"); return; }
+    if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
+      toast.error("Atividade bloqueada: só pode ser editada após aprovação da solicitação de mudança.");
+      return;
+    }
+    if (activity && !canMutateActivity(activity as Activity)) {
+      toast.error("Você não pode editar esta atividade", {
+        description: "Só a equipe do projeto e quem responde pela atividade podem. Peça ao gestor do projeto para incluir você na equipe.",
+      });
+      return;
+    }
+    setEditActivityInitialTab(initialTab);
+    setEditingActivity(activity);
+    setEditActivityDialogOpen(true);
+  }, [canMutateActivity, isActivityBlocked, isProjectConcluded, showProjectLockedToast, toast]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -2120,6 +2146,7 @@ export default function ProjectDetailsPage() {
                 phases={phases}
                 projectTitle={project?.title}
                 onEditActivity={(activity) => openEditActivity(activity as any)}
+                onEditarNoDialogo={(activity) => onEditarNoDialogo(activity as any)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}

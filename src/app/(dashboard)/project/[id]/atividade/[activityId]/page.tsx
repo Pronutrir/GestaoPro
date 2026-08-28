@@ -403,6 +403,7 @@ export default function PaginaDaAtividade() {
         aoAtribuir={aoAtribuir}
         aoRemoverPessoa={aoRemoverPessoa}
         buscarPessoas={buscarPessoas}
+        aoAbrirEditorAntigo={soLeitura ? undefined : () => router.push(`/project/${projectId}?activity=${activityId}`)}
         aoMarcarLido={user?.id ? async () => {
           await marcarFeedVisto(activityId, user.id).catch(() => {});
           setNaoLidos(0);

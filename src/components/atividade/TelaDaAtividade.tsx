@@ -127,6 +127,7 @@ export function TelaDaAtividade({
   aoAtribuir,
   aoRemoverPessoa,
   buscarPessoas,
+  aoAbrirEditorAntigo,
   aoCriar,
   aoCriarEContinuar,
   aoCancelar,
@@ -151,6 +152,9 @@ export function TelaDaAtividade({
   aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
   aoRemoverPessoa?: (userId: string) => Promise<void>;
   buscarPessoas?: (q: string) => Promise<{ id: string; nome: string }[]>;
+  /** A PORTA ANTIGA: abre o formulário completo (13 campos). Temporária, até a
+   *  tela editar tudo no lugar. */
+  aoAbrirEditorAntigo?: () => void;
   aoCriar?: () => Promise<void>;
   aoCriarEContinuar?: () => Promise<void>;
   aoCancelar?: () => void;
@@ -238,6 +242,18 @@ export function TelaDaAtividade({
                   className="h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
                 >
                   {dados.concluida ? "Reabrir" : "Concluir"}
+                </button>
+              )}
+              {/* A PORTA ANTIGA, em paralelo: o formulário completo, enquanto a
+                  tela não edita todos os campos. Sai quando a tela estiver pronta. */}
+              {!criando && aoAbrirEditorAntigo && (
+                <button
+                  type="button"
+                  onClick={aoAbrirEditorAntigo}
+                  className="h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
+                  title="Abrir o formulário completo (todos os campos)"
+                >
+                  Editar
                 </button>
               )}
             </div>
