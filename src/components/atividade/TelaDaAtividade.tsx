@@ -1,7 +1,9 @@
 'use client';
 
-import { Diamond, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Diamond, Plus, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { CampoNoLugar } from "./CampoNoLugar";
 import { DescricaoRica } from "./DescricaoRica";
 import { TrilhaDaAtividade } from "./TrilhaDaAtividade";
@@ -65,6 +67,8 @@ export interface CapacidadesDaTela {
   criarSubatividade?: boolean;
   concluir?: boolean;
   comentar?: boolean;
+  /** Mudar Fase/Entrega/Atividade/Marco — é escopo, planejamento. */
+  mudarTipo?: boolean;
 }
 
 export interface DadosDaTela {
@@ -74,7 +78,9 @@ export interface DadosDaTela {
   title: string;
   descricao: string | null;
   tipoRotulo: string;
+  tipoKind: EapKind;
   ehMarco: boolean;
+  concluida: boolean;
   statusRotulo: string;
   statusCor: string | null;
   previstoInicio: string | null;
@@ -117,6 +123,10 @@ export function TelaDaAtividade({
   aoComentar,
   aoMarcarLido,
   aoConcluir,
+  aoMudarTipo,
+  aoAtribuir,
+  aoRemoverPessoa,
+  buscarPessoas,
   aoCriar,
   aoCriarEContinuar,
   aoCancelar,
@@ -133,10 +143,14 @@ export function TelaDaAtividade({
   /** A faixa do estado "visualizar", explicando o papel. */
   avisoDePapel?: string | null;
   aoGravarCampo?: (campo: string, valor: string) => Promise<void>;
-  aoCriarSubatividade?: () => void;
+  aoCriarSubatividade?: (nome: string) => Promise<void>;
   aoComentar?: (t: string) => Promise<void>;
   aoMarcarLido?: () => void;
   aoConcluir?: () => void;
+  aoMudarTipo?: (kind: EapKind) => Promise<void>;
+  aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
+  aoRemoverPessoa?: (userId: string) => Promise<void>;
+  buscarPessoas?: (q: string) => Promise<{ id: string; nome: string }[]>;
   aoCriar?: () => Promise<void>;
   aoCriarEContinuar?: () => Promise<void>;
   aoCancelar?: () => void;
@@ -197,8 +211,9 @@ export function TelaDaAtividade({
                 dica="O que precisa ser feito"
               />
             </div>
+            {/* AS AÇÕES MORAM NO TOPO, À DIREITA. Botão sem permissão NÃO aparece
+                (nunca `disabled`). Tipo é dropdown quando pode, texto quando não. */}
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[11px] text-muted-foreground">{dados.tipoRotulo}</span>
               {!criando && (
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
                   {dados.statusCor && (
@@ -211,15 +226,18 @@ export function TelaDaAtividade({
                   {dados.statusRotulo}
                 </span>
               )}
-              {/* BOTÃO SEM PERMISSÃO NÃO APARECE. Não é `disabled` — o desenho
-                  é explícito: "nunca apagado". */}
+              {!criando && capacidades.mudarTipo && aoMudarTipo ? (
+                <DropdownTipo atual={dados.tipoKind} aoMudar={aoMudarTipo} />
+              ) : (
+                <span className="text-[11px] text-muted-foreground">{dados.tipoRotulo}</span>
+              )}
               {capacidades.concluir && aoConcluir && (
                 <button
                   type="button"
                   onClick={aoConcluir}
                   className="h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
                 >
-                  Concluir
+                  {dados.concluida ? "Reabrir" : "Concluir"}
                 </button>
               )}
             </div>
@@ -231,21 +249,34 @@ export function TelaDaAtividade({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-3">
             <PessoasNoResumo
               rotulo="Responsáveis"
+              papel="responsavel"
               pessoas={responsaveis}
-              vazio="sem responsável"
+              vazioTexto="sem responsável"
+              vazioVerbo="+ atribuir alguém"
+              bloqueiaSeVazio
               podeEditar={!!capacidades.editarPessoas}
+              aoAtribuir={aoAtribuir}
+              aoRemover={aoRemoverPessoa}
+              buscarPessoas={buscarPessoas}
             />
             <PessoasNoResumo
               rotulo="Participantes"
+              papel="participante"
               pessoas={participantes}
-              vazio="ninguém"
+              vazioTexto="ninguém"
+              vazioVerbo="+ incluir participante"
               podeEditar={!!capacidades.editarPessoas}
+              aoAtribuir={aoAtribuir}
+              aoRemover={aoRemoverPessoa}
+              buscarPessoas={buscarPessoas}
             />
-            <CampoNoLugar
+            <EditorDeJanela
               rotulo="Previsto"
-              valor={janela(dados.previstoInicio, dados.previstoFim)}
-              vazio="sem data"
-              aoGravar={gravador("previsto", capacidades.editarDatas)}
+              inicio={dados.previstoInicio}
+              fim={dados.previstoFim}
+              vazioVerbo="+ definir prazo"
+              aoGravarInicio={gravador("start_date", capacidades.editarDatas)}
+              aoGravarFim={gravador("end_date", capacidades.editarDatas)}
             />
             <CampoNoLugar
               rotulo="Realizado"
@@ -261,14 +292,17 @@ export function TelaDaAtividade({
                     }`
                   : null
               }
+              valorEdicao={dados.horasPrevistas != null ? String(dados.horasPrevistas) : ""}
               vazio="sem estimativa"
+              dica="horas previstas — só o número"
               aoGravar={gravador("hours", capacidades.editarEsforco)}
             />
+            {/* GUT é três fatores (G×U×T); o editor de prioridade dedicado ainda
+                não veio — por ora é leitura, não um input que salva NaN. */}
             <CampoNoLugar
               rotulo="GUT"
               valor={dados.gut ? `${dados.gut.g} × ${dados.gut.u} × ${dados.gut.t} = ${dados.gut.total}` : null}
               vazio={dados.ehMarco ? "não se aplica" : "sem prioridade"}
-              aoGravar={dados.ehMarco ? undefined : gravador("gut", capacidades.editarGut)}
             />
             {/* Fase, Pacote e Origem são LEITURA sempre: mudam pela EAP, não
                 por digitação. Editá-los aqui abriria uma segunda via de mover
@@ -301,16 +335,6 @@ export function TelaDaAtividade({
                   {resumoSubs}
                 </span>
               )}
-              {capacidades.criarSubatividade && aoCriarSubatividade && (
-                <button
-                  type="button"
-                  onClick={aoCriarSubatividade}
-                  className="ml-auto inline-flex items-center gap-1 h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Subatividade
-                </button>
-              )}
             </div>
             {subatividades.length === 0 ? (
               <p className="text-[12px] text-muted-foreground/70">
@@ -338,6 +362,11 @@ export function TelaDaAtividade({
                   </li>
                 ))}
               </ul>
+            )}
+            {/* + adicionar com uma linha só: nome + Enter cria a próxima.
+                Subatividade não vira cartão sozinha — nasce no Backlog. */}
+            {capacidades.criarSubatividade && aoCriarSubatividade && (
+              <NovaSubatividade aoCriar={aoCriarSubatividade} />
             )}
           </div>
         )}
@@ -400,41 +429,291 @@ export function TelaDaAtividade({
  */
 function PessoasNoResumo({
   rotulo,
+  papel,
   pessoas,
-  vazio,
+  vazioTexto,
+  vazioVerbo,
+  bloqueiaSeVazio = false,
   podeEditar,
+  aoAtribuir,
+  aoRemover,
+  buscarPessoas,
 }: {
   rotulo: string;
+  papel: "responsavel" | "participante";
   pessoas: PessoaDaAtividade[];
-  vazio: string;
+  vazioTexto: string;
+  vazioVerbo: string;
+  bloqueiaSeVazio?: boolean;
   podeEditar: boolean;
+  aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
+  aoRemover?: (userId: string) => Promise<void>;
+  buscarPessoas?: (q: string) => Promise<{ id: string; nome: string }[]>;
 }) {
+  const [aberto, setAberto] = useState(false);
+  const [q, setQ] = useState("");
+  const [resultados, setResultados] = useState<{ id: string; nome: string }[]>([]);
+  const [ocupado, setOcupado] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (aberto) ref.current?.focus(); }, [aberto]);
+  useEffect(() => {
+    if (!aberto || !buscarPessoas) return;
+    let vivo = true;
+    buscarPessoas(q).then((r) => { if (vivo) setResultados(r); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [q, aberto, buscarPessoas]);
+
+  const escolher = async (id: string) => {
+    if (!aoAtribuir) return;
+    setOcupado(true);
+    try { await aoAtribuir(id, papel); setAberto(false); setQ(""); } finally { setOcupado(false); }
+  };
+
+  const podeAtribuir = podeEditar && !!aoAtribuir && !!buscarPessoas;
+
   return (
-    <div className="flex flex-col gap-1 min-w-0">
+    <div className="flex flex-col gap-1 min-w-0 relative">
       <span className="text-[11px] text-muted-foreground">{rotulo}</span>
-      {pessoas.length === 0 ? (
-        <span className="text-[13px] text-muted-foreground/60">{vazio}</span>
-      ) : (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {pessoas.map((p) => (
-            <span key={p.id} className="inline-flex items-center gap-1 min-w-0" title={p.nome}>
-              <span className="w-[22px] h-[22px] rounded-full bg-muted text-muted-foreground text-[10px] font-semibold inline-flex items-center justify-center shrink-0">
-                {p.iniciais}
-              </span>
-              <span className="text-[12.5px] truncate">{p.nome}</span>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {pessoas.map((p) => (
+          <span
+            key={p.id}
+            className="group inline-flex items-center gap-1 min-w-0 rounded-full bg-muted/60 pl-0.5 pr-1.5 py-0.5"
+            title={p.nome}
+          >
+            <span className="w-[20px] h-[20px] rounded-full bg-muted text-muted-foreground text-[10px] font-semibold inline-flex items-center justify-center shrink-0">
+              {p.iniciais}
             </span>
-          ))}
-          {podeEditar && (
+            <span className="text-[12.5px] truncate">{p.nome}</span>
+            {podeEditar && aoRemover && (
+              <button
+                type="button"
+                onClick={() => void aoRemover(p.id)}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
+                title={`Remover de ${rotulo.toLowerCase()}`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </span>
+        ))}
+
+        {/* VAZIO É CONVITE COM VERBO — âmbar quando o vazio trava (responsável).
+            Sem permissão vira texto puro, sem verbo. */}
+        {pessoas.length === 0 && !podeAtribuir && (
+          <span className="text-[13px] text-muted-foreground/60">{vazioTexto}</span>
+        )}
+        {podeAtribuir && (
+          pessoas.length === 0 ? (
             <button
               type="button"
-              className="w-[22px] h-[22px] rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary inline-flex items-center justify-center"
+              onClick={() => setAberto(true)}
+              className={cn(
+                "text-[13px] hover:underline",
+                bloqueiaSeVazio ? "text-amber-600 dark:text-amber-500" : "text-primary",
+              )}
+            >
+              {vazioVerbo}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAberto(true)}
+              className="w-[20px] h-[20px] rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary inline-flex items-center justify-center"
               title={`Incluir em ${rotulo.toLowerCase()}`}
             >
               <Plus className="w-3 h-3" />
             </button>
-          )}
-        </div>
+          )
+        )}
+      </div>
+
+      {aberto && (
+        <>
+          <button className="fixed inset-0 z-10 cursor-default" onClick={() => setAberto(false)} aria-hidden tabIndex={-1} />
+          <div className="absolute z-20 top-full left-0 mt-1 w-64 rounded-[6px] border border-border bg-card shadow-md p-1">
+            <input
+              ref={ref}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") setAberto(false); }}
+              placeholder="buscar pessoa…"
+              className="w-full bg-background border border-border rounded-[4px] px-2 py-1 text-[12.5px] outline-none focus:border-primary"
+            />
+            <ul className="max-h-52 overflow-y-auto mt-1">
+              {resultados.length === 0 ? (
+                <li className="px-2 py-1.5 text-[12px] text-muted-foreground">ninguém encontrado</li>
+              ) : (
+                resultados.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      disabled={ocupado}
+                      onClick={() => void escolher(r.id)}
+                      className="w-full text-left px-2 py-1.5 text-[12.5px] hover:bg-muted rounded-[4px] disabled:opacity-50"
+                    >
+                      {r.nome}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+            <p className="px-2 py-1 text-[10.5px] text-muted-foreground/70">
+              Quem estiver fora da equipe entra ao ser atribuído.
+            </p>
+          </div>
+        </>
       )}
+    </div>
+  );
+}
+
+/* ── O DROPDOWN DE TIPO — Fase/Entrega/Atividade/Marco ────────────────────────
+ * Fase e Entrega gravam igual (as duas agrupam); o rótulo exibido colapsa em
+ * "Entrega" desde o E2. Mantê-las nas opções não muda o resultado. */
+function DropdownTipo({ atual, aoMudar }: { atual: EapKind; aoMudar: (k: EapKind) => Promise<void> }) {
+  const opcoes: EapKind[] = ["atividade", "entrega", "fase", "marco"];
+  const valor = opcoes.includes(atual) ? atual : "atividade";
+  return (
+    <div className="relative inline-flex items-center">
+      <select
+        value={valor}
+        onChange={(e) => void aoMudar(e.target.value as EapKind)}
+        className="h-7 pl-2 pr-6 rounded-[4px] border border-border bg-card text-[12px] hover:bg-muted appearance-none cursor-pointer outline-none focus:border-primary"
+        title="Tipo do item"
+        aria-label="Tipo do item"
+      >
+        {opcoes.map((k) => (
+          <option key={k} value={k}>{EAP_LABELS[k]}</option>
+        ))}
+      </select>
+      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-1.5 pointer-events-none" />
+    </div>
+  );
+}
+
+/* ── EDITOR DE JANELA (Previsto) — duas datas nativas ─────────────────────────
+ * O vazio que trava (sem prazo) é âmbar com verbo; o preenchido, texto. Cada
+ * data grava ao sair. Não há "salvar". */
+function EditorDeJanela({
+  rotulo, inicio, fim, vazioVerbo, aoGravarInicio, aoGravarFim,
+}: {
+  rotulo: string;
+  inicio: string | null;
+  fim: string | null;
+  vazioVerbo: string;
+  aoGravarInicio?: (novo: string) => Promise<void>;
+  aoGravarFim?: (novo: string) => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const pode = typeof aoGravarInicio === "function";
+  const temValor = !!(inicio || fim);
+  const texto = temValor
+    ? `${inicio ? formatarDataBR(inicio) : "—"} → ${fim ? formatarDataBR(fim) : "—"}`
+    : null;
+
+  const inputCls = "bg-background border border-primary rounded-[4px] px-1.5 py-0.5 text-[12.5px] outline-none ring-2 ring-primary/20";
+
+  if (!pode) {
+    return (
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-[11px] text-muted-foreground">{rotulo}</span>
+        <span className={cn("text-[13px]", temValor ? "text-foreground" : "text-muted-foreground/60")}>{texto ?? "sem data"}</span>
+      </div>
+    );
+  }
+
+  if (aberto) {
+    return (
+      <div className="flex flex-col gap-1 min-w-0">
+        <span className="text-[11px] text-muted-foreground">{rotulo}</span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            defaultValue={inicio ?? ""}
+            onBlur={(e) => { if (e.target.value !== (inicio ?? "")) void aoGravarInicio?.(e.target.value); }}
+            className={inputCls}
+          />
+          <span className="text-[12px] text-muted-foreground">→</span>
+          <input
+            type="date"
+            defaultValue={fim ?? ""}
+            onBlur={(e) => { if (e.target.value !== (fim ?? "")) void aoGravarFim?.(e.target.value); }}
+            className={inputCls}
+          />
+          <button type="button" onClick={() => setAberto(false)} className="text-[12px] text-muted-foreground hover:text-foreground">ok</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setAberto(true)}
+      className="flex flex-col gap-0.5 min-w-0 text-left rounded-[4px] -mx-1 px-1 py-0.5 hover:bg-muted/60 transition-colors"
+      title={`Clique para ajustar · ${rotulo}`}
+    >
+      <span className="text-[11px] text-muted-foreground">{rotulo}</span>
+      {temValor ? (
+        <span className="text-[13px] text-foreground">{texto}</span>
+      ) : (
+        <span className="text-[13px] text-amber-600 dark:text-amber-500">{vazioVerbo}</span>
+      )}
+    </button>
+  );
+}
+
+/* ── NOVA SUBATIVIDADE — uma linha, Enter cria a próxima ──────────────────── */
+function NovaSubatividade({ aoCriar }: { aoCriar: (nome: string) => Promise<void> }) {
+  const [ativo, setAtivo] = useState(false);
+  const [nome, setNome] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (ativo) ref.current?.focus(); }, [ativo]);
+
+  const criar = async () => {
+    const t = nome.trim();
+    if (!t) { setAtivo(false); return; }
+    setSalvando(true);
+    try {
+      await aoCriar(t);
+      setNome("");
+      ref.current?.focus();
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (!ativo) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAtivo(true)}
+        className="mt-2 inline-flex items-center gap-1 text-[12.5px] text-primary hover:underline"
+      >
+        <Plus className="w-3.5 h-3.5" /> adicionar subatividade
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <input
+        ref={ref}
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+        disabled={salvando}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); void criar(); }
+          if (e.key === "Escape") { setAtivo(false); setNome(""); }
+        }}
+        onBlur={() => { if (!nome.trim()) setAtivo(false); }}
+        placeholder="nome da subatividade — Enter cria a próxima, Esc fecha"
+        className="w-full bg-background border border-primary rounded-[4px] px-2 py-1 text-[12.5px] outline-none ring-2 ring-primary/20 disabled:opacity-60"
+      />
     </div>
   );
 }

@@ -110,8 +110,13 @@ check("e o feed fica vazio, sem inventar histórico",
 // "vazio diz o que falta — sem responsável, sem data — nunca 0, traço mudo ou
 // a definir". É regra não negociável do desenho.
 check('nenhum campo usa "a definir"', !/a definir/i.test(tela));
-check("os vazios nomeiam a ausência",
-  /vazio="sem responsável"/.test(tela) && /vazio="sem data"/.test(tela));
+// A ausência é nomeada na LEITURA (sem responsável, sem data); no EDITÁVEL o
+// vazio é convite com verbo (+ atribuir alguém, + definir prazo) — a regra #1
+// da tela interativa. Nunca 0, traço mudo ou "a definir".
+check("os vazios nomeiam a ausência (leitura)",
+  /sem responsável/.test(tela) && /sem data/.test(tela));
+check("os vazios editáveis convidam com verbo (edição)",
+  /\+ atribuir alguém/.test(tela) && /\+ definir prazo/.test(tela));
 check("marco diz 'não se aplica' no GUT, não 'sem prioridade'",
   /dados\.ehMarco \? "não se aplica"/.test(tela));
 

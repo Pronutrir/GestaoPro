@@ -25,8 +25,12 @@ import {
   type EventoDoBanco,
 } from "@/lib/telaDaAtividadeDados";
 import { capacidadesNaAtividade } from "@/lib/activityAccess";
-import { resolveEapKind, EAP_LABELS } from "@/lib/eapModel";
+import { resolveEapKind, eapToPersisted, EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { gutScore } from "@/lib/gutPriority";
+
+// activity_assignees é da fase 02 e não está nos tipos gerados do Supabase —
+// mesmo contorno de lib/telaDaAtividadeDados: casta o nome para escapar do tipo.
+const tabelaSemTipo = (nome: string) => supabase.from(nome as never);
 
 /**
  * A TELA DA ATIVIDADE, EM ROTA PRÓPRIA — `/project/:id/atividade/:activityId`
@@ -163,16 +167,17 @@ export default function PaginaDaAtividade() {
    * uma gravação que o banco recusou — o defeito que já custou caro aqui.
    */
   const gravarCampo = useCallback(async (campo: string, valor: string) => {
-    const mapa: Record<string, string> = {
-      title: "title",
-      description: "description",
-      hours: "hours",
-    };
-    const coluna = mapa[campo];
+    // Cada campo grava numa coluna. Os que viram número/data limpam para NULL
+    // quando vazios — "" numa coluna de data é erro de tipo, não "sem data".
+    const numerico = new Set(["hours", "cost", "gravity", "urgency", "tendency"]);
+    const dataCol = new Set(["start_date", "end_date"]);
+    const texto = new Set(["title", "description"]);
+    const coluna = [...numerico, ...dataCol, ...texto].find((c) => c === campo);
     if (!coluna) throw new Error(`campo "${campo}" ainda não é editável por aqui`);
 
-    const patch: Record<string, unknown> =
-      coluna === "hours" ? { hours: Number(valor) || null } : { [coluna]: valor || null };
+    const patch: Record<string, unknown> = numerico.has(coluna)
+      ? { [coluna]: valor.trim() === "" ? null : Number(valor) }
+      : { [coluna]: valor.trim() === "" ? null : valor };
 
     const { error, count } = await supabase
       .from("activities")
@@ -196,6 +201,96 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, carregar, user?.id, nomeDeQuemFez]);
 
+  /* ── AS AÇÕES — cada uma grava e recarrega; a confirmação é a linha no feed ── */
+
+  // CONCLUIR — status vira 'completed' e o realizado FECHA (a data nasce do
+  // trabalho, não da digitação: aqui é o ato de concluir que a define).
+  const aoConcluir = useCallback(async () => {
+    const jaConcluida = String((atividade as Record<string, unknown>)?.status) === "completed";
+    const patch = jaConcluida
+      ? { status: "in_progress", actual_end_date: null }
+      : { status: "completed", actual_end_date: new Date().toISOString().slice(0, 10) };
+    const { error, count } = await supabase
+      .from("activities").update(patch as never, { count: "exact" }).eq("id", activityId);
+    if (error) { toast({ title: "Não deu para concluir", description: error.message, variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de execução nesta atividade?", variant: "destructive" }); return; }
+    await carregar();
+  }, [activityId, atividade, carregar, toast]);
+
+  // MUDAR O TIPO — traduz o EapKind para (item_type, is_milestone) pela ponte
+  // única. A trava do banco pode barrar (agrupador sem subitem no quadro); o
+  // recado sobe para a tela em português, não como código.
+  const aoMudarTipo = useCallback(async (kind: EapKind) => {
+    const { item_type, is_milestone } = eapToPersisted(kind);
+    const { error, count } = await supabase
+      .from("activities").update({ item_type, is_milestone } as never, { count: "exact" }).eq("id", activityId);
+    if (error) { toast({ title: "Não deu para mudar o tipo", description: error.message, variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
+    await carregar();
+  }, [activityId, carregar, toast]);
+
+  // SUBATIVIDADE — cria uma filha com nome só; nasce no Backlog (não vira cartão
+  // sozinha, a regra continua). O resto se preenche na tela dela.
+  const aoCriarSubatividade = useCallback(async (nome: string) => {
+    const titulo = nome.trim();
+    if (!titulo) return;
+    const { data: backlog } = await supabase
+      .from("workflow_stages").select("id")
+      .eq("project_id", projectId).eq("categoria", "backlog").limit(1).maybeSingle();
+    const { error } = await supabase.from("activities").insert({
+      project_id: projectId, parent_id: activityId, title: titulo,
+      item_type: "atividade", is_milestone: false, status: "not_started",
+      workflow_stage_id: (backlog as Record<string, unknown> | null)?.id ?? null,
+    } as never);
+    if (error) { toast({ title: "Não deu para criar a subatividade", description: error.message, variant: "destructive" }); return; }
+    await carregar();
+  }, [activityId, projectId, carregar, toast]);
+
+  // ATRIBUIR — dois caminhos, e a regra inviolável no meio.
+  //   1) DIRETO: a pessoa já está na equipe → insere o vínculo de atividade. O
+  //      gatilho trg_assignee_exige_equipe barra quem está fora, e é esse "não"
+  //      que separa os dois casos sem uma consulta extra — quem só tem canAssign
+  //      (e não gerencia equipe) atribui um colega de equipe por aqui.
+  //   2) DE FORA: cai na RPC incluir_e_atribuir, que inclui na equipe E atribui
+  //      na MESMA transação (só quem gerencia equipe pode). Assina como
+  //      participante; para responsável, promove o papel depois.
+  const aoAtribuir = useCallback(async (userId: string, papel: "responsavel" | "participante") => {
+    const { error: eDireto } = await tabelaSemTipo("activity_assignees").insert({
+      activity_id: activityId, user_id: userId, papel, created_by: user?.id ?? null,
+    } as never);
+
+    if (eDireto) {
+      const { error: eRpc } = await supabase.rpc("incluir_e_atribuir" as never, {
+        p_activity_id: activityId, p_user_id: userId,
+      } as never);
+      if (eRpc) { toast({ title: "Não deu para atribuir", description: eRpc.message, variant: "destructive" }); return; }
+      if (papel === "responsavel") {
+        const { error: eP } = await tabelaSemTipo("activity_assignees")
+          .update({ papel: "responsavel" } as never).eq("activity_id", activityId).eq("user_id", userId);
+        if (eP) toast({ title: "Atribuído como participante", description: `Não deu para tornar responsável: ${eP.message}`, variant: "destructive" });
+      }
+    }
+    await carregar();
+  }, [activityId, user?.id, carregar, toast]);
+
+  // REMOVER da atividade — tira o vínculo de responsável/participante. NÃO mexe
+  // na equipe do projeto (isso é outro ato, de quem gerencia equipe).
+  const aoRemoverPessoa = useCallback(async (userId: string) => {
+    const { error } = await tabelaSemTipo("activity_assignees")
+      .delete().eq("activity_id", activityId).eq("user_id", userId);
+    if (error) { toast({ title: "Não deu para remover", description: error.message, variant: "destructive" }); return; }
+    await carregar();
+  }, [activityId, carregar, toast]);
+
+  // BUSCAR pessoas para atribuir: perfis ativos, filtrados pelo texto. A
+  // inclusão na equipe (se faltar) acontece dentro de incluir_e_atribuir.
+  const buscarPessoas = useCallback(async (q: string): Promise<{ id: string; nome: string }[]> => {
+    let query = supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name").limit(8);
+    if (q.trim()) query = query.ilike("full_name", `%${q.trim()}%`);
+    const { data } = await query;
+    return ((data ?? []) as Record<string, unknown>[]).map((p) => ({ id: String(p.id), nome: String(p.full_name ?? "sem nome") }));
+  }, []);
+
   /* ── TRADUÇÃO PARA O VOCABULÁRIO DA TELA ───────────────────────────────── */
   const dados: DadosDaTela | null = useMemo(() => {
     if (!atividade) return null;
@@ -214,7 +309,9 @@ export default function PaginaDaAtividade() {
       title: String(a.title ?? ""),
       descricao: (a.description as string) ?? null,
       tipoRotulo: EAP_LABELS[kind] ?? "Atividade",
+      tipoKind: kind,
       ehMarco: !!a.is_milestone,
+      concluida: String(a.status) === "completed",
       statusRotulo: String((coluna?.title as string) ?? "sem coluna"),
       statusCor: (coluna?.color as string) ?? null,
       previstoInicio: (a.start_date as string) ?? null,
@@ -300,6 +397,12 @@ export default function PaginaDaAtividade() {
             : null
         }
         aoGravarCampo={gravarCampo}
+        aoConcluir={aoConcluir}
+        aoMudarTipo={aoMudarTipo}
+        aoCriarSubatividade={aoCriarSubatividade}
+        aoAtribuir={aoAtribuir}
+        aoRemoverPessoa={aoRemoverPessoa}
+        buscarPessoas={buscarPessoas}
         aoMarcarLido={user?.id ? async () => {
           await marcarFeedVisto(activityId, user.id).catch(() => {});
           setNaoLidos(0);

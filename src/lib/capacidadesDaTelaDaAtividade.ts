@@ -49,5 +49,7 @@ export function capacidadesDaTela(c: {
     criarSubatividade: c.canEditPlanejamento,
     concluir: c.canEditExecucao,
     comentar: c.canComment,
+    // Mudar Fase/Entrega/Atividade/Marco é decidir o que a atividade É — escopo.
+    mudarTipo: c.canEditPlanejamento,
   };
 }
