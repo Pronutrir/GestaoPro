@@ -53,5 +53,7 @@ export function capacidadesDaTela(c: {
     comentar: c.canComment,
     // Mudar Fase/Entrega/Atividade/Marco é decidir o que a atividade É — escopo.
     mudarTipo: c.canEditPlanejamento,
+    // Promover (backlog → quadro) é decisão de escopo — CLAUDE.md.
+    promover: c.canEditPlanejamento,
   };
 }

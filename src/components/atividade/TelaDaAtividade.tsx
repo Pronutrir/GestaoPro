@@ -70,6 +70,8 @@ export interface CapacidadesDaTela {
   comentar?: boolean;
   /** Mudar Fase/Entrega/Atividade/Marco — é escopo, planejamento. */
   mudarTipo?: boolean;
+  /** Promover do backlog para o quadro — decisão de escopo (planejamento). */
+  promover?: boolean;
 }
 
 export interface DadosDaTela {
@@ -82,6 +84,7 @@ export interface DadosDaTela {
   tipoKind: EapKind;
   ehMarco: boolean;
   concluida: boolean;
+  noBacklog: boolean;
   statusRotulo: string;
   statusCor: string | null;
   previstoInicio: string | null;
@@ -126,6 +129,7 @@ export function TelaDaAtividade({
   aoMarcarLido,
   aoConcluir,
   aoMudarTipo,
+  aoMoverParaQuadro,
   aoAtribuir,
   aoRemoverPessoa,
   buscarPessoas,
@@ -152,6 +156,7 @@ export function TelaDaAtividade({
   aoMarcarLido?: () => void;
   aoConcluir?: () => void;
   aoMudarTipo?: (kind: EapKind) => Promise<void>;
+  aoMoverParaQuadro?: () => void;
   aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
   aoRemoverPessoa?: (userId: string) => Promise<void>;
   buscarPessoas?: (q: string) => Promise<{ id: string; nome: string }[]>;
@@ -248,6 +253,18 @@ export function TelaDaAtividade({
                   className="h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
                 >
                   {dados.concluida ? "Reabrir" : "Concluir"}
+                </button>
+              )}
+              {/* MOVER PARA O QUADRO — só quando está no backlog e pode promover.
+                  Promover é decisão de escopo; a trava do banco recusa agrupador
+                  sem subitem em português. */}
+              {!criando && dados.noBacklog && capacidades.promover && aoMoverParaQuadro && (
+                <button
+                  type="button"
+                  onClick={aoMoverParaQuadro}
+                  className="h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
+                >
+                  Mover para o quadro
                 </button>
               )}
               {/* A PORTA ANTIGA, em paralelo: o formulário completo, enquanto a

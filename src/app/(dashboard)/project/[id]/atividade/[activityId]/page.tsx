@@ -230,6 +230,24 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, carregar, toast]);
 
+  // MOVER PARA O QUADRO — promove do backlog para a coluna de ENTRADA (ou a
+  // primeira visível não-backlog). A trava do banco recusa agrupador sem subitem
+  // em português; count:"exact" pega a recusa silenciosa da RLS.
+  const aoMoverParaQuadro = useCallback(async () => {
+    const { data: stages } = await supabase.from("workflow_stages")
+      .select("id, is_entry_point, is_visible, categoria").eq("project_id", projectId);
+    const lista = ((stages ?? []) as Record<string, unknown>[]).filter(
+      (s) => s.is_visible !== false && String(s.categoria ?? "").toLowerCase() !== "backlog",
+    );
+    const alvo = (lista.find((s) => s.is_entry_point) ?? lista[0]) as Record<string, unknown> | undefined;
+    if (!alvo?.id) { toast({ title: "Sem coluna no quadro", description: "Este projeto não tem coluna visível fora do backlog.", variant: "destructive" }); return; }
+    const { error, count } = await supabase.from("activities")
+      .update({ workflow_stage_id: alvo.id } as never, { count: "exact" }).eq("id", activityId);
+    if (error) { toast({ title: "Não deu para mover ao quadro", description: error.message, variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
+    await carregar();
+  }, [activityId, projectId, carregar, toast]);
+
   // SUBATIVIDADE — cria uma filha com nome só; nasce no Backlog (não vira cartão
   // sozinha, a regra continua). O resto se preenche na tela dela.
   const aoCriarSubatividade = useCallback(async (nome: string) => {
@@ -313,6 +331,7 @@ export default function PaginaDaAtividade() {
       tipoKind: kind,
       ehMarco: !!a.is_milestone,
       concluida: String(a.status) === "completed",
+      noBacklog: String((coluna?.categoria as string) ?? "").toLowerCase() === "backlog",
       statusRotulo: String((coluna?.title as string) ?? "sem coluna"),
       statusCor: (coluna?.color as string) ?? null,
       previstoInicio: (a.start_date as string) ?? null,
@@ -401,6 +420,7 @@ export default function PaginaDaAtividade() {
         aoGravarCampo={gravarCampo}
         aoConcluir={aoConcluir}
         aoMudarTipo={aoMudarTipo}
+        aoMoverParaQuadro={aoMoverParaQuadro}
         aoCriarSubatividade={aoCriarSubatividade}
         aoAtribuir={aoAtribuir}
         aoRemoverPessoa={aoRemoverPessoa}

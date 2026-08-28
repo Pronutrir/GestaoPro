@@ -181,6 +181,7 @@ export default function PaginaCriarAtividade() {
     tipoKind: tipo,
     ehMarco: tipo === "marco",
     concluida: false,
+    noBacklog: false,
     statusRotulo: "",
     statusCor: null,
     previstoInicio: null, previstoFim: null,
