@@ -12,6 +12,7 @@ import {
 } from "@/components/atividade/TelaDaAtividade";
 import { capacidadesDaTela } from "@/lib/capacidadesDaTelaDaAtividade";
 import { ActivityDependencies } from "@/components/ActivityDependencies";
+import { ActivityAttachments } from "@/components/ActivityAttachments";
 import {
   carregarTrilha,
   carregarPessoas,
@@ -301,6 +302,60 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, carregar, toast]);
 
+  // DUPLICAR — clona os campos de PLANEJAMENTO (nome, descrição, tipo, esforço,
+  // custo, GUT, posição, coluna), zera o que nasce do trabalho (datas/status).
+  // Vai para a cópia.
+  const aoDuplicar = useCallback(async () => {
+    const a = (atividade ?? {}) as Record<string, unknown>;
+    const { data: nova, error } = await supabase.from("activities").insert({
+      project_id: projectId,
+      parent_id: a.parent_id ?? null,
+      title: `Cópia de ${a.title ?? "atividade"}`,
+      description: a.description ?? null,
+      item_type: a.item_type ?? "atividade",
+      is_milestone: a.is_milestone ?? false,
+      status: "not_started",
+      hours: a.hours ?? null,
+      cost: a.cost ?? null,
+      gravity: a.gravity ?? null,
+      urgency: a.urgency ?? null,
+      tendency: a.tendency ?? null,
+      workflow_stage_id: a.workflow_stage_id ?? null,
+    } as never).select("id").single();
+    if (error) { toast({ title: "Não deu para duplicar", description: error.message, variant: "destructive" }); return; }
+    if (nova && (nova as Record<string, unknown>).id) {
+      router.push(`/project/${projectId}/atividade/${String((nova as Record<string, unknown>).id)}`);
+    }
+  }, [atividade, projectId, router, toast]);
+
+  // ARQUIVAR — is_trashed=true e sai da atividade (ela some das listas). É a via
+  // do quadro/backlog para arquivar; a policy de DELETE não aceita o ator.
+  const aoArquivar = useCallback(async () => {
+    const { error, count } = await supabase.from("activities")
+      .update({ is_trashed: true } as never, { count: "exact" }).eq("id", activityId);
+    if (error) { toast({ title: "Não deu para arquivar", description: error.message, variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
+    router.push(`/project/${projectId}`);
+  }, [activityId, projectId, router, toast]);
+
+  // TRANSFORMAR EM LIÇÃO — cria uma lição SEMEADA pela atividade (source_activity_id),
+  // no estado "identificada". Problema/solução se completam em Lições.
+  const aoCriarLicao = useCallback(async () => {
+    const a = (atividade ?? {}) as Record<string, unknown>;
+    const { error } = await supabase.from("lessons_learned").insert({
+      project_id: projectId,
+      category: "Geral",
+      problem: `A partir de "${a.title ?? "atividade"}"`,
+      source_activity_id: activityId,
+      source_trigger: "atividade",
+      reported_by: nomeDeQuemFez,
+      reported_by_id: user?.id ?? null,
+      lifecycle: "identificada",
+    } as never);
+    if (error) { toast({ title: "Não deu para criar a lição", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Lição criada", description: "Complete o problema e a solução na aba Lições." });
+  }, [atividade, activityId, projectId, nomeDeQuemFez, user?.id, toast]);
+
   // BUSCAR pessoas para atribuir: perfis ativos, filtrados pelo texto. A
   // inclusão na equipe (se faltar) acontece dentro de incluir_e_atribuir.
   const buscarPessoas = useCallback(async (q: string): Promise<{ id: string; nome: string }[]> => {
@@ -427,6 +482,10 @@ export default function PaginaDaAtividade() {
         buscarPessoas={buscarPessoas}
         aoAbrirEditorAntigo={soLeitura ? undefined : () => router.push(`/project/${projectId}?activity=${activityId}`)}
         secaoDependencias={<ActivityDependencies activityId={activityId} projectId={projectId} podeEditar={!soLeitura} />}
+        secaoAnexos={<ActivityAttachments activityId={activityId} projectId={projectId} />}
+        aoDuplicar={caps.canEditPlanejamento ? aoDuplicar : undefined}
+        aoArquivar={caps.canEditPlanejamento ? aoArquivar : undefined}
+        aoCriarLicao={(caps.canEditExecucao || caps.canComment) ? aoCriarLicao : undefined}
         aoMarcarLido={user?.id ? async () => {
           await marcarFeedVisto(activityId, user.id).catch(() => {});
           setNaoLidos(0);

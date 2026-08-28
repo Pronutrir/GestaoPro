@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Diamond, Plus, X, ChevronDown } from "lucide-react";
+import { Diamond, Plus, X, ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { CampoNoLugar } from "./CampoNoLugar";
@@ -133,8 +133,12 @@ export function TelaDaAtividade({
   aoAtribuir,
   aoRemoverPessoa,
   buscarPessoas,
+  aoDuplicar,
+  aoArquivar,
+  aoCriarLicao,
   aoAbrirEditorAntigo,
   secaoDependencias,
+  secaoAnexos,
   aoCriar,
   aoCriarEContinuar,
   aoCancelar,
@@ -160,12 +164,16 @@ export function TelaDaAtividade({
   aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
   aoRemoverPessoa?: (userId: string) => Promise<void>;
   buscarPessoas?: (q: string) => Promise<{ id: string; nome: string }[]>;
+  aoDuplicar?: () => void;
+  aoArquivar?: () => void;
+  aoCriarLicao?: () => void;
   /** A PORTA ANTIGA: abre o formulário completo (13 campos). Temporária, até a
    *  tela editar tudo no lugar. */
   aoAbrirEditorAntigo?: () => void;
-  /** A seção de Dependências, montada pela rota (que consulta) — a tela só a
-   *  posiciona, para continuar pura. */
+  /** As seções de Dependências e Anexos, montadas pela rota (que consulta) — a
+   *  tela só as posiciona, para continuar pura. */
   secaoDependencias?: ReactNode;
+  secaoAnexos?: ReactNode;
   aoCriar?: () => Promise<void>;
   aoCriarEContinuar?: () => Promise<void>;
   aoCancelar?: () => void;
@@ -278,6 +286,9 @@ export function TelaDaAtividade({
                 >
                   Editar
                 </button>
+              )}
+              {!criando && (aoDuplicar || aoArquivar || aoCriarLicao) && (
+                <MenuAcoes aoDuplicar={aoDuplicar} aoArquivar={aoArquivar} aoCriarLicao={aoCriarLicao} />
               )}
             </div>
           </div>
@@ -422,6 +433,13 @@ export function TelaDaAtividade({
         {!criando && secaoDependencias && (
           <div className="rounded-[6px] border border-border bg-card p-4">
             {secaoDependencias}
+          </div>
+        )}
+
+        {/* ── ANEXOS — idem: a rota monta, a tela só posiciona ── */}
+        {!criando && secaoAnexos && (
+          <div className="rounded-[6px] border border-border bg-card p-4">
+            {secaoAnexos}
           </div>
         )}
 
@@ -716,6 +734,54 @@ function EditorDeJanela({
         <span className="text-[13px] text-amber-600 dark:text-amber-500">{vazioVerbo}</span>
       )}
     </button>
+  );
+}
+
+/* ── MENU DE AÇÕES (⋯) — Duplicar · Lição aprendida · Arquivar ───────────────
+ * Item sem handler não aparece (a permissão chega como ausência da função). */
+function MenuAcoes({
+  aoDuplicar, aoArquivar, aoCriarLicao,
+}: {
+  aoDuplicar?: () => void;
+  aoArquivar?: () => void;
+  aoCriarLicao?: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const item = (label: string, on: (() => void) | undefined, destrutivo = false) =>
+    on ? (
+      <button
+        type="button"
+        onClick={() => { setAberto(false); on(); }}
+        className={cn(
+          "w-full text-left px-2.5 py-1.5 text-[12.5px] hover:bg-muted rounded-[4px]",
+          destrutivo && "text-destructive",
+        )}
+      >
+        {label}
+      </button>
+    ) : null;
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="h-7 w-7 rounded-[4px] border border-border text-[12px] hover:bg-muted inline-flex items-center justify-center"
+        title="Mais ações"
+        aria-label="Mais ações"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {aberto && (
+        <>
+          <button className="fixed inset-0 z-10 cursor-default" onClick={() => setAberto(false)} aria-hidden tabIndex={-1} />
+          <div className="absolute z-20 top-full right-0 mt-1 w-52 rounded-[6px] border border-border bg-card shadow-md p-1 flex flex-col">
+            {item("Duplicar", aoDuplicar)}
+            {item("Transformar em lição aprendida", aoCriarLicao)}
+            {item("Arquivar", aoArquivar, true)}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
