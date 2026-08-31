@@ -1214,6 +1214,10 @@ export const ActivityKanban = ({
           .from("task_dependencies")
           .select("id, predecessor_id, successor_id")
           .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
+        // 2: o `.or` acima repete o lote em DOIS filtros, entao cada id custa o
+        // dobro na URL. Sem isto o lote de 50 vira 3.742 chars, o proxy devolve
+        // 502, e a tela abre dizendo que as dependencias nao carregaram.
+        2,
       )
         .then((linhas) => {
           const vistos = new Set<string>();
@@ -1282,8 +1286,16 @@ export const ActivityKanban = ({
         })
         .catch(() => setAttachmentCounts(new Map()));
       // Este era o pior caso: o `.or()` monta a lista de ids DUAS vezes na mesma
-      // URL, então estourava o limite do proxy com metade das atividades. Em
-      // lotes, cada requisição carrega no máximo 2×50 ids.
+      // URL, então estourava o limite do proxy com metade das atividades.
+      //
+      // CORRIGIDO PELA METADE ATÉ 31/08/2026. O diagnóstico acima estava certo,
+      // a conclusão não: "cada requisição carrega no máximo 2×50 ids" tratava
+      // 2×50 como seguro, e 2×50 é justamente o que estoura — 3.742 chars
+      // contra o limite de ~3.700. O lote virou metade do que era, mas a URL
+      // continuou do mesmo tamanho do problema original.
+      //
+      // O `2` abaixo é o que faltava: ele divide o lote pela repetição, e a URL
+      // cai para 1.892 chars.
       selectInChunks<{ id: string; source_activity_id: string; target_activity_id: string; relation_type: string }>(
         ids,
         (batch) =>
@@ -1291,6 +1303,7 @@ export const ActivityKanban = ({
             .from("task_relations")
             .select("id, source_activity_id, target_activity_id, relation_type")
             .or(`source_activity_id.in.(${batch.join(",")}),target_activity_id.in.(${batch.join(",")})`),
+        2,
       )
         .then((data) => {
           const titleById = new Map<string, string>();

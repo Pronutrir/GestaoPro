@@ -489,6 +489,10 @@ export const BacklogSection = ({
         .from("task_dependencies")
         .select("id, predecessor_id, successor_id")
         .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
+      // 2: o `.or` acima repete o lote em DOIS filtros, entao cada id custa o
+      // dobro na URL. Sem isto o lote de 50 vira 3.742 chars, o proxy devolve
+      // 502, e a tela abre dizendo que as dependencias nao carregaram.
+      2,
     )
       .then((linhas) => {
         const vistos = new Set<string>();
