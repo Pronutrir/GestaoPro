@@ -391,6 +391,44 @@ export default function ProjectDetailsPage() {
     }
   }, [searchParams, visibleTabs]);
 
+  /**
+   * A ABA ATIVA VAI PARA A URL — e é o que faz o F5 não voltar ao Kanban.
+   *
+   * ============================================================================
+   * O DEFEITO (relatado em 31/08/2026, e é o U15 do plano)
+   *
+   * A leitura de `?tab=` já existia (efeito acima), mas ninguém ESCREVIA: trocar
+   * de aba mudava só o estado em memória. Então:
+   *
+   *   - F5 no Cronograma voltava para o Kanban;
+   *   - salvar uma atividade e voltar caía no Kanban;
+   *   - o link colado no chat abria a aba errada.
+   *
+   * `useState("kanban")` é o padrão, e ele vencia toda vez que a página
+   * remontava — porque a URL não guardava a escolha.
+   *
+   * `replace`, não `push`: trocar de aba não é navegação nova. Com `push`, o
+   * voltar do navegador percorreria cada aba visitada antes de sair do projeto.
+   *
+   * O `?activity=` é PRESERVADO: ele é outro deep-link, e apagá-lo aqui fecharia
+   * a atividade aberta ao trocar de aba.
+   * ============================================================================
+   */
+  useEffect(() => {
+    if (!activeTab || !id) return;
+    const atual = searchParams?.get("tab");
+    if (atual === activeTab) return;
+    // Só depois de as abas visíveis estarem resolvidas: antes disso o
+    // `activeTab` ainda é o padrão, e gravá-lo apagaria o `?tab=` que veio no
+    // link — justamente o caso que o efeito acima existe para atender.
+    if (!visibleTabs.length || !visibleTabs.includes(activeTab)) return;
+
+    const qs = new URLSearchParams(searchParams?.toString() ?? "");
+    qs.set("tab", activeTab);
+    openedTabRef.current = activeTab;
+    router.replace(`/project/${id}?${qs.toString()}`, { scroll: false });
+  }, [activeTab, id, router, searchParams, visibleTabs]);
+
   // do que é editável.
   const openedDeepLinkRef = useRef<string | null>(null);
   useEffect(() => {

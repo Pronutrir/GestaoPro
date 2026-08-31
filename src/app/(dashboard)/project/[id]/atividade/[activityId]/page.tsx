@@ -97,6 +97,24 @@ export default function PaginaDaAtividade() {
         .eq("parent_id", activityId).eq("is_trashed", false)
         .order("wbs_code", { ascending: true });
 
+      /**
+       * O PAI — só para saber quem responde por ele.
+       *
+       * Serve à permissão de atribuir: quem responde pela entrega pode
+       * distribuir o trabalho das filhas dela. Ver activityAccess, canAssign.
+       *
+       * Uma consulta a mais, e só quando há pai. O alternativo seria a função
+       * de acesso carregar a árvore — e regra de permissão não deve fazer
+       * consulta.
+       */
+      const paiId = (a as Record<string, unknown>)?.parent_id;
+      const { data: pai } = paiId
+        // `select("*")` em vez da lista: `assigned_to_id` nasceu na migration
+        // 20260826200000 e o types.ts gerado é anterior — pedir a coluna pelo
+        // nome faz o tsc recusar uma coluna que existe no banco.
+        ? await supabase.from("activities").select("*").eq("id", String(paiId)).single()
+        : { data: null };
+
       const stageId = (a as Record<string, unknown>)?.workflow_stage_id;
       const { data: col } = stageId
         ? await supabase.from("workflow_stages").select("*").eq("id", String(stageId)).single()
@@ -122,7 +140,11 @@ export default function PaginaDaAtividade() {
         user?.id ? contarNaoLidos(activityId, user.id).catch(() => 0) : Promise.resolve(0),
       ]);
 
-      setAtividade(a as Record<string, unknown>);
+      setAtividade({
+        ...(a as Record<string, unknown>),
+        responsavel_do_pai: (pai as Record<string, unknown> | null)?.assigned_to ?? null,
+        responsavel_do_pai_id: (pai as Record<string, unknown> | null)?.assigned_to_id ?? null,
+      });
       setProjeto((p ?? null) as Record<string, unknown> | null);
       setFilhas((fs ?? []) as Record<string, unknown>[]);
       setColuna((col ?? null) as Record<string, unknown> | null);
