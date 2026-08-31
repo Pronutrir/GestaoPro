@@ -58,6 +58,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateScheduleSlack } from "@/lib/criticalPath";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +85,14 @@ interface Props {
   defaultMode?: CronogramaMode;
   showProjectColumn?: boolean;
   onEditActivity?: (activity: any) => void;
+  /**
+   * FONTE ÚNICA (passo 5): quando a página já carregou as atividades (filtradas
+   * por visibilidade, atualizadas nas mutações), passa-as aqui — e o Cronograma
+   * usa ESSAS em vez de buscar as próprias. É o que impede "Backlog com 208 e
+   * Cronograma com 0" na mesma tela, e faz editar no Backlog refletir aqui sem
+   * F5. Sem isto (Cronograma Geral, multi-projeto), ele carrega sozinho.
+   */
+  activitiesExternas?: any[];
 }
 
 const LINK_TYPES: Record<string, { short: string; label: string; desc: string }> = {
@@ -265,6 +274,7 @@ export function ProjectCronogramaPanel({
   defaultMode = "gantt",
   showProjectColumn = false,
   onEditActivity,
+  activitiesExternas,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -282,6 +292,12 @@ export function ProjectCronogramaPanel({
     ]).then(([hols, sched]) => {
       setHolidays((hols.data || []) as Holiday[]);
       if (sched && (sched as any).data) setWorkSchedule((sched as any).data as WorkSchedule);
+    }).catch((err) => {
+      // O CALENDÁRIO É AUXILIAR (sombreia o Gantt, ajusta duração). Se falhar —
+      // p.ex. user_work_schedules ausente —, o Cronograma usa a jornada PADRÃO
+      // (workCalendar já trata schedule undefined) e segue listando as
+      // atividades. Nunca derrubar a lista inteira por uma chamada de calendário.
+      console.error("calendário (holidays/user_work_schedules):", err);
     });
   }, [profile?.id]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -300,6 +316,10 @@ export function ProjectCronogramaPanel({
   const [erroAoCarregar, setErroAoCarregar] = useState<string | null>(null);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
+  // As dependências são AUXILIARES (setas, folga CPM). Se falharem, o cronograma
+  // ainda lista as atividades — este flag liga o aviso em vez de deixar a tela
+  // em branco (o defeito antigo: o erro do fetch de deps sumia com tudo).
+  const [depsErro, setDepsErro] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
   /** A mesma gente, em lista — é o formato que `PersonCombobox` consome. */
   const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
@@ -516,12 +536,16 @@ export function ProjectCronogramaPanel({
       return;
     }
 
-    const actsQ = supabase
-      .from("activities")
-      .select("*")
-      .eq("is_trashed", false)
-      .in("project_id", scopedProjectIds)
-      .order("display_order", { ascending: true });
+    // FONTE ÚNICA: se a página passou as atividades, usa ELAS — sem re-buscar
+    // (é o que impede "Backlog 208 / Cronograma 0" na mesma tela).
+    const actsQ = activitiesExternas
+      ? Promise.resolve({ data: activitiesExternas })
+      : supabase
+          .from("activities")
+          .select("*")
+          .eq("is_trashed", false)
+          .in("project_id", scopedProjectIds)
+          .order("display_order", { ascending: true });
 
     // `*` em vez da lista explícita: traz `categoria` onde a migration já
     // rodou e continua funcionando onde ainda não rodou.
@@ -646,12 +670,24 @@ export function ProjectCronogramaPanel({
     setProjectsMap(pm);
     setProjectDeadlines(pdl);
 
+    // DEPENDÊNCIAS PELA RPC (POST), uma por projeto do escopo — sem a lista de
+    // ids na URL que estourava 15 KB e voltava 502. E DEGRADA: se falhar, as
+    // atividades continuam listadas; só as setas/folga ficam de fora, com aviso.
     const ids = (acts || []).map((a: any) => a.id);
     if (ids.length) {
-      const { data: d } = await supabase.from("task_dependencies").select("*")
-        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`);
-      setDeps(d || []);
-    } else setDeps([]);
+      try {
+        const listas = await Promise.all(scopedProjectIds.map((pid) => fetchTaskDependencias(pid)));
+        const vistos = new Set<string>();
+        setDeps(listas.flat().filter((dep) => (vistos.has(dep.id) ? false : (vistos.add(dep.id), true))));
+        setDepsErro(false);
+      } catch (err) {
+        // Falhar em silêncio aqui apagava a tela inteira. Agora: log com
+        // contexto, deps vazio (a tela degrada) e o aviso liga.
+        console.error("task_dependencies (cronograma):", err);
+        setDeps([]);
+        setDepsErro(true);
+      }
+    } else { setDeps([]); setDepsErro(false); }
   }, [projectIds, accessLoading, filterProjects]);
 
   /**
@@ -675,6 +711,14 @@ export function ProjectCronogramaPanel({
   }, [carregarDados]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // A página atualiza suas atividades (edição in-place, reorder, arquivar) —
+  // reflete aqui NA HORA, sem re-buscar fases/deps. É o "editar no Backlog
+  // aparece no Cronograma sem F5". Numa edição os ids não mudam, então as deps
+  // já carregadas continuam válidas.
+  useEffect(() => {
+    if (activitiesExternas) setActivities(activitiesExternas);
+  }, [activitiesExternas]);
 
   // ===== Mock estável (para colunas ainda não persistidas) =====
   /**
@@ -3659,11 +3703,9 @@ export function ProjectCronogramaPanel({
     <div className="space-y-4">
       {Toolbar}
 
-      {/* A FALHA DE CARREGAMENTO, DITA (31/08/2026).
-          Antes disto, cronograma quebrado e cronograma sem atividades eram a
-          MESMA tela em branco. Aqui o usuário lê o motivo em português e tem o
-          "Tentar de novo" — falha de rede é o caso comum, e recarregar a página
-          inteira para tentar outra vez é castigo desproporcional. */}
+      {/* CARGA INTEIRA FALHOU — a faixa do Raphael (mensagem + tentar de novo),
+          restaurada no merge. Complementa o depsErro abaixo: aqui é quando NEM as
+          atividades carregam; ali é quando só as dependências faltam. */}
       {erroAoCarregar && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px]">
           <span className="inline-flex items-center gap-1.5 font-semibold text-destructive">
@@ -3672,6 +3714,25 @@ export function ProjectCronogramaPanel({
           <span className="text-foreground/80">{erroAoCarregar}</span>
           <button type="button" onClick={() => { void fetchData(); }}
             className="ml-auto rounded-md border border-destructive/40 px-2 py-0.5 font-medium text-destructive hover:bg-destructive/10">
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
+      {/* DEPENDÊNCIAS NÃO CARREGARAM — degrada, não some. As atividades e datas
+          seguem na tela; faltam só as setas e a folga do CPM. Antes isto apagava
+          o cronograma inteiro em silêncio. */}
+      {depsErro && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px]">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-muted-foreground">
+            As dependências não carregaram — o cronograma está sem as setas e a folga do caminho crítico. As atividades e datas estão corretas.
+          </span>
+          <button
+            type="button"
+            onClick={() => void fetchData()}
+            className="ml-auto shrink-0 h-6 px-2 rounded-[4px] border border-border text-[11.5px] hover:bg-muted"
+          >
             Tentar de novo
           </button>
         </div>

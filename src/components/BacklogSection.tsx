@@ -9,7 +9,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen, CircleDashed, UserCheck,
   ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
-  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
+  Rows3, MoreHorizontal, Pencil, Maximize2, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X, Network,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -52,7 +52,8 @@ import {
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
 } from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
-import { mutateInChunks, selectInChunks } from "@/lib/chunkedIn";
+import { mutateInChunks } from "@/lib/chunkedIn";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 // As sete decisões visuais da mesa de planejamento, como regras testáveis —
@@ -143,6 +144,9 @@ interface BacklogSectionProps {
   activities: Activity[];
   phases: Phase[];
   onEditActivity: (activity: Activity) => void;
+  /** A PORTA ANTIGA: abre o EditActivityDialog completo. Em paralelo à tela nova
+   *  (que ainda não edita tudo). Sai quando a tela tiver os 13 campos. */
+  onEditarNoDialogo?: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onDataChanged: () => void;
@@ -182,7 +186,7 @@ interface BacklogSectionProps {
 
 export const BacklogSection = ({
   projectId, activities, phases,
-  onEditActivity, onDeleteActivity, onToggleActivity,
+  onEditActivity, onEditarNoDialogo, onDeleteActivity, onToggleActivity,
   onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters, ehMinha,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
@@ -481,22 +485,11 @@ export const BacklogSection = ({
       setDependencyCounts(new Map());
       return;
     }
-    // Em lotes de 50: a lista de ids na URL estoura o limite do proxy e volta
-    // 502 com projeto grande (ver lib/chunkedIn). Dedup por id porque uma
-    // dependência pode casar em dois lotes.
-    selectInChunks<{ id: string; predecessor_id: string; successor_id: string }>(ids, (batch) =>
-      supabase
-        .from("task_dependencies")
-        .select("id, predecessor_id, successor_id")
-        .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
-      // 2: o `.or` acima repete o lote em DOIS filtros, entao cada id custa o
-      // dobro na URL. Sem isto o lote de 50 vira 3.742 chars, o proxy devolve
-      // 502, e a tela abre dizendo que as dependencias nao carregaram.
-      2,
-    )
-      .then((linhas) => {
-        const vistos = new Set<string>();
-        const data = linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
+    // Uma chamada POST (rpc get_task_dependencies), sem lista de ids na URL — o
+    // 502 do proxy some. Devolve as dependências do projeto; o que não casar com
+    // uma atividade carregada não entra no mapa.
+    fetchTaskDependencias(projectId)
+      .then((data) => {
         const map = new Map<string, { pred: number; succ: number }>();
         data.forEach((d) => {
           const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
@@ -2848,8 +2841,16 @@ export const BacklogSection = ({
                 >
                   <Plus className="w-3.5 h-3.5 mr-2" /> Adicionar subitem
                 </DropdownMenuItem>
+                {/* EDITAR abre o diálogo antigo completo (13 campos). Fica ao
+                    lado de "Abrir detalhes" (a tela nova, ainda em construção)
+                    até a tela editar tudo. */}
+                {onEditarNoDialogo && (
+                  <DropdownMenuItem onSelect={() => onEditarNoDialogo(activity)}>
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
-                  <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                  <Maximize2 className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
                 </DropdownMenuItem>
                 {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban
                     (isAdmin). Desabilitado COM o motivo em vez de oculto —

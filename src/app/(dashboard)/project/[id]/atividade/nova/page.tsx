@@ -178,7 +178,10 @@ export default function PaginaCriarAtividade() {
     title: nome,
     descricao: null,
     tipoRotulo: `${EAP_LABELS[tipo]}${oferecidos.length > 1 ? "" : " (único tipo aqui)"}`,
+    tipoKind: tipo,
     ehMarco: tipo === "marco",
+    concluida: false,
+    noBacklog: false,
     statusRotulo: "",
     statusCor: null,
     previstoInicio: null, previstoFim: null,
@@ -189,6 +192,7 @@ export default function PaginaCriarAtividade() {
     pacoteRotulo: pai ? String(pai.title ?? "") : null,
     origemRotulo: null,
     custoRotulo: null,
+    custoValor: null,
   };
 
   return (

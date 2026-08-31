@@ -102,14 +102,17 @@ const TELAS = [
   "src/components/TimelineView.tsx",
 ];
 
+// ATUALIZADO NO MERGE (main venceu no 502): a RPC — get_task_dependencies /
+// get_task_relations — SUBSTITUIU o `.or(...in.(batch),...in.(batch))` nas quatro
+// telas. O filtro vai no corpo do POST, então o padrão que dobrava a URL não pode
+// mais existir aqui. É garantia MAIS FORTE que "se dobra, declara 2": não dobra.
 for (const tela of TELAS) {
   const nome = path.basename(tela);
   const cod = semComentario(ler(tela));
   const repete = (cod.match(/\.or\(`[^`]*\$\{batch[^`]*\$\{batch/g) || []).length;
-  const declara = (cod.match(/\n\s*2,\s*\n\s*\)/g) || []).length;
-  check(`${nome}: ${repete === 1 ? "a chamada que repete o lote passa" : `as ${repete} chamadas que repetem o lote passam`} 2`,
-    repete > 0 && declara >= repete,
-    `${repete} repetem, ${declara} declaram — sem o 2, o padrão 1 devolve o lote que estoura`);
+  check(`${nome}: sem .or(...in.(batch),...in.(batch)) — a RPC substituiu o lote que dobrava na URL`,
+    repete === 0,
+    `${repete} ainda montam o lote duas vezes na URL — deviam usar fetchTaskDependencias/fetchTaskRelations`);
 }
 
 /* ── 4. nenhuma outra chamada repete a lista sem declarar ────────────────── */

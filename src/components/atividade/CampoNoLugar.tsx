@@ -51,6 +51,12 @@ export interface CampoNoLugarProps {
   vazio: string;
   /** Sem isto, o campo é TEXTO. É assim que a permissão chega aqui. */
   aoGravar?: (novo: string) => Promise<void>;
+  /**
+   * O que vai NO INPUT ao editar, quando difere do que se lê. Ex.: Esforço lê
+   * "24h previstas · 9h apontadas" mas edita "24". Sem isto, o campo colocaria a
+   * string formatada no input e `Number(...)` viraria NaN.
+   */
+  valorEdicao?: string;
   /** Multilinha para descrição; uma linha para o resto. */
   multilinha?: boolean;
   /** Dica no estado de edição. */
@@ -63,6 +69,7 @@ export function CampoNoLugar({
   valor,
   vazio,
   aoGravar,
+  valorEdicao,
   multilinha = false,
   dica,
   className,
@@ -86,9 +93,13 @@ export function CampoNoLugar({
     }
   }, [editando]);
 
+  // A base de comparação e o que vai no input: `valorEdicao` quando o que se lê
+  // difere do que se edita (Esforço, custo).
+  const base = valorEdicao ?? valor ?? "";
+
   const abrir = () => {
     if (!podeEditar) return;
-    setRascunho(valor ?? "");
+    setRascunho(base);
     setErro(null);
     setEditando(true);
   };
@@ -98,7 +109,7 @@ export function CampoNoLugar({
     const novo = rascunho.trim();
     // Nada mudou: fecha sem escrever. Gravar igual gera linha no feed e
     // confunde quem lê o histórico depois.
-    if (novo === (valor ?? "").trim()) {
+    if (novo === base.trim()) {
       setEditando(false);
       return;
     }
