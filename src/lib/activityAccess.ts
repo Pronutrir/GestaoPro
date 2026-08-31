@@ -408,12 +408,29 @@ export function capacidadesNaAtividade(
          * NÃO ALARGA PARA A ÁRVORE INTEIRA: só o pai DIRETO. Subir até a raiz
          * daria ao dono da fase o poder de atribuir em qualquer neta, o que é
          * gerência de projeto — e essa via já existe no passo 3.
-         * ============================================================================
+         * ------------------------------------------------------------------
+         * O `ator &&` QUE ANULAVA ESTA REGRA (corrigido em 31/08/2026, tarde)
+         *
+         * A primeira versão desta cláusula ficou escrita assim:
+         *
+         *     canAssign: ator && ( ...assigned_to... || ...responsavel_do_pai... )
+         *
+         * E `ator` é sobre a PRÓPRIA atividade — `ehAtividadeDaPessoa`. Na
+         * filha recém-criada, quem responde pelo pai NÃO é ator dela: não é
+         * responsável (o campo está vazio, que é a premissa do relato) nem
+         * participante. O `&&` então zerava exatamente o caso que a segunda
+         * metade da expressão existia para atender.
+         *
+         * A regra passou no teste porque o cenário montado lá punha a pessoa
+         * como participante da filha (`participants: [EU]`) — e participante é
+         * ator. O teste confirmava a expressão, não o relato.
+         *
+         * Responder pelo pai é via PRÓPRIA, não um refinamento da via de ator.
+         * ------------------------------------------------------------------
          */
-        canAssign: ator && (
-          matchesIdentity(atividade?.assigned_to, candidatos)
-          || matchesIdentity(atividade?.responsavel_do_pai, candidatos)
-        ),
+        canAssign:
+          (ator && matchesIdentity(atividade?.assigned_to, candidatos))
+          || matchesIdentity(atividade?.responsavel_do_pai, candidatos),
       },
       "4-equipe-editar-apenas-as-minhas",
       "projeto",

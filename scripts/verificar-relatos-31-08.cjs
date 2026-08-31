@@ -65,17 +65,33 @@ const entrega = { assigned_to: EU, participants: [] };
 check("no PAI, quem responde por ele pode atribuir",
   capacidadesNaAtividade(entrega, projeto, naEquipeSoAsMinhas).canAssign);
 
-// A filha: sem responsável ainda, e eu respondo pelo pai.
-const filha = { assigned_to: null, participants: [EU], responsavel_do_pai: EU };
-check("na FILHA sem responsável, quem responde pelo PAI pode atribuir",
+// A FILHA COMO ELA É NO RELATO — e este cenário estava errado até 31/08 à
+// tarde. A versão anterior punha `participants: [EU]`, e participante É ator:
+// o `ator &&` da regra ficava satisfeito por acidente, então o teste passava
+// com a expressão quebrada e o defeito continuava na tela.
+//
+// Na captura (1.2.1.5.1) o campo Participantes diz "ninguém" e Responsáveis diz
+// "sem responsável". A pessoa não tem vínculo NENHUM com a filha — só responde
+// pelo pai. É esse o caso que precisa funcionar, e é ele que se monta aqui.
+const filha = { assigned_to: null, participants: [], responsavel_do_pai: EU };
+check("na FILHA sem responsável E sem participantes, quem responde pelo PAI atribui",
   capacidadesNaAtividade(filha, projeto, naEquipeSoAsMinhas).canAssign,
-  "era o impasse: canAssign exigia ser responsável de um campo vazio");
+  "o `ator &&` anulava justamente o caso que a regra do pai existia para atender");
 
 // E o limite: participante do pai NÃO herda o poder de atribuir.
 const filhaDeOutro = { assigned_to: null, participants: [EU], responsavel_do_pai: "Outra Pessoa" };
 check("mas quem só PARTICIPA do pai não atribui",
   !capacidadesNaAtividade(filhaDeOutro, projeto, naEquipeSoAsMinhas).canAssign,
   "distribuir trabalho é ato de quem responde pelo conjunto");
+
+// O PASSO QUE DECIDE. Sem os campos de equipe, a função nunca chega ao passo 4
+// e devolve "6-sem-acesso" — foi o que manteve a tela em leitura mesmo depois
+// de a regra do pai existir. Travar o passo, e não só o booleano, é o que
+// impede a tela de voltar a chamar a função com o ator pela metade.
+check("e a decisão vem do passo 4, não do 6",
+  capacidadesNaAtividade(filha, projeto, naEquipeSoAsMinhas).passoQueDecidiu
+    === "4-equipe-editar-apenas-as-minhas",
+  "sem naEquipe/canEditOwn, cai em 6-sem-acesso e a tela abre em modo leitura");
 
 // Sem o campo, o comportamento anterior é preservado.
 const semPai = { assigned_to: null, participants: [EU] };
@@ -86,6 +102,39 @@ check("sem `responsavel_do_pai`, a regra antiga vale — nada regride",
 const minhaFilha = { assigned_to: EU, participants: [] };
 check("quem responde pela própria atividade continua podendo",
   capacidadesNaAtividade(minhaFilha, projeto, naEquipeSoAsMinhas).canAssign);
+
+/* ── RELATO 1b: a TELA precisa passar o ator inteiro ─────────────────────── */
+//
+// A regra acima pode estar perfeita e não aparecer, e foi o que aconteceu: a
+// tela da atividade montava o ator só com identidade (id, nome, email, isAdmin)
+// e OMITIA os campos de equipe. Como o passo 4 inteiro depende de `naEquipe`,
+// a função caía em "6-sem-acesso" para um membro com permissão de escrita.
+//
+// O `as never` no argumento é o que permitiu isso passar: ele desliga a
+// checagem de forma do objeto. Por isso a asserção o proíbe — não é estilo, é
+// a única barreira que teria pego o defeito antes da tela.
+const tela = fs.readFileSync(
+  path.join(raiz, "src/app/(dashboard)/project/[id]/atividade/[activityId]/page.tsx"), "utf8");
+
+for (const campo of ["naEquipe", "canEdit", "canMove", "canCreate", "canDelete"]) {
+  check(`a tela passa \`${campo}\` para a função de acesso`,
+    new RegExp(`${campo}:\\s*!!?papelNaEquipe`).test(tela),
+    "sem os campos de equipe, o passo 4 nunca é alcançado");
+}
+// `canEditOwn` à parte: ele NÃO pode virar `!!`. Ausente significa "coluna não
+// preenchida", e o padrão do sistema desde a migration de 18/08 é `true` — a
+// coluna nasceu com DEFAULT true para não tirar acesso de ninguém. Um `!!`
+// aqui rebaixaria silenciosamente todo membro sem a coluna para
+// "visualizar e comentar", que é o oposto do defeito que se está consertando.
+check("a tela passa `canEditOwn`, e ausente vale `true` — não `false`",
+  /canEditOwn:\s*papelNaEquipe\?\.canEditOwn \?\? true/.test(tela),
+  "`!!` aqui rebaixaria membros sem a coluna para visualizar-e-comentar");
+check("e o ator NÃO é mais silenciado por `as never`",
+  !/ehVisualizador: false,\s*\n\s*\} as never,/.test(tela),
+  "o cast escondia o objeto incompleto do TypeScript");
+check("os campos vêm de project_members, a mesma fonte da página do projeto",
+  /\.from\("project_members"\)[\s\S]{0,200}can_edit_own/.test(tela),
+  "duas fontes de permissão divergem — foi o que já produziu o botão que aparece numa tela e não na outra");
 
 /* ── RELATO 2: salvar volta para o Kanban (U15) ──────────────────────────── */
 const proj = fs.readFileSync(path.join(raiz, "src/app/(dashboard)/project/[id]/page.tsx"), "utf8");

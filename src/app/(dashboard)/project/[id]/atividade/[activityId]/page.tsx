@@ -79,6 +79,40 @@ export default function PaginaDaAtividade() {
   const [coluna, setColuna] = useState<Record<string, unknown> | null>(null);
   const [eventos, setEventos] = useState<EventoDoBanco[]>([]);
   const [naoLidos, setNaoLidos] = useState(0);
+  /**
+   * O PAPEL DESTA PESSOA NA EQUIPE DO PROJETO.
+   *
+   * ==========================================================================
+   * POR QUE ISTO FALTAVA, E O QUE ISSO CAUSAVA (31/08/2026)
+   *
+   * `capacidadesNaAtividade` decide em seis passos, e o passo 4 — "está na
+   * equipe? o papel manda" — depende de `naEquipe`, `canEdit`, `canMove`,
+   * `canCreate`, `canDelete` e `canEditOwn`.
+   *
+   * Esta tela não passava NENHUM deles. O `as never` na chamada silenciava o
+   * TypeScript, então o objeto incompleto passava sem reclamação: para a
+   * função, quem abrisse esta tela simplesmente não era da equipe. O passo 4
+   * nunca era alcançado e sobrava a via do ator — ver e comentar.
+   *
+   * O sintoma relatado era "o responsável pela entrega não consegue destinar
+   * responsável para os filhos", com a faixa "Você acompanha esta atividade"
+   * no topo. Essa faixa era o próprio diagnóstico: ela só aparece quando
+   * `canEditExecucao` E `canEditPlanejamento` são falsos — ou seja, o problema
+   * nunca foi só o `canAssign`. A tela inteira estava em modo leitura para
+   * quem tinha permissão de escrita no projeto.
+   *
+   * Por isso a correção de 31/08 (responsável do pai também atribui) não
+   * apareceu: ela vive no passo 4, e o passo 4 não era alcançado.
+   *
+   * É a mesma família de "permissão: tela vs RLS" — com o lado da tela
+   * recusando o que o banco permitiria.
+   * ==========================================================================
+   */
+  const [papelNaEquipe, setPapelNaEquipe] = useState<{
+    naEquipe: boolean;
+    canEdit: boolean; canMove: boolean; canCreate: boolean;
+    canDelete: boolean; canEditOwn: boolean;
+  } | null>(null);
 
   const carregar = useCallback(async () => {
     if (!projectId || !activityId) return;
@@ -114,6 +148,42 @@ export default function PaginaDaAtividade() {
         // nome faz o tsc recusar uma coluna que existe no banco.
         ? await supabase.from("activities").select("*").eq("id", String(paiId)).single()
         : { data: null };
+
+      /**
+       * O PAPEL NA EQUIPE — a metade que faltava para o passo 4 existir.
+       *
+       * Mesma consulta que a página do projeto faz em `loadAccess`. Admin não
+       * precisa dela (o passo 1 resolve antes), mas custa uma consulta e evita
+       * um segundo caminho de decisão — e caminho duplo de permissão é
+       * exatamente o que já produziu "o botão aparece numa tela e não na
+       * outra".
+       *
+       * `maybeSingle`: não ser membro é resposta válida, não erro. Nesse caso
+       * `naEquipe` fica falso e a decisão desce para a via do ator, que é o
+       * comportamento correto para quem chegou só por atribuição.
+       */
+      const { data: membro } = user?.id
+        ? await supabase
+            .from("project_members")
+            .select("can_create, can_edit, can_delete, can_move, can_edit_own")
+            .eq("project_id", projectId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : { data: null };
+
+      const m = membro as Record<string, unknown> | null;
+      setPapelNaEquipe({
+        naEquipe: !!m,
+        canEdit: !!m?.can_edit,
+        canMove: !!m?.can_move,
+        canCreate: !!m?.can_create,
+        canDelete: !!m?.can_delete,
+        // `?? true` e não `?? false`: ausente quer dizer "coluna não
+        // preenchida", não "proibido". Falso aqui é o que rebaixa o membro
+        // para "visualizar e comentar" — e é uma decisão explícita de quem
+        // gerencia a equipe, não um padrão.
+        canEditOwn: m?.can_edit_own === undefined ? true : !!m.can_edit_own,
+      });
 
       const stageId = (a as Record<string, unknown>)?.workflow_stage_id;
       const { data: col } = stageId
@@ -173,10 +243,25 @@ export default function PaginaDaAtividade() {
         email: user?.email,
         isAdmin: !!(profile as Record<string, unknown>)?.is_admin,
         ehVisualizador: false,
-      } as never,
+        /**
+         * O PAPEL NA EQUIPE — sem isto o passo 4 nunca é alcançado.
+         *
+         * Enquanto `papelNaEquipe` é null a consulta ainda não voltou. Mandar
+         * `naEquipe: false` nesse intervalo faria a tela abrir em leitura e
+         * só depois liberar os campos — pior que abrir travada, porque o
+         * usuário já teria tentado editar e recebido a faixa de "acompanha".
+         * Enquanto carrega, a tela mostra o estado de carregamento.
+         */
+        naEquipe: !!papelNaEquipe?.naEquipe,
+        canEdit: !!papelNaEquipe?.canEdit,
+        canMove: !!papelNaEquipe?.canMove,
+        canCreate: !!papelNaEquipe?.canCreate,
+        canDelete: !!papelNaEquipe?.canDelete,
+        canEditOwn: papelNaEquipe?.canEditOwn ?? true,
+      },
     );
     return c;
-  }, [atividade, projeto, user, profile]);
+  }, [atividade, projeto, user, profile, papelNaEquipe]);
 
   /* ── GRAVAR UM CAMPO ───────────────────────────────────────────────────
    *
