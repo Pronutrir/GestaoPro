@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { Diamond, Plus, X, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Diamond, Plus, X, ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { CampoNoLugar } from "./CampoNoLugar";
@@ -63,12 +63,15 @@ export interface CapacidadesDaTela {
   editarDatas?: boolean;
   editarEsforco?: boolean;
   editarGut?: boolean;
+  editarCusto?: boolean;
   editarPessoas?: boolean;
   criarSubatividade?: boolean;
   concluir?: boolean;
   comentar?: boolean;
   /** Mudar Fase/Entrega/Atividade/Marco — é escopo, planejamento. */
   mudarTipo?: boolean;
+  /** Promover do backlog para o quadro — decisão de escopo (planejamento). */
+  promover?: boolean;
 }
 
 export interface DadosDaTela {
@@ -81,6 +84,7 @@ export interface DadosDaTela {
   tipoKind: EapKind;
   ehMarco: boolean;
   concluida: boolean;
+  noBacklog: boolean;
   statusRotulo: string;
   statusCor: string | null;
   previstoInicio: string | null;
@@ -94,6 +98,7 @@ export interface DadosDaTela {
   pacoteRotulo: string | null;
   origemRotulo: string | null;
   custoRotulo: string | null;
+  custoValor: number | null;
 }
 
 export interface SubatividadeNaTela {
@@ -124,10 +129,16 @@ export function TelaDaAtividade({
   aoMarcarLido,
   aoConcluir,
   aoMudarTipo,
+  aoMoverParaQuadro,
   aoAtribuir,
   aoRemoverPessoa,
   buscarPessoas,
+  aoDuplicar,
+  aoArquivar,
+  aoCriarLicao,
   aoAbrirEditorAntigo,
+  secaoDependencias,
+  secaoAnexos,
   aoCriar,
   aoCriarEContinuar,
   aoCancelar,
@@ -149,12 +160,20 @@ export function TelaDaAtividade({
   aoMarcarLido?: () => void;
   aoConcluir?: () => void;
   aoMudarTipo?: (kind: EapKind) => Promise<void>;
+  aoMoverParaQuadro?: () => void;
   aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
   aoRemoverPessoa?: (userId: string) => Promise<void>;
   buscarPessoas?: (q: string) => Promise<{ id: string; nome: string }[]>;
+  aoDuplicar?: () => void;
+  aoArquivar?: () => void;
+  aoCriarLicao?: () => void;
   /** A PORTA ANTIGA: abre o formulário completo (13 campos). Temporária, até a
    *  tela editar tudo no lugar. */
   aoAbrirEditorAntigo?: () => void;
+  /** As seções de Dependências e Anexos, montadas pela rota (que consulta) — a
+   *  tela só as posiciona, para continuar pura. */
+  secaoDependencias?: ReactNode;
+  secaoAnexos?: ReactNode;
   aoCriar?: () => Promise<void>;
   aoCriarEContinuar?: () => Promise<void>;
   aoCancelar?: () => void;
@@ -244,6 +263,18 @@ export function TelaDaAtividade({
                   {dados.concluida ? "Reabrir" : "Concluir"}
                 </button>
               )}
+              {/* MOVER PARA O QUADRO — só quando está no backlog e pode promover.
+                  Promover é decisão de escopo; a trava do banco recusa agrupador
+                  sem subitem em português. */}
+              {!criando && dados.noBacklog && capacidades.promover && aoMoverParaQuadro && (
+                <button
+                  type="button"
+                  onClick={aoMoverParaQuadro}
+                  className="h-7 px-2.5 rounded-[4px] border border-border text-[12px] hover:bg-muted"
+                >
+                  Mover para o quadro
+                </button>
+              )}
               {/* A PORTA ANTIGA, em paralelo: o formulário completo, enquanto a
                   tela não edita todos os campos. Sai quando a tela estiver pronta. */}
               {!criando && aoAbrirEditorAntigo && (
@@ -255,6 +286,9 @@ export function TelaDaAtividade({
                 >
                   Editar
                 </button>
+              )}
+              {!criando && (aoDuplicar || aoArquivar || aoCriarLicao) && (
+                <MenuAcoes aoDuplicar={aoDuplicar} aoArquivar={aoArquivar} aoCriarLicao={aoCriarLicao} />
               )}
             </div>
           </div>
@@ -313,12 +347,13 @@ export function TelaDaAtividade({
               dica="horas previstas — só o número"
               aoGravar={gravador("hours", capacidades.editarEsforco)}
             />
-            {/* GUT é três fatores (G×U×T); o editor de prioridade dedicado ainda
-                não veio — por ora é leitura, não um input que salva NaN. */}
-            <CampoNoLugar
-              rotulo="GUT"
-              valor={dados.gut ? `${dados.gut.g} × ${dados.gut.u} × ${dados.gut.t} = ${dados.gut.total}` : null}
-              vazio={dados.ehMarco ? "não se aplica" : "sem prioridade"}
+            <EditorGut
+              g={dados.gut?.g ?? null}
+              u={dados.gut?.u ?? null}
+              t={dados.gut?.t ?? null}
+              total={dados.gut?.total ?? null}
+              ehMarco={dados.ehMarco}
+              aoGravar={capacidades.editarGut && aoGravarCampo ? aoGravarCampo : undefined}
             />
             {/* Fase, Pacote e Origem são LEITURA sempre: mudam pela EAP, não
                 por digitação. Editá-los aqui abriria uma segunda via de mover
@@ -326,7 +361,14 @@ export function TelaDaAtividade({
             <CampoNoLugar rotulo="Fase" valor={dados.faseRotulo} vazio="na raiz" />
             <CampoNoLugar rotulo="Pacote" valor={dados.pacoteRotulo} vazio="—" />
             <CampoNoLugar rotulo="Origem" valor={dados.origemRotulo} vazio="criada aqui" />
-            <CampoNoLugar rotulo="Custo" valor={dados.custoRotulo} vazio="sem taxa cadastrada" />
+            <CampoNoLugar
+              rotulo="Custo"
+              valor={dados.custoRotulo}
+              valorEdicao={dados.custoValor != null ? String(dados.custoValor) : ""}
+              vazio="sem custo"
+              dica="valor em reais — só o número"
+              aoGravar={gravador("cost", capacidades.editarCusto)}
+            />
           </div>
         </div>
 
@@ -384,6 +426,20 @@ export function TelaDaAtividade({
             {capacidades.criarSubatividade && aoCriarSubatividade && (
               <NovaSubatividade aoCriar={aoCriarSubatividade} />
             )}
+          </div>
+        )}
+
+        {/* ── DEPENDÊNCIAS — a rota monta (consulta), a tela só posiciona ── */}
+        {!criando && secaoDependencias && (
+          <div className="rounded-[6px] border border-border bg-card p-4">
+            {secaoDependencias}
+          </div>
+        )}
+
+        {/* ── ANEXOS — idem: a rota monta, a tela só posiciona ── */}
+        {!criando && secaoAnexos && (
+          <div className="rounded-[6px] border border-border bg-card p-4">
+            {secaoAnexos}
           </div>
         )}
 
@@ -678,6 +734,131 @@ function EditorDeJanela({
         <span className="text-[13px] text-amber-600 dark:text-amber-500">{vazioVerbo}</span>
       )}
     </button>
+  );
+}
+
+/* ── MENU DE AÇÕES (⋯) — Duplicar · Lição aprendida · Arquivar ───────────────
+ * Item sem handler não aparece (a permissão chega como ausência da função). */
+function MenuAcoes({
+  aoDuplicar, aoArquivar, aoCriarLicao,
+}: {
+  aoDuplicar?: () => void;
+  aoArquivar?: () => void;
+  aoCriarLicao?: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const item = (label: string, on: (() => void) | undefined, destrutivo = false) =>
+    on ? (
+      <button
+        type="button"
+        onClick={() => { setAberto(false); on(); }}
+        className={cn(
+          "w-full text-left px-2.5 py-1.5 text-[12.5px] hover:bg-muted rounded-[4px]",
+          destrutivo && "text-destructive",
+        )}
+      >
+        {label}
+      </button>
+    ) : null;
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="h-7 w-7 rounded-[4px] border border-border text-[12px] hover:bg-muted inline-flex items-center justify-center"
+        title="Mais ações"
+        aria-label="Mais ações"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {aberto && (
+        <>
+          <button className="fixed inset-0 z-10 cursor-default" onClick={() => setAberto(false)} aria-hidden tabIndex={-1} />
+          <div className="absolute z-20 top-full right-0 mt-1 w-52 rounded-[6px] border border-border bg-card shadow-md p-1 flex flex-col">
+            {item("Duplicar", aoDuplicar)}
+            {item("Transformar em lição aprendida", aoCriarLicao)}
+            {item("Arquivar", aoArquivar, true)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── EDITOR DE GUT — três fatores (Gravidade × Urgência × Tendência) ──────────
+ * Cada fator (1 a 5) grava ao mudar; o total recomputa no servidor. Marco não
+ * tem GUT ("não se aplica"). Vazio é convite discreto (não trava trabalho). */
+function EditorGut({
+  g, u, t, total, ehMarco, aoGravar,
+}: {
+  g: number | null;
+  u: number | null;
+  t: number | null;
+  total: number | null;
+  ehMarco: boolean;
+  aoGravar?: (campo: string, valor: string) => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const pode = typeof aoGravar === "function" && !ehMarco;
+  const temValor = g != null && u != null && t != null;
+  const texto = temValor ? `${g} × ${u} × ${t} = ${total}` : null;
+
+  if (!pode) {
+    return (
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-[11px] text-muted-foreground">GUT</span>
+        <span className={cn("text-[13px]", temValor ? "text-foreground" : "text-muted-foreground/60")}>
+          {temValor ? texto : ehMarco ? "não se aplica" : "sem prioridade"}
+        </span>
+      </div>
+    );
+  }
+
+  const fatores: [string, string, number | null][] = [
+    ["gravity", "Gravidade", g],
+    ["urgency", "Urgência", u],
+    ["tendency", "Tendência", t],
+  ];
+
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0 relative">
+      <span className="text-[11px] text-muted-foreground">GUT</span>
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="text-left rounded-[4px] -mx-1 px-1 py-0.5 hover:bg-muted/60 transition-colors"
+        title="Clique para dar prioridade"
+      >
+        {temValor ? (
+          <span className="text-[13px] text-foreground">{texto}</span>
+        ) : (
+          <span className="text-[13px] text-primary">+ dar prioridade</span>
+        )}
+      </button>
+      {aberto && (
+        <>
+          <button className="fixed inset-0 z-10 cursor-default" onClick={() => setAberto(false)} aria-hidden tabIndex={-1} />
+          <div className="absolute z-20 top-full left-0 mt-1 w-56 rounded-[6px] border border-border bg-card shadow-md p-2 flex flex-col gap-2">
+            {fatores.map(([campo, rot, val]) => (
+              <label key={campo} className="flex items-center justify-between gap-2 text-[12.5px]">
+                <span className="text-muted-foreground">{rot}</span>
+                <select
+                  value={val ?? ""}
+                  onChange={(e) => void aoGravar!(campo, e.target.value)}
+                  className="h-7 px-1.5 rounded-[4px] border border-border bg-background text-[12.5px] outline-none focus:border-primary"
+                >
+                  <option value="">—</option>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <p className="text-[10.5px] text-muted-foreground/70">Gravidade × Urgência × Tendência (1 a 5 cada)</p>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

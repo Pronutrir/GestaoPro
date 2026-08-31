@@ -118,7 +118,7 @@ check("os vazios nomeiam a ausência (leitura)",
 check("os vazios editáveis convidam com verbo (edição)",
   /\+ atribuir alguém/.test(tela) && /\+ definir prazo/.test(tela));
 check("marco diz 'não se aplica' no GUT, não 'sem prioridade'",
-  /dados\.ehMarco \? "não se aplica"/.test(tela));
+  /ehMarco \? "não se aplica"/.test(tela));
 
 /* ── 8. O LAYOUT É O DO DESENHO ──────────────────────────────────────────── */
 check("grid 1fr 372px, medida da seção 02",

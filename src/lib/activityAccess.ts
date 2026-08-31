@@ -51,6 +51,18 @@ export interface AtividadeParaAcesso {
   // ambíguo desde 20260826180000.
   assigned_to_id?: string | null;
   participant_ids?: string[] | null;
+
+  /**
+   * O RESPONSÁVEL DO PAI — para destravar a atribuição nas filhas.
+   *
+   * OPCIONAL de propósito: quem não passar mantém o comportamento anterior.
+   * Quem passar permite que o dono de uma entrega distribua o trabalho dela.
+   *
+   * Não é o pai inteiro, é só quem responde por ele. A função de acesso não
+   * deve precisar carregar a árvore para responder uma pergunta de permissão.
+   */
+  responsavel_do_pai?: string | null;
+  responsavel_do_pai_id?: string | null;
 }
 
 /**
@@ -372,7 +384,53 @@ export function capacidadesNaAtividade(
         // Só onde já atua. E atribuir, só sendo o responsável.
         canEditExecucao: ator,
         canEditPlanejamento: ator,
-        canAssign: ator && matchesIdentity(atividade?.assigned_to, candidatos),
+        /**
+         * ATRIBUIR: sendo o responsável DESTA atividade — ou do PAI dela.
+         *
+         * ============================================================================
+         * O IMPASSE QUE ISTO RESOLVE (relatado em 31/08/2026)
+         *
+         * A regra era só `assigned_to` da própria atividade. Numa subatividade
+         * recém-criada esse campo está VAZIO — ninguém é responsável por ela
+         * ainda. Então `canAssign` dava false, e não havia como atribuir a
+         * PRIMEIRA vez. O campo só se preenchia se já estivesse preenchido.
+         *
+         * Relatado com captura: o responsável da entrega "1.2.1.5 Exames e
+         * procedimentos" não conseguia designar ninguém para as quatro filhas.
+         * Ele responde pela entrega e não podia distribuir o trabalho dela —
+         * que é exatamente o que se espera de quem responde por ela.
+         *
+         * POR QUE O PAI, E NÃO "QUALQUER ATOR": porque distribuir trabalho é
+         * ato de quem responde pelo conjunto. Um participante da entrega
+         * continua sem poder atribuir; quem responde por ela, pode. É a mesma
+         * lógica do gestor de projeto, um degrau abaixo.
+         *
+         * NÃO ALARGA PARA A ÁRVORE INTEIRA: só o pai DIRETO. Subir até a raiz
+         * daria ao dono da fase o poder de atribuir em qualquer neta, o que é
+         * gerência de projeto — e essa via já existe no passo 3.
+         * ------------------------------------------------------------------
+         * O `ator &&` QUE ANULAVA ESTA REGRA (corrigido em 31/08/2026, tarde)
+         *
+         * A primeira versão desta cláusula ficou escrita assim:
+         *
+         *     canAssign: ator && ( ...assigned_to... || ...responsavel_do_pai... )
+         *
+         * E `ator` é sobre a PRÓPRIA atividade — `ehAtividadeDaPessoa`. Na
+         * filha recém-criada, quem responde pelo pai NÃO é ator dela: não é
+         * responsável (o campo está vazio, que é a premissa do relato) nem
+         * participante. O `&&` então zerava exatamente o caso que a segunda
+         * metade da expressão existia para atender.
+         *
+         * A regra passou no teste porque o cenário montado lá punha a pessoa
+         * como participante da filha (`participants: [EU]`) — e participante é
+         * ator. O teste confirmava a expressão, não o relato.
+         *
+         * Responder pelo pai é via PRÓPRIA, não um refinamento da via de ator.
+         * ------------------------------------------------------------------
+         */
+        canAssign:
+          (ator && matchesIdentity(atividade?.assigned_to, candidatos))
+          || matchesIdentity(atividade?.responsavel_do_pai, candidatos),
       },
       "4-equipe-editar-apenas-as-minhas",
       "projeto",

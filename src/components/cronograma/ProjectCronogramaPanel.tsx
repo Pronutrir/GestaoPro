@@ -48,6 +48,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PersonCombobox } from "@/components/PersonCombobox";
 import { DateField } from "@/components/ui/date-field";
 import { CelulaEditavel } from "@/components/cronograma/CelulaEditavel";
+import { mensagemDeErro } from "@/lib/erroDoBanco";
 import { cn } from "@/lib/utils";
 import {
   format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval,
@@ -57,6 +58,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateScheduleSlack } from "@/lib/criticalPath";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useToast } from "@/hooks/use-toast";
@@ -83,6 +85,14 @@ interface Props {
   defaultMode?: CronogramaMode;
   showProjectColumn?: boolean;
   onEditActivity?: (activity: any) => void;
+  /**
+   * FONTE ÚNICA (passo 5): quando a página já carregou as atividades (filtradas
+   * por visibilidade, atualizadas nas mutações), passa-as aqui — e o Cronograma
+   * usa ESSAS em vez de buscar as próprias. É o que impede "Backlog com 208 e
+   * Cronograma com 0" na mesma tela, e faz editar no Backlog refletir aqui sem
+   * F5. Sem isto (Cronograma Geral, multi-projeto), ele carrega sozinho.
+   */
+  activitiesExternas?: any[];
 }
 
 const LINK_TYPES: Record<string, { short: string; label: string; desc: string }> = {
@@ -264,6 +274,7 @@ export function ProjectCronogramaPanel({
   defaultMode = "gantt",
   showProjectColumn = false,
   onEditActivity,
+  activitiesExternas,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -281,11 +292,34 @@ export function ProjectCronogramaPanel({
     ]).then(([hols, sched]) => {
       setHolidays((hols.data || []) as Holiday[]);
       if (sched && (sched as any).data) setWorkSchedule((sched as any).data as WorkSchedule);
+    }).catch((err) => {
+      // O CALENDÁRIO É AUXILIAR (sombreia o Gantt, ajusta duração). Se falhar —
+      // p.ex. user_work_schedules ausente —, o Cronograma usa a jornada PADRÃO
+      // (workCalendar já trata schedule undefined) e segue listando as
+      // atividades. Nunca derrubar a lista inteira por uma chamada de calendário.
+      console.error("calendário (holidays/user_work_schedules):", err);
     });
   }, [profile?.id]);
   const [activities, setActivities] = useState<any[]>([]);
+  /**
+   * POR QUE O CRONOGRAMA PRECISA DE UM ESTADO DE ERRO (31/08/2026)
+   *
+   * Relatado: "o cronograma não aparece informação alguma." Sem tela de erro,
+   * QUALQUER falha no carregamento resulta no mesmo quadro em branco do estado
+   * inicial — e uma tela vazia é indistinguível de "este projeto não tem
+   * atividades". O usuário fica sem saber se o dado não existe, se a permissão
+   * recusou ou se a consulta quebrou.
+   *
+   * Vazio e falha são coisas diferentes e passam a ser ditas de formas
+   * diferentes. Mesma decisão de `docs/` sobre zero vazio não ser zero.
+   */
+  const [erroAoCarregar, setErroAoCarregar] = useState<string | null>(null);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
+  // As dependências são AUXILIARES (setas, folga CPM). Se falharem, o cronograma
+  // ainda lista as atividades — este flag liga o aviso em vez de deixar a tela
+  // em branco (o defeito antigo: o erro do fetch de deps sumia com tudo).
+  const [depsErro, setDepsErro] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
   /** A mesma gente, em lista — é o formato que `PersonCombobox` consome. */
   const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
@@ -456,7 +490,7 @@ export function ProjectCronogramaPanel({
   }, []);
 
   // ===== Fetch =====
-  const fetchData = useCallback(async () => {
+  const carregarDados = useCallback(async () => {
     if (accessLoading) return;
 
     if (projectIds && projectIds.length === 0) {
@@ -480,15 +514,38 @@ export function ProjectCronogramaPanel({
       setActivities([]); setDeps([]); setPhases([]); setStages([]);
       setProjectsMap({});
       setProjectDeadlines({});
+      /**
+       * ESTE É O CAMINHO MAIS SILENCIOSO DOS TRÊS.
+       *
+       * Zerava tudo e voltava — tela em branco, sem uma palavra. E as duas
+       * causas possíveis pedem ações opostas:
+       *
+       *   `allProjects` veio vazio  → não há projeto ativo: não há o que ver.
+       *   `filterProjects` filtrou  → os projetos EXISTEM e a permissão é que
+       *                               não alcança; a saída é pedir acesso, e
+       *                               ninguém pede o que não sabe que existe.
+       *
+       * Não é erro de banco, então não usa o tradutor: é uma frase de estado.
+       */
+      const havia = (allProjects || []).length;
+      setErroAoCarregar(
+        havia > 0
+          ? `Você não tem acesso a nenhum dos ${havia} ${havia === 1 ? "projeto ativo" : "projetos ativos"}. Peça acesso ao gestor do projeto.`
+          : null,
+      );
       return;
     }
 
-    const actsQ = supabase
-      .from("activities")
-      .select("*")
-      .eq("is_trashed", false)
-      .in("project_id", scopedProjectIds)
-      .order("display_order", { ascending: true });
+    // FONTE ÚNICA: se a página passou as atividades, usa ELAS — sem re-buscar
+    // (é o que impede "Backlog 208 / Cronograma 0" na mesma tela).
+    const actsQ = activitiesExternas
+      ? Promise.resolve({ data: activitiesExternas })
+      : supabase
+          .from("activities")
+          .select("*")
+          .eq("is_trashed", false)
+          .in("project_id", scopedProjectIds)
+          .order("display_order", { ascending: true });
 
     // `*` em vez da lista explícita: traz `categoria` onde a migration já
     // rodou e continua funcionando onde ainda não rodou.
@@ -513,13 +570,66 @@ export function ProjectCronogramaPanel({
       .eq("papel" as never, "responsavel" as never)) as unknown as
       Promise<{ data: { activity_id: string; user_id: string }[] | null }>;
 
-    const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }, { data: resps }] = await Promise.all([
+    /**
+     * `allSettled`, NÃO `all` — a consulta acessória não derruba a tela.
+     *
+     * A CAUSA MEDIDA DO CRONOGRAMA EM BRANCO (31/08/2026):
+     *
+     * Com `Promise.all`, UMA consulta que rejeita rejeita a promise inteira. A
+     * exceção escapava de `fetchData`, nenhum `setActivities` chegava a rodar,
+     * e a tela ficava com o `useState([])` inicial — cronograma vazio, sem
+     * erro, sem log, sem nada. As cinco consultas eram um bloco só: qualquer
+     * uma levava as outras quatro junto.
+     *
+     * E elas NÃO têm o mesmo peso. `activities` é a tela; `activity_assignees`
+     * é uma coluna dentro dela. Um cronograma sem a coluna "responsável" ainda
+     * é um cronograma. Um cronograma sem atividades é uma página em branco.
+     *
+     * Então: a essencial que falha VIRA MENSAGEM (a faixa acima da tabela); a
+     * acessória que falha vira ausência daquele pedaço, e nada mais.
+     *
+     * `error` também passa a ser lido. `{ data }` sozinho descartava a recusa:
+     * `data` vem null, `|| []` transforma em lista vazia, e a RLS recusando
+     * ficava indistinguível de projeto sem atividade — a mesma família de
+     * "erro do banco chega como silêncio".
+     */
+    const [rActs, rPhs, rProfs, rStgs, rResps] = await Promise.allSettled([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url, email"),
       stagesQ,
       respQ,
     ]);
+
+    /** O que a consulta trouxe, ou null se ela falhou — de qualquer das duas
+     *  formas de falhar: a promise rejeitar, ou o PostgREST devolver `error`. */
+    const colher = <T,>(r: PromiseSettledResult<any>): { data: T[] | null; erro: unknown } => {
+      if (r.status === "rejected") return { data: null, erro: r.reason };
+      const v = r.value as { data?: T[] | null; error?: unknown };
+      if (v?.error) return { data: null, erro: v.error };
+      return { data: v?.data ?? null, erro: null };
+    };
+
+    const acts_ = colher<any>(rActs);
+    const phs_ = colher<any>(rPhs);
+    const profs_ = colher<any>(rProfs);
+    const stgs_ = colher<any>(rStgs);
+    const resps_ = colher<{ activity_id: string; user_id: string }>(rResps);
+
+    // A ESSENCIAL. Sem atividades não há cronograma: diz o que houve e para.
+    // Não sobrescreve o que já estava na tela com uma lista vazia — dado velho
+    // com aviso é melhor que branco sem explicação.
+    if (acts_.erro) {
+      setErroAoCarregar(mensagemDeErro(acts_.erro, { projetos: projectsMap }));
+      return;
+    }
+    setErroAoCarregar(null);
+
+    const acts = acts_.data;
+    const phs = phs_.data;
+    const profs = profs_.data;
+    const stgs = stgs_.data;
+    const resps = resps_.data;
     setActivities(acts || []);
     setPhases(phs || []);
     setStages(stgs || []);
@@ -560,15 +670,55 @@ export function ProjectCronogramaPanel({
     setProjectsMap(pm);
     setProjectDeadlines(pdl);
 
+    // DEPENDÊNCIAS PELA RPC (POST), uma por projeto do escopo — sem a lista de
+    // ids na URL que estourava 15 KB e voltava 502. E DEGRADA: se falhar, as
+    // atividades continuam listadas; só as setas/folga ficam de fora, com aviso.
     const ids = (acts || []).map((a: any) => a.id);
     if (ids.length) {
-      const { data: d } = await supabase.from("task_dependencies").select("*")
-        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`);
-      setDeps(d || []);
-    } else setDeps([]);
+      try {
+        const listas = await Promise.all(scopedProjectIds.map((pid) => fetchTaskDependencias(pid)));
+        const vistos = new Set<string>();
+        setDeps(listas.flat().filter((dep) => (vistos.has(dep.id) ? false : (vistos.add(dep.id), true))));
+        setDepsErro(false);
+      } catch (err) {
+        // Falhar em silêncio aqui apagava a tela inteira. Agora: log com
+        // contexto, deps vazio (a tela degrada) e o aviso liga.
+        console.error("task_dependencies (cronograma):", err);
+        setDeps([]);
+        setDepsErro(true);
+      }
+    } else { setDeps([]); setDepsErro(false); }
   }, [projectIds, accessLoading, filterProjects]);
 
+  /**
+   * A ÚLTIMA VIA DE SILÊNCIO: o que o `allSettled` não alcança.
+   *
+   * Dentro de `carregarDados` ainda há dois pontos que rodam ANTES das cinco
+   * consultas — a leitura de `projects` e a chamada de `filterProjects`. Se um
+   * deles lançar, a exceção sai da função async como uma promise rejeitada que
+   * ninguém aguarda: o React não a mostra, o `useEffect` a ignora, e o efeito
+   * visível é de novo a tela em branco.
+   *
+   * Nenhuma falha de carregamento deste painel pode terminar sem uma frase na
+   * tela. Este `catch` é o que garante isso — não importa por onde ela venha.
+   */
+  const fetchData = useCallback(async () => {
+    try {
+      await carregarDados();
+    } catch (e) {
+      setErroAoCarregar(mensagemDeErro(e));
+    }
+  }, [carregarDados]);
+
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // A página atualiza suas atividades (edição in-place, reorder, arquivar) —
+  // reflete aqui NA HORA, sem re-buscar fases/deps. É o "editar no Backlog
+  // aparece no Cronograma sem F5". Numa edição os ids não mudam, então as deps
+  // já carregadas continuam válidas.
+  useEffect(() => {
+    if (activitiesExternas) setActivities(activitiesExternas);
+  }, [activitiesExternas]);
 
   // ===== Mock estável (para colunas ainda não persistidas) =====
   /**
@@ -2365,8 +2515,27 @@ export function ProjectCronogramaPanel({
             </SortableContext>
           </thead>
           <tbody>
+            {/* VAZIO NÃO É UM SÓ (31/08/2026).
+                "Nenhuma atividade encontrada" respondia por três situações
+                distintas, e nenhuma delas ficava clara: o projeto realmente não
+                tem atividades; um filtro está escondendo todas; ou o usuário não
+                alcança projeto nenhum. Só a primeira é "não há o que fazer" — as
+                outras duas têm uma saída, e a tela precisa dizer qual.
+                Zero vazio não é zero, o mesmo princípio do painel do projeto. */}
             {rows.length === 0 && (
-              <tr><td colSpan={visibleCols.length} className="text-center py-10 text-muted-foreground">Nenhuma atividade encontrada.</td></tr>
+              <tr><td colSpan={visibleCols.length} className="text-center py-10 text-muted-foreground">
+                {activities.length > 0 ? (
+                  <>
+                    <div>Nenhuma atividade corresponde aos filtros.</div>
+                    <div className="mt-1 text-[12px]">
+                      Há <b className="tabular-nums">{activities.length}</b>{" "}
+                      {activities.length === 1 ? "atividade" : "atividades"} fora do filtro atual.
+                    </div>
+                  </>
+                ) : (
+                  <div>Este projeto ainda não tem atividades no cronograma.</div>
+                )}
+              </td></tr>
             )}
             {rows.map(({ a, idx, mock }, rowIdx) => {
               const id = indexById.get(a.id) ?? shortIdOf(a.id);
@@ -3533,6 +3702,41 @@ export function ProjectCronogramaPanel({
   return (
     <div className="space-y-4">
       {Toolbar}
+
+      {/* CARGA INTEIRA FALHOU — a faixa do Raphael (mensagem + tentar de novo),
+          restaurada no merge. Complementa o depsErro abaixo: aqui é quando NEM as
+          atividades carregam; ali é quando só as dependências faltam. */}
+      {erroAoCarregar && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px]">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-destructive">
+            <AlertCircle className="h-3.5 w-3.5" /> O cronograma não pôde ser carregado
+          </span>
+          <span className="text-foreground/80">{erroAoCarregar}</span>
+          <button type="button" onClick={() => { void fetchData(); }}
+            className="ml-auto rounded-md border border-destructive/40 px-2 py-0.5 font-medium text-destructive hover:bg-destructive/10">
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
+      {/* DEPENDÊNCIAS NÃO CARREGARAM — degrada, não some. As atividades e datas
+          seguem na tela; faltam só as setas e a folga do CPM. Antes isto apagava
+          o cronograma inteiro em silêncio. */}
+      {depsErro && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px]">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-muted-foreground">
+            As dependências não carregaram — o cronograma está sem as setas e a folga do caminho crítico. As atividades e datas estão corretas.
+          </span>
+          <button
+            type="button"
+            onClick={() => void fetchData()}
+            className="ml-auto shrink-0 h-6 px-2 rounded-[4px] border border-border text-[11.5px] hover:bg-muted"
+          >
+            Tentar de novo
+          </button>
+        </div>
+      )}
 
       {/* Avisos do cálculo. Só aparece quando há o que avisar — em cronograma
           saudável não ocupa espaço. Antes, tudo isto falhava em silêncio: a

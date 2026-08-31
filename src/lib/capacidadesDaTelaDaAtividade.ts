@@ -44,6 +44,8 @@ export function capacidadesDaTela(c: {
     // própria e não passa por aqui.
     editarEsforco: c.canEditPlanejamento,
     editarGut: c.canEditPlanejamento,
+    // Custo é planejamento (CLAUDE.md: previsto, GUT, custo, posição na EAP).
+    editarCusto: c.canEditPlanejamento,
     editarPessoas: c.canAssign,
     // Criar subatividade é decidir escopo: quebra o trabalho em partes.
     criarSubatividade: c.canEditPlanejamento,
@@ -51,5 +53,7 @@ export function capacidadesDaTela(c: {
     comentar: c.canComment,
     // Mudar Fase/Entrega/Atividade/Marco é decidir o que a atividade É — escopo.
     mudarTipo: c.canEditPlanejamento,
+    // Promover (backlog → quadro) é decisão de escopo — CLAUDE.md.
+    promover: c.canEditPlanejamento,
   };
 }

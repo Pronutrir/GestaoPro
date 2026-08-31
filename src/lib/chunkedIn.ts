@@ -23,6 +23,30 @@ export const chunkIds = <T,>(items: T[], size = ID_CHUNK): T[][] => {
 };
 
 /**
+ * QUANDO A LISTA APARECE MAIS DE UMA VEZ NA MESMA URL (31/08/2026)
+ *
+ * `ID_CHUNK = 50` foi calibrado para UM `.in(...)`: ~50 ids ≈ 1,9 KB, metade do
+ * limite. Mas há um padrão em que a mesma lista entra DUAS vezes na query:
+ *
+ *   .or(`predecessor_id.in.(${batch}),successor_id.in.(${batch})`)
+ *
+ * Aí o custo por lote dobra, e o lote "seguro" de 50 vira **3.742 chars** —
+ * acima dos ~3.700 que o proxy aceita. Medido, não estimado. Resultado: 502, o
+ * `selectInChunks` lança, e as quatro telas de dependência mostram
+ * "Dependências não carregaram" ao abrir um projeto grande.
+ *
+ * O sintoma é o mesmo que já derrubou o "Ler todas" das notificações, com um
+ * agravante: como estoura por pouco, o projeto pequeno funciona e só o grande
+ * quebra — o que faz parecer defeito intermitente.
+ *
+ * Baixar o `ID_CHUNK` global seria o conserto errado: puniria as dezenas de
+ * chamadas com um `.in()` só, dobrando o número de viagens delas sem motivo. O
+ * que muda é quem sabe que repete a lista, e é quem repete que declara.
+ */
+export const chunkIdsFor = <T,>(items: T[], vezesNaUrl: number): T[][] =>
+  chunkIds(items, Math.max(1, Math.floor(ID_CHUNK / Math.max(1, vezesNaUrl))));
+
+/**
  * Roda `run` uma vez por lote e concatena os resultados.
  *
  * Lança no primeiro lote com erro — quem chama trata como trataria uma consulta
@@ -36,10 +60,19 @@ export const chunkIds = <T,>(items: T[], size = ID_CHUNK): T[][] => {
 export async function selectInChunks<Row>(
   ids: string[],
   run: (batch: string[]) => PromiseLike<{ data: Row[] | null; error: { message: string } | null }>,
+  /**
+   * Quantas vezes a lista de ids aparece na URL desta consulta.
+   *
+   * 1 é o caso normal (um `.in(...)`) e continua sendo o padrão, então nenhuma
+   * das chamadas existentes muda de comportamento. Passe 2 quando um `.or(...)`
+   * repete o `batch` em dois filtros — senão o lote dobra de tamanho e estoura
+   * o limite do proxy.
+   */
+  vezesNaUrl = 1,
 ): Promise<Row[]> {
   if (ids.length === 0) return [];
   const out: Row[] = [];
-  for (const batch of chunkIds(ids)) {
+  for (const batch of chunkIdsFor(ids, vezesNaUrl)) {
     const { data, error } = await run(batch);
     if (error) throw new Error(error.message);
     if (data) out.push(...data);

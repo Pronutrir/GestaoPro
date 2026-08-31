@@ -11,6 +11,8 @@ import {
   type SubatividadeNaTela,
 } from "@/components/atividade/TelaDaAtividade";
 import { capacidadesDaTela } from "@/lib/capacidadesDaTelaDaAtividade";
+import { ActivityDependencies } from "@/components/ActivityDependencies";
+import { ActivityAttachments } from "@/components/ActivityAttachments";
 import {
   carregarTrilha,
   carregarPessoas,
@@ -83,6 +85,40 @@ export default function PaginaDaAtividade() {
   const [coluna, setColuna] = useState<Record<string, unknown> | null>(null);
   const [eventos, setEventos] = useState<EventoDoBanco[]>([]);
   const [naoLidos, setNaoLidos] = useState(0);
+  /**
+   * O PAPEL DESTA PESSOA NA EQUIPE DO PROJETO.
+   *
+   * ==========================================================================
+   * POR QUE ISTO FALTAVA, E O QUE ISSO CAUSAVA (31/08/2026)
+   *
+   * `capacidadesNaAtividade` decide em seis passos, e o passo 4 — "está na
+   * equipe? o papel manda" — depende de `naEquipe`, `canEdit`, `canMove`,
+   * `canCreate`, `canDelete` e `canEditOwn`.
+   *
+   * Esta tela não passava NENHUM deles. O `as never` na chamada silenciava o
+   * TypeScript, então o objeto incompleto passava sem reclamação: para a
+   * função, quem abrisse esta tela simplesmente não era da equipe. O passo 4
+   * nunca era alcançado e sobrava a via do ator — ver e comentar.
+   *
+   * O sintoma relatado era "o responsável pela entrega não consegue destinar
+   * responsável para os filhos", com a faixa "Você acompanha esta atividade"
+   * no topo. Essa faixa era o próprio diagnóstico: ela só aparece quando
+   * `canEditExecucao` E `canEditPlanejamento` são falsos — ou seja, o problema
+   * nunca foi só o `canAssign`. A tela inteira estava em modo leitura para
+   * quem tinha permissão de escrita no projeto.
+   *
+   * Por isso a correção de 31/08 (responsável do pai também atribui) não
+   * apareceu: ela vive no passo 4, e o passo 4 não era alcançado.
+   *
+   * É a mesma família de "permissão: tela vs RLS" — com o lado da tela
+   * recusando o que o banco permitiria.
+   * ==========================================================================
+   */
+  const [papelNaEquipe, setPapelNaEquipe] = useState<{
+    naEquipe: boolean;
+    canEdit: boolean; canMove: boolean; canCreate: boolean;
+    canDelete: boolean; canEditOwn: boolean;
+  } | null>(null);
 
   const carregar = useCallback(async () => {
     if (!projectId || !activityId) return;
@@ -100,6 +136,60 @@ export default function PaginaDaAtividade() {
         .from("activities").select("*")
         .eq("parent_id", activityId).eq("is_trashed", false)
         .order("wbs_code", { ascending: true });
+
+      /**
+       * O PAI — só para saber quem responde por ele.
+       *
+       * Serve à permissão de atribuir: quem responde pela entrega pode
+       * distribuir o trabalho das filhas dela. Ver activityAccess, canAssign.
+       *
+       * Uma consulta a mais, e só quando há pai. O alternativo seria a função
+       * de acesso carregar a árvore — e regra de permissão não deve fazer
+       * consulta.
+       */
+      const paiId = (a as Record<string, unknown>)?.parent_id;
+      const { data: pai } = paiId
+        // `select("*")` em vez da lista: `assigned_to_id` nasceu na migration
+        // 20260826200000 e o types.ts gerado é anterior — pedir a coluna pelo
+        // nome faz o tsc recusar uma coluna que existe no banco.
+        ? await supabase.from("activities").select("*").eq("id", String(paiId)).single()
+        : { data: null };
+
+      /**
+       * O PAPEL NA EQUIPE — a metade que faltava para o passo 4 existir.
+       *
+       * Mesma consulta que a página do projeto faz em `loadAccess`. Admin não
+       * precisa dela (o passo 1 resolve antes), mas custa uma consulta e evita
+       * um segundo caminho de decisão — e caminho duplo de permissão é
+       * exatamente o que já produziu "o botão aparece numa tela e não na
+       * outra".
+       *
+       * `maybeSingle`: não ser membro é resposta válida, não erro. Nesse caso
+       * `naEquipe` fica falso e a decisão desce para a via do ator, que é o
+       * comportamento correto para quem chegou só por atribuição.
+       */
+      const { data: membro } = user?.id
+        ? await supabase
+            .from("project_members")
+            .select("can_create, can_edit, can_delete, can_move, can_edit_own")
+            .eq("project_id", projectId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : { data: null };
+
+      const m = membro as Record<string, unknown> | null;
+      setPapelNaEquipe({
+        naEquipe: !!m,
+        canEdit: !!m?.can_edit,
+        canMove: !!m?.can_move,
+        canCreate: !!m?.can_create,
+        canDelete: !!m?.can_delete,
+        // `?? true` e não `?? false`: ausente quer dizer "coluna não
+        // preenchida", não "proibido". Falso aqui é o que rebaixa o membro
+        // para "visualizar e comentar" — e é uma decisão explícita de quem
+        // gerencia a equipe, não um padrão.
+        canEditOwn: m?.can_edit_own === undefined ? true : !!m.can_edit_own,
+      });
 
       const stageId = (a as Record<string, unknown>)?.workflow_stage_id;
       const { data: col } = stageId
@@ -126,7 +216,11 @@ export default function PaginaDaAtividade() {
         user?.id ? contarNaoLidos(activityId, user.id).catch(() => 0) : Promise.resolve(0),
       ]);
 
-      setAtividade(a as Record<string, unknown>);
+      setAtividade({
+        ...(a as Record<string, unknown>),
+        responsavel_do_pai: (pai as Record<string, unknown> | null)?.assigned_to ?? null,
+        responsavel_do_pai_id: (pai as Record<string, unknown> | null)?.assigned_to_id ?? null,
+      });
       setProjeto((p ?? null) as Record<string, unknown> | null);
       setFilhas((fs ?? []) as Record<string, unknown>[]);
       setColuna((col ?? null) as Record<string, unknown> | null);
@@ -155,10 +249,25 @@ export default function PaginaDaAtividade() {
         email: user?.email,
         isAdmin: !!(profile as Record<string, unknown>)?.is_admin,
         ehVisualizador: false,
-      } as never,
+        /**
+         * O PAPEL NA EQUIPE — sem isto o passo 4 nunca é alcançado.
+         *
+         * Enquanto `papelNaEquipe` é null a consulta ainda não voltou. Mandar
+         * `naEquipe: false` nesse intervalo faria a tela abrir em leitura e
+         * só depois liberar os campos — pior que abrir travada, porque o
+         * usuário já teria tentado editar e recebido a faixa de "acompanha".
+         * Enquanto carrega, a tela mostra o estado de carregamento.
+         */
+        naEquipe: !!papelNaEquipe?.naEquipe,
+        canEdit: !!papelNaEquipe?.canEdit,
+        canMove: !!papelNaEquipe?.canMove,
+        canCreate: !!papelNaEquipe?.canCreate,
+        canDelete: !!papelNaEquipe?.canDelete,
+        canEditOwn: papelNaEquipe?.canEditOwn ?? true,
+      },
     );
     return c;
-  }, [atividade, projeto, user, profile]);
+  }, [atividade, projeto, user, profile, papelNaEquipe]);
 
   /* ── GRAVAR UM CAMPO ───────────────────────────────────────────────────
    *
@@ -229,6 +338,24 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, carregar, toast]);
 
+  // MOVER PARA O QUADRO — promove do backlog para a coluna de ENTRADA (ou a
+  // primeira visível não-backlog). A trava do banco recusa agrupador sem subitem
+  // em português; count:"exact" pega a recusa silenciosa da RLS.
+  const aoMoverParaQuadro = useCallback(async () => {
+    const { data: stages } = await supabase.from("workflow_stages")
+      .select("id, is_entry_point, is_visible, categoria").eq("project_id", projectId);
+    const lista = ((stages ?? []) as Record<string, unknown>[]).filter(
+      (s) => s.is_visible !== false && String(s.categoria ?? "").toLowerCase() !== "backlog",
+    );
+    const alvo = (lista.find((s) => s.is_entry_point) ?? lista[0]) as Record<string, unknown> | undefined;
+    if (!alvo?.id) { toast({ title: "Sem coluna no quadro", description: "Este projeto não tem coluna visível fora do backlog.", variant: "destructive" }); return; }
+    const { error, count } = await supabase.from("activities")
+      .update({ workflow_stage_id: alvo.id } as never, { count: "exact" }).eq("id", activityId);
+    if (error) { toast({ title: "Não deu para mover ao quadro", description: error.message, variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
+    await carregar();
+  }, [activityId, projectId, carregar, toast]);
+
   // SUBATIVIDADE — cria uma filha com nome só; nasce no Backlog (não vira cartão
   // sozinha, a regra continua). O resto se preenche na tela dela.
   const aoCriarSubatividade = useCallback(async (nome: string) => {
@@ -282,6 +409,60 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, carregar, toast]);
 
+  // DUPLICAR — clona os campos de PLANEJAMENTO (nome, descrição, tipo, esforço,
+  // custo, GUT, posição, coluna), zera o que nasce do trabalho (datas/status).
+  // Vai para a cópia.
+  const aoDuplicar = useCallback(async () => {
+    const a = (atividade ?? {}) as Record<string, unknown>;
+    const { data: nova, error } = await supabase.from("activities").insert({
+      project_id: projectId,
+      parent_id: a.parent_id ?? null,
+      title: `Cópia de ${a.title ?? "atividade"}`,
+      description: a.description ?? null,
+      item_type: a.item_type ?? "atividade",
+      is_milestone: a.is_milestone ?? false,
+      status: "not_started",
+      hours: a.hours ?? null,
+      cost: a.cost ?? null,
+      gravity: a.gravity ?? null,
+      urgency: a.urgency ?? null,
+      tendency: a.tendency ?? null,
+      workflow_stage_id: a.workflow_stage_id ?? null,
+    } as never).select("id").single();
+    if (error) { toast({ title: "Não deu para duplicar", description: error.message, variant: "destructive" }); return; }
+    if (nova && (nova as Record<string, unknown>).id) {
+      router.push(`/project/${projectId}/atividade/${String((nova as Record<string, unknown>).id)}`);
+    }
+  }, [atividade, projectId, router, toast]);
+
+  // ARQUIVAR — is_trashed=true e sai da atividade (ela some das listas). É a via
+  // do quadro/backlog para arquivar; a policy de DELETE não aceita o ator.
+  const aoArquivar = useCallback(async () => {
+    const { error, count } = await supabase.from("activities")
+      .update({ is_trashed: true } as never, { count: "exact" }).eq("id", activityId);
+    if (error) { toast({ title: "Não deu para arquivar", description: error.message, variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
+    router.push(`/project/${projectId}`);
+  }, [activityId, projectId, router, toast]);
+
+  // TRANSFORMAR EM LIÇÃO — cria uma lição SEMEADA pela atividade (source_activity_id),
+  // no estado "identificada". Problema/solução se completam em Lições.
+  const aoCriarLicao = useCallback(async () => {
+    const a = (atividade ?? {}) as Record<string, unknown>;
+    const { error } = await supabase.from("lessons_learned").insert({
+      project_id: projectId,
+      category: "Geral",
+      problem: `A partir de "${a.title ?? "atividade"}"`,
+      source_activity_id: activityId,
+      source_trigger: "atividade",
+      reported_by: nomeDeQuemFez,
+      reported_by_id: user?.id ?? null,
+      lifecycle: "identificada",
+    } as never);
+    if (error) { toast({ title: "Não deu para criar a lição", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Lição criada", description: "Complete o problema e a solução na aba Lições." });
+  }, [atividade, activityId, projectId, nomeDeQuemFez, user?.id, toast]);
+
   // BUSCAR pessoas para atribuir: perfis ativos, filtrados pelo texto. A
   // inclusão na equipe (se faltar) acontece dentro de incluir_e_atribuir.
   const buscarPessoas = useCallback(async (q: string): Promise<{ id: string; nome: string }[]> => {
@@ -312,6 +493,7 @@ export default function PaginaDaAtividade() {
       tipoKind: kind,
       ehMarco: !!a.is_milestone,
       concluida: String(a.status) === "completed",
+      noBacklog: String((coluna?.categoria as string) ?? "").toLowerCase() === "backlog",
       statusRotulo: String((coluna?.title as string) ?? "sem coluna"),
       statusCor: (coluna?.color as string) ?? null,
       previstoInicio: (a.start_date as string) ?? null,
@@ -329,6 +511,7 @@ export default function PaginaDaAtividade() {
         : null,
       origemRotulo: (a.origem as string) ?? null,
       custoRotulo: (a.cost as number) ? `R$ ${a.cost}` : null,
+      custoValor: (a.cost as number) ?? null,
     };
   }, [atividade, coluna, trilha, projectId]);
 
@@ -399,11 +582,17 @@ export default function PaginaDaAtividade() {
         aoGravarCampo={gravarCampo}
         aoConcluir={aoConcluir}
         aoMudarTipo={aoMudarTipo}
+        aoMoverParaQuadro={aoMoverParaQuadro}
         aoCriarSubatividade={aoCriarSubatividade}
         aoAtribuir={aoAtribuir}
         aoRemoverPessoa={aoRemoverPessoa}
         buscarPessoas={buscarPessoas}
         aoAbrirEditorAntigo={soLeitura ? undefined : () => router.push(`/project/${projectId}?activity=${activityId}`)}
+        secaoDependencias={<ActivityDependencies activityId={activityId} projectId={projectId} podeEditar={!soLeitura} />}
+        secaoAnexos={<ActivityAttachments activityId={activityId} projectId={projectId} />}
+        aoDuplicar={caps.canEditPlanejamento ? aoDuplicar : undefined}
+        aoArquivar={caps.canEditPlanejamento ? aoArquivar : undefined}
+        aoCriarLicao={(caps.canEditExecucao || caps.canComment) ? aoCriarLicao : undefined}
         aoMarcarLido={user?.id ? async () => {
           await marcarFeedVisto(activityId, user.id).catch(() => {});
           setNaoLidos(0);

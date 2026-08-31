@@ -137,8 +137,21 @@ check("confere can_manage ANTES de qualquer escrita",
 check("o padrão é Visualizar e comentar, escopo só a atividade e a trilha",
   /p_papel\s+text DEFAULT 'visualizar_comentar'/.test(mig)
   && /p_escopo\s+text DEFAULT 'atividade_e_trilha'/.test(mig));
-check("grava no histórico a FRASE INTEIRA, não 'usuário X adicionado'",
-  /incluiu %s na equipe do projeto como %s, com acesso %s, e atribuiu/.test(mig));
+// O passo do histórico foi REMOVIDO em 28/08 (ver o comentário da seção 3 da
+// migration): ele escrevia em `activity_feed_eventos`, tabela descartada no
+// commit ad38feb. plpgsql adia a resolução de nomes, então a função se criava
+// e só abortava EM RUNTIME — revertendo o incluir+atribuir a cada chamada.
+//
+// A asserção original exigia a frase inteira. Ela não é apagada: vira as duas
+// abaixo. A primeira trava o conserto (a função não pode voltar a escrever numa
+// tabela inexistente); a segunda trava o DÉBITO — sem o registro no feed, a
+// remoção precisa continuar dizendo o que custou e onde a decisão está.
+check("não escreve na tabela descartada — abortaria a cada chamada",
+  !/INSERT INTO\s+public\.activity_feed_eventos/.test(mig),
+  "plpgsql só falharia em runtime: a migration passaria e a função nunca funcionaria");
+check("e o custo da remoção fica escrito, com a pergunta em aberto",
+  /CUSTO MEDIDO/.test(mig) && /FILA-DE-TRABALHO/.test(mig),
+  "remover sem registrar transforma débito conhecido em defeito esquecido");
 check("SECURITY DEFINER com search_path fixo",
   /SECURITY DEFINER\s*\nSET search_path = public/.test(mig));
 check("e o EXECUTE é revogado de public",

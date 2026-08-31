@@ -181,6 +181,7 @@ export default function PaginaCriarAtividade() {
     tipoKind: tipo,
     ehMarco: tipo === "marco",
     concluida: false,
+    noBacklog: false,
     statusRotulo: "",
     statusCor: null,
     previstoInicio: null, previstoFim: null,
@@ -191,6 +192,7 @@ export default function PaginaCriarAtividade() {
     pacoteRotulo: pai ? String(pai.title ?? "") : null,
     origemRotulo: null,
     custoRotulo: null,
+    custoValor: null,
   };
 
   return (
