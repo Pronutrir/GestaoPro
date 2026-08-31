@@ -376,6 +376,41 @@ decide **cor**.
 
 ---
 
+## 8 · O evento de texto rico no feed — `incluir_e_atribuir` perdeu o passo 3
+
+**Origem:** 28/08/2026. A migration `20260827160000_incluir_e_atribuir` gravava a
+frase inteira ("Fulano incluiu Beltrano na equipe e atribuiu") em
+`public.activity_feed_eventos`. Essa tabela **não existe**: foi descartada no
+commit `ad38feb`. A função aplicava (plpgsql adia a resolução de nomes) mas
+**abortava em runtime a cada chamada**, revertendo o incluir+atribuir e devolvendo
+erro cru do Postgres. O passo 3 foi **removido** para o crítico (vínculo +
+atribuição na mesma transação, recusa em português) voltar a funcionar.
+
+**O que se perdeu, medido:** a ação some do feed. `activity_assignees` **não tem
+gatilho de auditoria** (`audit_log` tem 0 linhas dela) e a view `activity_feed_events`
+só mostra audit de `table_name='activities'`. Não há fallback de texto seco.
+
+### A pergunta que vem ANTES de restaurar qualquer coisa
+
+**Por que `activity_feed_eventos` foi descartada em `ad38feb`?** O commit seguinte
+(`a4c2b8de`) diz "a tabela que eu ia criar JÁ EXISTIA — consome a fase 08". Mas a
+fase 08 entregou uma **view** (`activity_feed_events`, une `activity_comments` +
+`audit_log`) — nenhum dos dois tem campo de **texto livre** para um evento como
+"X incluiu Y". Então ou o descarte foi correto e a frase rica precisa de outro
+desenho, ou foi engano e a tabela deve voltar. **Responder isso primeiro** —
+restaurar por reversão uma tabela apagada de propósito, sem saber o motivo, arrisca
+duas tabelas fazendo o mesmo trabalho (já aconteceu nesta semana).
+
+### Só então decidir o sink
+
+Candidatos, quando a pergunta acima tiver resposta: (a) restaurar
+`activity_feed_eventos` com coluna de texto e ligá-la como 3º ramo da view; (b) um
+gatilho de auditoria em `activity_assignees` (texto seco, mas aparece); (c) outro
+desenho. Nenhum deve entrar no mesmo lote de uma publicação — muda a view que o
+sino e o feed leem.
+
+---
+
 ## Esperando gente, não código
 
 - **Quem publicou** em 26/08 18:01 e em 27/08 12:08 — e qual `APP_VERSION`.

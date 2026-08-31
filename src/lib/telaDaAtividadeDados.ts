@@ -163,8 +163,12 @@ export function iniciaisDe(nome: string): string {
  * pessoa para uma comparação por texto.
  */
 export async function carregarPessoas(activityId: string): Promise<PessoaDaAtividade[]> {
+  // `profiles` DESAMBIGUADO pelo nome do constraint: activity_assignees tem DOIS
+  // FKs para profiles (user_id e created_by), então `profiles(...)` cru é
+  // ambíguo (PGRST201) e a tela não abre em atividade nenhuma. Queremos o perfil
+  // do RESPONSÁVEL — o do user_id.
   const { data, error } = await tabela("activity_assignees")
-    .select("user_id, papel, profiles(id, full_name)")
+    .select("user_id, papel, profiles!activity_assignees_user_id_fkey(id, full_name)")
     .eq("activity_id", activityId);
 
   if (error) throw new Error(`não foi possível ler os responsáveis: ${error.message}`);

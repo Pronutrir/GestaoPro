@@ -56,22 +56,30 @@ WHERE categoria = 'backlog' AND is_visible IS DISTINCT FROM false;
 -- Se o Backlog estivesse marcado como entrada, a tarefa nova nasceria numa
 -- coluna que o quadro não desenha — invisível para quem acabou de criá-la.
 -- Passa a marca para a primeira coluna que o quadro mostra.
-WITH fila_entrada AS (
-  SELECT id, project_id FROM public.workflow_stages
-  WHERE is_entry_point = true AND categoria = 'backlog'
-),
-substituta AS (
+--
+-- DESMARCA ANTES DE MARCAR: o indice unico parcial
+-- (workflow_stages_one_entry_per_project) e checado por linha. Fazer a troca
+-- num unico UPDATE (is_entry_point = (w.id = sub.id)) deixa, no meio da
+-- execucao, o Backlog e a substituta as duas como entrada no mesmo projeto e
+-- viola o indice. Dois passos evitam isso.
+UPDATE public.workflow_stages
+   SET is_entry_point = false
+ WHERE is_entry_point = true AND categoria = 'backlog';
+
+WITH substituta AS (
   SELECT DISTINCT ON (s.project_id) s.project_id, s.id
   FROM public.workflow_stages s
-  JOIN fila_entrada f ON f.project_id = s.project_id
   WHERE s.categoria IS DISTINCT FROM 'backlog'
     AND s.is_visible IS DISTINCT FROM false
+    AND NOT EXISTS (
+      SELECT 1 FROM public.workflow_stages e
+       WHERE e.project_id = s.project_id AND e.is_entry_point = true
+    )
   ORDER BY s.project_id, s.display_order
 )
 UPDATE public.workflow_stages w
-SET is_entry_point = (w.id = sub.id)
-FROM substituta sub
-WHERE w.project_id = sub.project_id
-  AND (w.id = sub.id OR w.id IN (SELECT id FROM fila_entrada));
+   SET is_entry_point = true
+  FROM substituta sub
+ WHERE w.id = sub.id;
 
 NOTIFY pgrst, 'reload schema';

@@ -162,6 +162,13 @@ END $$;
 -- esta guardado. E preenche tambem os ambiguos, que e o que permite ao script
 -- da parte (b) trabalhar depois.
 -- ───────────────────────────────────────────────────────────────────────────
+-- Guard: os UPDATE de sombra e conversao abaixo mutam activities em massa,
+-- inclusive as 127 de projetos concluidos (a sombra toca TODA linha com
+-- assigned_to). Sem o guard o trigger de projeto concluido abortaria.
+-- Religado apos a secao 5. Nao muta activities.status/coluna, entao o rollup
+-- da leva 8 nao e relevante; e so o trigger de concluido.
+SET session_replication_role = replica;
+
 UPDATE public.activities
    SET assigned_to_nome_original = assigned_to
  WHERE assigned_to IS NOT NULL
@@ -220,6 +227,9 @@ UPDATE public.projects
  WHERE manager IS NOT NULL AND btrim(manager) <> ''
    AND manager_id IS NULL
    AND public.resolver_identificador_para_conversao(manager) IS NOT NULL;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 6) DEPOIS -- e a verificacao que falha alto

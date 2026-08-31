@@ -60,6 +60,13 @@
 --
 -- Estar na fila é estado legítimo, não extravio. O que continua sendo defeito
 -- é o filho numa coluna do QUADRO que alguém ocultou: essa sim é gaveta.
+--
+-- Guard: desliga os triggers de negócio durante o UPDATE. (1) o trigger de
+-- projeto concluído abortaria se um filho caísse em projeto fechado; (2) o
+-- rollup trg_filho_recalcula_pai (leva 8) dispararia no sentido INVERSO ao
+-- movimento explícito desta migration. Religado logo após.
+SET session_replication_role = replica;
+
 UPDATE public.activities f
    SET workflow_stage_id = p.workflow_stage_id
   FROM public.activities p
@@ -74,9 +81,12 @@ UPDATE public.activities f
      SELECT 1 FROM public.workflow_stages sf
       WHERE sf.id = f.workflow_stage_id
         AND sf.is_visible = false
-        AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'backlog'
+        AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'backlog'
    )
    AND f.workflow_stage_id IS DISTINCT FROM p.workflow_stage_id;
+
+-- Religa os triggers de negócio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
 
@@ -96,7 +106,7 @@ BEGIN
      -- Mesma guarda do UPDATE: filho na FILA não é filho perdido. Sem isto a
      -- verificação acusaria como defeito o estado normal da EAP importada e
      -- abortaria a migration inteira.
-     AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'backlog';
+     AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'backlog';
 
   IF filhos_perdidos > 0 THEN
     RAISE EXCEPTION 'ainda ha % filho(s) fora do quadro com o pai dentro', filhos_perdidos;

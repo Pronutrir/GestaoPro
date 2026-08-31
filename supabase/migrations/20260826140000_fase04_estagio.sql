@@ -72,8 +72,9 @@ SET search_path = public
 AS $$
   SELECT COALESCE((
     SELECT CASE
-             WHEN s.categoria IS NOT NULL AND trim(s.categoria) <> ''
-               THEN lower(trim(s.categoria)) = 'backlog'
+             -- categoria e enum workflow_category: cast ::text antes de trim/lower.
+             WHEN s.categoria IS NOT NULL AND trim(s.categoria::text) <> ''
+               THEN lower(trim(s.categoria::text)) = 'backlog'
              ELSE lower(trim(COALESCE(s.title, ''))) IN ('backlog', 'fila', 'a fila', 'fila de espera')
            END
       FROM public.workflow_stages s
@@ -114,6 +115,11 @@ CREATE TRIGGER trg_sincronizar_estagio
 -- ───────────────────────────────────────────────────────────────────────────
 -- 4) Backfill
 -- ───────────────────────────────────────────────────────────────────────────
+-- Guard: o UPDATE muta activities. Trigger de projeto concluido abortaria se
+-- uma atividade em coluna de fila caisse em projeto fechado, e o novo
+-- trg_sincronizar_estagio dispararia por baixo. Religado apos.
+SET session_replication_role = replica;
+
 UPDATE public.activities a
    SET estagio = CASE
      WHEN a.workflow_stage_id IS NOT NULL
@@ -125,6 +131,9 @@ UPDATE public.activities a
       AND public.eh_coluna_de_fila(a.workflow_stage_id) THEN 'backlog'
      ELSE 'quadro'
    END::public.activity_estagio);
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- Verificacao -- o espelho tem de bater com a coluna em 100% dos casos

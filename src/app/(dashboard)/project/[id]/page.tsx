@@ -53,6 +53,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { rotaDaAtividade } from "@/lib/telaDaAtividade";
 import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
@@ -333,39 +334,23 @@ export default function ProjectDetailsPage() {
     [currentUser?.id, currentUser?.email, profile?.email, profile?.full_name, profile?.id],
   );
 
-  // Helper que abre o EditActivityDialog respeitando bloqueios escopados
+  // Abre a atividade na TELA ÚNICA (rota própria), aposentando o EditActivityDialog.
+  //
+  // A tela única faz visualização + edição no lugar e enforce a própria permissão
+  // (capacidadesDaTela: campo sem permissão vira texto). Por isso NÃO barramos
+  // aqui quem só visualiza — o diálogo antigo barrava porque era só-edição, e
+  // barrar a navegação esconderia a atividade de quem tem direito de vê-la
+  // (concluído, bloqueado e sem-permissão-de-edição são leitura, não ausência).
+  // Guard que sobra: linha sintética de fase não é atividade e não tem rota — o
+  // Cronograma roteia a fase para o editor certo.
   const openEditActivity = useCallback((
     activity: any,
-    initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
+    _initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
   ) => {
-    // Linha sintética de fase nunca é atividade. Além de abrir um painel que
-    // não corresponde a nada ("Criada em Invalid Date") e salvar sem gravar,
-    // ela DERROTAVA os dois guards abaixo: `phase_id` é nulo na montagem,
-    // então uma fase sob solicitação de mudança não era bloqueada, e
-    // `canMutateActivity` caía num `assigned_to` inexistente. O Cronograma já
-    // roteia a fase para o editor certo; isto é a rede embaixo.
     if (isSyntheticPhaseRow(activity)) return;
-    if (isProjectConcluded) {
-      showProjectLockedToast("editar atividades");
-      return;
-    }
-    if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
-      toast.error("Atividade bloqueada: só pode ser editada após aprovação da solicitação de mudança.");
-      return;
-    }
-    if (activity && !canMutateActivity(activity as Activity)) {
-      // A mensagem nomeia a regra REAL e a saída. As quatro diziam "somente o
-      // criador ou responsável", que além de incompleto (a equipe também pode)
-      // não dizia a quem pedir.
-      toast.error("Você não pode editar esta atividade", {
-        description: "Só a equipe do projeto e quem responde pela atividade podem. Peça ao gestor do projeto para incluir você na equipe.",
-      });
-      return;
-    }
-    setEditActivityInitialTab(initialTab);
-    setEditingActivity(activity);
-    setEditActivityDialogOpen(true);
-  }, [canMutateActivity, isActivityBlocked, isProjectConcluded, showProjectLockedToast, toast]);
+    if (!activity?.id || !id) return;
+    router.push(rotaDaAtividade(id, activity.id));
+  }, [id, router]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })

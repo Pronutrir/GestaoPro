@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { podeMutarAtividade } from "@/lib/activityAccess";
 import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -156,6 +157,7 @@ import {
 import { VisoesMenu } from "./kanban/VisoesMenu";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 import { selectInChunks } from "@/lib/chunkedIn";
+import { rotaDaAtividade } from "@/lib/telaDaAtividade";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
 // Valores (DEFAULT_CARD_FIELDS etc.) agora só em kanban/shared — re-exportar
@@ -309,10 +311,16 @@ export const ActivityKanban = ({
   const [blockingActivity, setBlockingActivity] = useState<Activity | null>(null);
   const [blockReason, setBlockReason] = useState("");
   const [blockSaving, setBlockSaving] = useState(false);
-  // Painel de detalhe (Item 2): clique no card abre LEITURA; editar é botão.
-  // Guarda só o id — o objeto vem sempre fresco da lista de atividades.
+  const router = useRouter();
+  // Clique no card abre a TELA ÚNICA (rota própria: link, F5, voltar do
+  // navegador), aposentando o painel de detalhe — que fica dormente (nunca
+  // recebe id). `detailId` permanece só para o painel não quebrar enquanto o
+  // JSX morto não é removido.
   const [detailId, setDetailId] = useState<string | null>(null);
-  const openDetail = useCallback((a: Activity) => setDetailId(a.id), []);
+  const openDetail = useCallback(
+    (a: Activity) => router.push(rotaDaAtividade(projectId, a.id)),
+    [router, projectId],
+  );
   const [createStoryTitle, setCreateStoryTitle] = useState("");
   const [createStoryNarrative, setCreateStoryNarrative] = useState("");
   const [createStoryLoading, setCreateStoryLoading] = useState(false);
@@ -1196,13 +1204,22 @@ export const ActivityKanban = ({
     // Fetch task dependencies for badge counters
     const ids = activities.map((a) => a.id);
     if (ids.length > 0) {
-      supabase
-        .from("task_dependencies")
-        .select("predecessor_id, successor_id")
-        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
-        .then(({ data }) => {
+      // Em lotes de 50: com muitas atividades a lista de ids na URL estoura o
+      // limite do proxy e volta 502 (ver lib/chunkedIn) — era o único fetch
+      // deste efeito que faltava lotear. O chunking pode repetir uma dependência
+      // que casa em dois lotes (predecessora num, sucessora noutro), então
+      // DEDUPLICA por id antes de contar.
+      selectInChunks<{ id: string; predecessor_id: string; successor_id: string }>(ids, (batch) =>
+        supabase
+          .from("task_dependencies")
+          .select("id, predecessor_id, successor_id")
+          .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
+      )
+        .then((linhas) => {
+          const vistos = new Set<string>();
+          const data = linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
           const map = new Map<string, { pred: number; succ: number }>();
-          (data || []).forEach((d) => {
+          data.forEach((d) => {
             const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
             p.pred += 1;
             map.set(d.successor_id, p);
@@ -1217,7 +1234,7 @@ export const ActivityKanban = ({
           // e um travado esperando outro pareciam idênticos no quadro.
           const statusById = new Map(activities.map((a) => [a.id, a.status]));
           const waiting = new Map<string, number>();
-          (data || []).forEach((d) => {
+          data.forEach((d) => {
             const predStatus = statusById.get(d.predecessor_id);
             // Só conta predecessora que existe neste projeto e não terminou.
             if (predStatus !== undefined && predStatus !== "completed") {
@@ -1225,6 +1242,10 @@ export const ActivityKanban = ({
             }
           });
           setWaitingOnCounts(waiting);
+        })
+        .catch((err) => {
+          console.error("task_dependencies (quadro):", err);
+          toast({ title: "Dependências não carregaram", description: "As setas e travas do quadro podem faltar. Recarregue a página.", variant: "destructive" });
         });
       // Contagem de comentários e anexos por atividade: os dois sinais mais
       // universais de card no mercado ("tem discussão aqui", "tem arquivo").

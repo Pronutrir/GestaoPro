@@ -351,6 +351,11 @@ CREATE TRIGGER trg_tabela_para_assigned_to
 -- Sem isto, as linhas que envelheceram desde o backfill continuam erradas: o
 -- trigger so pega escrita NOVA.
 -- ───────────────────────────────────────────────────────────────────────────
+-- Guard: os INSERT abaixo disparam tg_tabela_para_assigned_to, que faz UPDATE
+-- de volta em activities. Em atividade de projeto concluido isso abortaria; e
+-- reescrever activities a partir do que veio dela e redundante. Religado apos.
+SET session_replication_role = replica;
+
 INSERT INTO public.activity_assignees (activity_id, user_id, papel)
 SELECT a.id, public.resolver_profile_do_texto(a.assigned_to), 'responsavel'
   FROM public.activities a
@@ -372,6 +377,9 @@ SELECT DISTINCT a.id, public.resolver_profile_do_texto(nome), 'participante'
  WHERE btrim(COALESCE(nome, '')) <> ''
    AND public.resolver_profile_do_texto(nome) IS NOT NULL
 ON CONFLICT (activity_id, user_id) DO NOTHING;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 5) Verificacao -- falha alto se a sincronia nao ficou de pe

@@ -88,6 +88,11 @@ $$;
 -- da 20260824120000, que o script executa em seguida), o UPDATE so encontra
 -- destino nos projetos que ja a tem -- e e por isso que o script roda as duas
 -- na ordem certa.
+--
+-- Guard: o UPDATE muta activities. Trigger de projeto concluido + rollup da
+-- leva 8 (UPDATE de workflow_stage_id). Religado apos.
+SET session_replication_role = replica;
+
 WITH fila AS (
   SELECT DISTINCT ON (project_id) project_id, id
     FROM public.workflow_stages
@@ -104,6 +109,9 @@ UPDATE public.activities a
    AND a.status = 'pending'
    AND a.wbs_code ~ '^[0-9]+(\.[0-9]+)*$';
 
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
+
 NOTIFY pgrst, 'reload schema';
 
 -- Verificacao: a funcao precisa produzir a fila, e so uma entrada.
@@ -111,7 +119,7 @@ DO $$
 DECLARE
   def text;
 BEGIN
-  SELECT pg_get_functiondef(oid) INTO def
+  SELECT pg_get_functiondef(p.oid) INTO def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'create_default_workflow_stages';
 

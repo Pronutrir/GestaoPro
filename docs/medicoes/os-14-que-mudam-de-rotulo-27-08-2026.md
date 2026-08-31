@@ -91,3 +91,46 @@ defeito fatal do modelo anterior.
 
 **Método:** `activities` inteira (8199 linhas), `resolveEapKind`
 compilado de `src/lib/eapModel.ts` e chamado de verdade. Só `SELECT`.
+
+---
+
+## Adendo 27/08 — o `'projeto'` (nível 1) e os 5 que trocam de CAMPO, não de rótulo
+
+A decisão sobre o `'projeto'` (14 itens de nível 1, wbs de um dígito) foi:
+**com filhas → `fase`; sem filhas → `atividade`.** Sem alargar a CHECK, sem
+mudar modelo. Isso porque `eapToPersisted('projeto')` cai em `atividade` pelo
+fallthrough, e um nível-1 **com filhas** gravado como `atividade` seria recusado
+pelo trigger de aninhamento (pai tem de ser `fase`/`pacote`).
+
+Medido direto na tabela:
+
+- **5 com filhas** — todos `Projeto Escritório de Processos` (FASE 1..4 +
+  GERENCIAMENTO DO PROJETO), `item_type='fase'` → congelam em **`fase`**.
+  **Nenhum muda.**
+- **9 sem filhas** — congelam em **`atividade`**. Destes:
+  - 4 já eram `atividade` (`f5945dba`, `04570694` vivos; `672f6eef`, `0b0f6f65`
+    na lixeira) — nada muda.
+  - **5 eram `fase` e passam a `atividade`** — TODOS na lixeira:
+
+    | id | projeto | título | item_type antes→depois | rótulo antes→depois |
+    |---|---|---|---|---|
+    | `70d9453b` | Revitalização Tasy | Cadastros e Funções Essenciais | fase → **atividade** | projeto → projeto |
+    | `22e95b23` | Revitalização Tasy | ETAPA I - Teste Piloto / Liberação | fase → **atividade** | projeto → projeto |
+    | `75e5bd24` | Revitalização Tasy | Planejamento e Lançamento | fase → **atividade** | projeto → projeto |
+    | `a10ea71d` | Ambiente de Homologação (Teste) | teste | fase → **atividade** | projeto → projeto |
+    | `3945ac17` | Revitalização Tasy | Validações / Testes / Ajustes | fase → **atividade** | projeto → projeto |
+
+### A correção da frase "nenhum outro muda de rótulo"
+
+Ela continua **verdadeira para o RÓTULO**: `resolveEapKind` (`eapModel.ts:314`)
+devolve `'projeto'` para todo nível-1 lendo o **nível**, não o `item_type` —
+então os 5 acima seguem exibindo `projeto` dos dois lados. Nenhum usuário vê
+diferença.
+
+O que a frase NÃO cobria é o **campo gravado**: 5 itens (todos na lixeira)
+trocam `item_type` de `fase` para `atividade` (agrupador → trabalho no
+armazenamento). É mudança real de dado, mesmo sem mudança de tela. A
+consequência prática está em `20260827130000`/condição 3: um nível-1
+`atividade` na raiz é aceito como folha, mas para **receber filha** teria de ser
+promovido a `fase` — os 5 estão na lixeira, então isso só importa se um deles
+for restaurado e ganhar subitem.

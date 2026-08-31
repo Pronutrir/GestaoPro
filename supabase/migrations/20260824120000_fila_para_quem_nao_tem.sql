@@ -49,6 +49,12 @@ SELECT p.id, 'Backlog', 'hsl(220, 15%, 50%)', -1, false, true,
 -- Atividade sem coluna nenhuma: com a fila criada acima, ela passa a ter
 -- lugar. So mexe em quem esta com NULL -- quem ja tem coluna ficou onde
 -- alguem o colocou.
+--
+-- Guard: o UPDATE muta activities. Sem ele o trigger de projeto concluido
+-- abortaria se um orfao caisse em projeto fechado, e o rollup da leva 8
+-- dispararia por baixo. Religado logo apos.
+SET session_replication_role = replica;
+
 UPDATE public.activities a
    SET workflow_stage_id = s.id
   FROM public.workflow_stages s
@@ -56,5 +62,7 @@ UPDATE public.activities a
    AND a.is_trashed = false
    AND s.project_id = a.project_id
    AND lower(coalesce(s.categoria::text, '')) = 'backlog';
+
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';

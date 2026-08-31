@@ -9,6 +9,8 @@ import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { useToast } from "@/hooks/use-toast";
+import { selectInChunks } from "@/lib/chunkedIn";
 
 interface Phase {
   id: string; title: string; description: string | null; display_order: number; project_id: string;
@@ -28,16 +30,28 @@ interface TimelineViewProps {
 
 export const TimelineView = ({ phases, activities, projectDueDate, onActivityClick }: TimelineViewProps) => {
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const { toast } = useToast();
   const assigneeAvatarMap = useAssigneeAvatarLookup(activities.map((activity) => activity.assigned_to));
   const scheduledActivities = activities.filter(a => a.start_date || a.end_date);
 
   useEffect(() => {
     const actIds = activities.map(a => a.id);
     if (actIds.length === 0) return;
-    supabase.from("task_dependencies").select("*")
-      .or(`predecessor_id.in.(${actIds.join(",")}),successor_id.in.(${actIds.join(",")})`)
-      .then(({ data }) => setDependencies(data || []));
-  }, [activities]);
+    // Em lotes de 50 — a lista de ids na URL estoura o limite do proxy (502) em
+    // projeto grande. Dedup por id: uma dependência pode casar em dois lotes.
+    selectInChunks<Dependency & { id: string }>(actIds, (batch) =>
+      supabase.from("task_dependencies").select("*")
+        .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
+    )
+      .then((linhas) => {
+        const vistos = new Set<string>();
+        setDependencies(linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true))));
+      })
+      .catch((err) => {
+        console.error("task_dependencies (timeline):", err);
+        toast({ title: "Dependências não carregaram", description: "A linha do tempo pode não mostrar os vínculos. Recarregue a página.", variant: "destructive" });
+      });
+  }, [activities, toast]);
 
   const { minDate, maxDate, totalDays } = useMemo(() => {
     const dates: Date[] = [startOfDay(new Date())];

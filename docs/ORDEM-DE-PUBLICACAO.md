@@ -8,6 +8,23 @@
 
 ---
 
+## 🔒 PASSO OBRIGATÓRIO — toda migration nova roda no CLONE antes de qualquer publicação
+
+Antes de publicar qualquer coisa que dependa de uma migration nova, a migration
+é aplicada **duas vezes** num CLONE de produção (dump `--schema=public` restaurado
+em `migtest_db`), com `-v ON_ERROR_STOP=1`. Nenhum teste de código substitui isso:
+
+- as 7+ suítes de verificação e o `tsc` **nunca aplicam migration** — não veem
+  trigger de projeto concluído, violação de CHECK, bug de cast de enum, nem drift
+  de policy. Tudo isso já apareceu **só** contra o Postgres real;
+- caso concreto (27/08): o clone pegou que `20260827130000_congelar_item_type`
+  gravava vocabulário de EXIBIÇÃO (`EapKind`) na coluna de ARMAZENAMENTO
+  (`item_type`), violando a CHECK — o que 7 suítes verdes e o `tsc` não pegaram.
+
+Regra: **migration nova → clone-teste (2 passadas) → só então publicar.**
+
+---
+
 ## ⚠ O PAR ACOPLADO — leia antes de qualquer coisa
 
 **A entrega 3 tem uma migration que precisa ser aplicada ANTES ou JUNTO com o

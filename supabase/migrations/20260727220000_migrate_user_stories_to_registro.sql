@@ -46,7 +46,12 @@ WHERE us.activity_id IS NOT NULL
     SELECT 1 FROM public.activity_comments ac
     WHERE ac.activity_id = us.activity_id
       AND ac.author = 'História (migrada)'
-      AND ac.content LIKE '**' || coalesce(nullif(btrim(us.title), ''), 'História') || '**%'
+      -- Comparacao exata de prefixo em vez de LIKE: titulos com % ou _
+      -- (ex.: "Aumentar conversao em 20%") sao curingas nao escapados e
+      -- fariam a checagem de idempotencia casar com o registro errado.
+      AND left(ac.content,
+               length('**' || coalesce(nullif(btrim(us.title), ''), 'História') || '**'))
+          = '**' || coalesce(nullif(btrim(us.title), ''), 'História') || '**'
   );
 
 -- Arquiva (soft-delete) as histórias que foram migradas — recuperáveis, não apagadas.

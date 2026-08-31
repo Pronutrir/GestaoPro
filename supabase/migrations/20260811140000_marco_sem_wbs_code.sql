@@ -26,6 +26,12 @@
 ALTER TABLE public.activities
   ADD COLUMN IF NOT EXISTS wbs_code_prev_marco text;
 
+-- Guard defensivo: os UPDATE abaixo disparariam
+-- trg_prevent_activity_mutation_on_concluded_project (20260526150000) se um
+-- marco com codigo caisse em projeto concluido. Hoje nenhum cai (13 marcos com
+-- codigo, 0 em concluido), mas o dado muda. Reativado apos os UPDATE.
+SET session_replication_role = replica;
+
 UPDATE public.activities
    SET wbs_code_prev_marco = wbs_code
  WHERE is_milestone = true
@@ -36,6 +42,9 @@ UPDATE public.activities
    SET wbs_code = NULL
  WHERE is_milestone = true
    AND wbs_code IS NOT NULL;
+
+-- Religa os triggers de negócio antes de criar/validar a constraint.
+SET session_replication_role = origin;
 
 -- Trava a regra no banco, não só na aplicação. A UI já não grava código em
 -- marco, mas import antigo, script solto ou uma tela futura poderiam — e o

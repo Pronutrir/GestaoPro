@@ -167,8 +167,50 @@ BEGIN
   END LOOP;
 END $fumaca$;
 
+-- ── CONDICAO 3 (27/08): nivel-1 ATIVIDADE na RAIZ pode receber filha? ────────
+-- O congelamento gera 'atividade' de nivel 1 com parent null -- "trabalho na
+-- raiz", que o desenho nao preve para item novo mas existe no dado legado (os 9
+-- de nivel-1 sem filha viram atividade). Com eap_is_group = NOT is_milestone, o
+-- banco tem de ACEITAR a insercao de filha sob ela. Projeto NAO concluido de
+-- proposito: la o trigger de concluido recusaria antes do de aninhamento, e o
+-- que se quer medir aqui e SO o aninhamento.
+DO $c3$
+DECLARE
+  v_raiz uuid;
+  v_proj uuid;
+  v_erro text;
+BEGIN
+  SELECT a.id, a.project_id INTO v_raiz, v_proj
+    FROM public.activities a
+    JOIN public.projects p ON p.id = a.project_id
+   WHERE a.item_type = 'atividade' AND a.is_milestone = false
+     AND a.parent_id IS NULL AND a.wbs_code ~ '^[0-9]+$'
+     AND a.is_trashed = false AND p.status IS DISTINCT FROM 'concluido'
+   LIMIT 1;
+
+  IF v_raiz IS NULL THEN
+    INSERT INTO _fumaca VALUES ('nivel-1 raiz', NULL, 'receber filha', NULL,
+      'nenhuma atividade nivel-1 na raiz de projeto vivo — testar com um sintetico');
+    -- Sintetico: cria a raiz, tenta a filha, e o bloco inteiro sai no ROLLBACK.
+    INSERT INTO public.activities (project_id, title, item_type, is_milestone, wbs_code)
+      SELECT id, '__fumaca_raiz__', 'atividade', false, '9' FROM public.projects
+       WHERE status IS DISTINCT FROM 'concluido' LIMIT 1
+      RETURNING id, project_id INTO v_raiz, v_proj;
+  END IF;
+
+  BEGIN
+    INSERT INTO public.activities (project_id, title, item_type, is_milestone, parent_id)
+      VALUES (v_proj, '__fumaca_filha__', 'atividade', false, v_raiz);
+    INSERT INTO _fumaca VALUES ('nivel-1 raiz', v_raiz, 'receber filha', true, NULL);
+    DELETE FROM public.activities WHERE title = '__fumaca_filha__' AND parent_id = v_raiz;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_erro = MESSAGE_TEXT;
+    INSERT INTO _fumaca VALUES ('nivel-1 raiz', v_raiz, 'receber filha', false, v_erro);
+  END;
+END $c3$;
+
 -- ── QUEM TEM FILHAS, para ler o relatorio ───────────────────────────────────
-SELECT '--- as cobaias ---' AS "";
+SELECT '--- as cobaias ---' AS " ";
 SELECT rpad(f.tipo, 18)                                        AS "tipo",
        CASE WHEN EXISTS (SELECT 1 FROM public.activities c
                           WHERE c.parent_id = f.amostra)
@@ -179,7 +221,7 @@ SELECT rpad(f.tipo, 18)                                        AS "tipo",
  ORDER BY f.tipo;
 
 -- ── O RELATORIO ─────────────────────────────────────────────────────────────
-SELECT '--- o que o banco fez ---' AS "";
+SELECT '--- o que o banco fez ---' AS " ";
 SELECT rpad(tipo, 18)                            AS "tipo",
        rpad(operacao, 26)                        AS "operacao",
        CASE WHEN aceitou IS NULL THEN '  -    '

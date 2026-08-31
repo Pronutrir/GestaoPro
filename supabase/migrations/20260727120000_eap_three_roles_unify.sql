@@ -27,12 +27,21 @@ ALTER TABLE public.activities
   DROP CONSTRAINT IF EXISTS activities_item_type_check;
 ALTER TABLE public.activities
   ADD CONSTRAINT activities_item_type_check
-  CHECK (item_type IN ('fase', 'pacote', 'atividade', 'tarefa', 'subtarefa', 'historia_usuario'));
+  -- Mantem fechado nos 4 valores normalizados por 20260722130000/20260722150000.
+  -- Reabrir 'tarefa'/'subtarefa' deixaria a UI regravar tipos que eap_is_group
+  -- trata como folha, desfazendo a normalizacao em silencio.
+  CHECK (item_type IN ('fase', 'pacote', 'atividade', 'historia_usuario'));
 
 -- 2) Backup do tipo anterior (só cria a coluna se ainda não existir — preserva o
 --    valor original mesmo que a migração rode mais de uma vez).
 ALTER TABLE public.activities
   ADD COLUMN IF NOT EXISTS item_type_prev_eap_unify text;
+
+-- Os backfills abaixo tocam atividades de projetos ja concluidos, e o trigger
+-- trg_prevent_activity_mutation_on_concluded_project (20260526150000) aborta
+-- qualquer UPDATE nessas linhas. Como isto e correcao de esquema, e nao edicao
+-- de usuario, desligamos os triggers pela duracao do backfill.
+SET session_replication_role = replica;
 
 UPDATE public.activities
 SET item_type_prev_eap_unify = item_type
@@ -56,6 +65,9 @@ SET item_type = CASE
   ELSE 'atividade'
 END
 WHERE a.item_type <> 'historia_usuario';
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ---------------------------------------------------------------------------
 -- ROLLBACK (executar manualmente se necessário — restaura o tipo anterior):

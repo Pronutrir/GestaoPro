@@ -32,6 +32,14 @@ ALTER TABLE public.workflow_stages
 -- 'andamento' e o quadro exibiria quase tudo como em curso. É um backfill
 -- único sobre dados legados — o defeito que originou tudo isto era o rename
 -- RECORRENTE reescrever a semântica, e isso não acontece aqui.
+-- is_exception vem de 20260508024956, que nao foi aplicada em todos os
+-- ambientes (o banco de producao nao tem a coluna nem a versao registrada).
+-- Cria-la aqui, de forma aditiva e idempotente, alinha o banco ao que o app
+-- ja espera (src/lib/activityProgress.ts, WorkflowStageManager) e evita que o
+-- backfill abaixo aborte a migration no meio com "column does not exist".
+ALTER TABLE public.workflow_stages
+  ADD COLUMN IF NOT EXISTS is_exception boolean NOT NULL DEFAULT false;
+
 UPDATE public.workflow_stages
 SET categoria = CASE
   WHEN is_final THEN 'concluida'::public.workflow_category
@@ -57,17 +65,9 @@ WHERE categoria IS NULL;
 ALTER TABLE public.workflow_stages
   ALTER COLUMN categoria SET DEFAULT 'andamento'::public.workflow_category;
 
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM public.workflow_stages WHERE categoria IS NULL) THEN
-    RAISE EXCEPTION 'Backfill incompleto: ha workflow_stages com categoria nula.';
-  END IF;
-  ALTER TABLE public.workflow_stages ALTER COLUMN categoria SET NOT NULL;
-EXCEPTION
-  WHEN others THEN
-    -- Já era NOT NULL numa aplicação anterior: segue em frente.
-    NULL;
-END $$;
+-- SET NOT NULL ja e no-op quando a coluna ja e NOT NULL, entao nao precisa de
+-- guarda. Falhar aqui e o comportamento correto: significa backfill incompleto.
+ALTER TABLE public.workflow_stages ALTER COLUMN categoria SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS workflow_stages_categoria_idx
   ON public.workflow_stages (project_id, categoria);
@@ -75,6 +75,25 @@ CREATE INDEX IF NOT EXISTS workflow_stages_categoria_idx
 -- 5) Uma única coluna de conclusão por projeto ---------------------------
 -- Torna "% concluído" e "data de conclusão" inequívocos (regra que o
 -- Azure DevOps aplica ao seu state category 'Completed').
+-- Desempate obrigatorio antes do indice: is_final nunca teve unicidade, entao
+-- projetos com duas colunas finais ("Concluida" + "Entregue") sao comuns e
+-- fariam o CREATE UNIQUE INDEX abortar a migration no meio. Mantem a coluna
+-- mais a direita (maior display_order) como a de conclusao; as demais viram
+-- 'andamento' e podem ser reclassificadas na tela de colunas.
+WITH ranked AS (
+  SELECT id,
+         row_number() OVER (
+           PARTITION BY project_id
+           ORDER BY display_order DESC, created_at DESC, id DESC
+         ) AS rn
+  FROM public.workflow_stages
+  WHERE categoria = 'concluida'
+)
+UPDATE public.workflow_stages s
+   SET categoria = 'andamento'::public.workflow_category
+  FROM ranked r
+ WHERE r.id = s.id AND r.rn > 1;
+
 CREATE UNIQUE INDEX IF NOT EXISTS workflow_stages_one_final_per_project
   ON public.workflow_stages (project_id)
   WHERE categoria = 'concluida';

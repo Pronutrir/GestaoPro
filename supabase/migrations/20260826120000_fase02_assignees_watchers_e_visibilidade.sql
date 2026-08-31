@@ -96,6 +96,15 @@ SELECT DISTINCT ON (a.id) a.id, pr.id, 'responsavel', a.created_by
  WHERE a.assigned_to IS NOT NULL
    AND trim(a.assigned_to) <> ''
    AND a.is_trashed = false
+   -- Idempotencia: nao insere responsavel se a atividade ja tem um. Sem isto,
+   -- como DISTINCT ON e nao-deterministico, um 2o run poderia escolher outro
+   -- perfil para a mesma atividade e violar activity_assignees_um_responsavel
+   -- (que o ON CONFLICT por (activity_id,user_id) nao cobre).
+   AND NOT EXISTS (
+     SELECT 1 FROM public.activity_assignees aa
+      WHERE aa.activity_id = a.id AND aa.papel = 'responsavel'
+   )
+ ORDER BY a.id, pr.id
 ON CONFLICT (activity_id, user_id) DO NOTHING;
 
 INSERT INTO public.activity_assignees (activity_id, user_id, papel, created_by)
@@ -106,6 +115,14 @@ SELECT DISTINCT a.id, pr.id, 'participante', a.created_by
     ON (pr.full_name IS NOT NULL AND lower(trim(p.nome)) = lower(trim(pr.full_name)))
     OR lower(trim(p.nome)) = lower(trim(pr.id::text))
  WHERE a.is_trashed = false
+   -- Idempotencia: pula quem ja e assignee desta atividade. Sem isto, num 2o
+   -- run o BEFORE INSERT do trigger de equipe (criado apos este backfill)
+   -- dispara para linhas que o ON CONFLICT so descartaria depois, e rejeita
+   -- os participantes grandfathered que nao estao formalmente na equipe.
+   AND NOT EXISTS (
+     SELECT 1 FROM public.activity_assignees aa
+      WHERE aa.activity_id = a.id AND aa.user_id = pr.id
+   )
 ON CONFLICT (activity_id, user_id) DO NOTHING;
 
 -- ───────────────────────────────────────────────────────────────────────────
@@ -309,6 +326,17 @@ AS
 
 COMMENT ON VIEW public.activity_dependency_card IS
   'Cartao reduzido da dependencia que bloqueia, mesmo sendo irma invisivel. Excecao deliberada: quem esta bloqueado precisa saber O QUE e SE ja terminou -- e nada alem disso.';
+
+-- As duas views sao security_invoker=false: rodam com os privilegios do dono e
+-- BYPASSAM a RLS de activities. Sem restricao de privilegio, o papel `anon`
+-- (chave publica embarcada no bundle) leria codigo/nome/tipo/status de TODAS as
+-- atividades vivas, cross-projeto. Restringe a authenticated.
+REVOKE ALL ON public.activity_breadcrumb FROM PUBLIC;
+REVOKE ALL ON public.activity_breadcrumb FROM anon;
+REVOKE ALL ON public.activity_dependency_card FROM PUBLIC;
+REVOKE ALL ON public.activity_dependency_card FROM anon;
+GRANT SELECT ON public.activity_breadcrumb TO authenticated;
+GRANT SELECT ON public.activity_dependency_card TO authenticated;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 8) RLS das tabelas novas

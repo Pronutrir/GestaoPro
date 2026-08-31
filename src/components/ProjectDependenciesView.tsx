@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link2, ArrowRight, Search, X, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { selectInChunks } from "@/lib/chunkedIn";
 
 interface Props {
   projectId: string;
@@ -50,11 +51,22 @@ export const ProjectDependenciesView = ({ projectId, onEditActivity }: Props) =>
       return;
     }
     const ids = list.map((a) => a.id);
-    const { data: depData } = await supabase
-      .from("task_dependencies")
-      .select("id, predecessor_id, successor_id, dependency_type")
-      .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`);
-    setDeps((depData || []) as DepRow[]);
+    try {
+      // Em lotes de 50 — a lista de ids na URL estoura o limite do proxy (502)
+      // em projeto grande. Dedup por id: uma dependência pode casar em dois lotes.
+      const linhas = await selectInChunks<DepRow>(ids, (batch) =>
+        supabase
+          .from("task_dependencies")
+          .select("id, predecessor_id, successor_id, dependency_type")
+          .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
+      );
+      const vistos = new Set<string>();
+      setDeps(linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true))));
+    } catch (err) {
+      console.error("task_dependencies (deps view):", err);
+      toast({ title: "Dependências não carregaram", description: "Recarregue a página.", variant: "destructive" });
+      setDeps([]);
+    }
     setLoading(false);
   };
 

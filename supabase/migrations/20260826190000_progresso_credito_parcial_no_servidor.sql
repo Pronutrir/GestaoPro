@@ -84,7 +84,7 @@ BEGIN
   END IF;
 
   -- Categoria explicita, ou a leitura legada das flags.
-  v_categoria := NULLIF(btrim(COALESCE(v_col.categoria, '')), '');
+  v_categoria := NULLIF(btrim(COALESCE(v_col.categoria::text, '')), '');
   IF v_categoria IS NULL THEN
     v_categoria := CASE
       WHEN v_col.is_final THEN 'concluida'
@@ -118,7 +118,7 @@ BEGIN
         FROM public.workflow_stages s
        WHERE s.project_id = v_col.project_id
          AND COALESCE(
-               NULLIF(btrim(COALESCE(s.categoria, '')), ''),
+               NULLIF(btrim(COALESCE(s.categoria::text, '')), ''),
                CASE
                  WHEN s.is_final THEN 'concluida'
                  WHEN s.display_order = 0 THEN 'backlog'
@@ -208,7 +208,7 @@ BEGIN
 
   IF v_a.is_milestone THEN
     SELECT COALESCE(s.is_final, false)
-           OR NULLIF(btrim(COALESCE(s.categoria, '')), '') = 'concluida'
+           OR NULLIF(btrim(COALESCE(s.categoria::text, '')), '') = 'concluida'
       INTO v_final
       FROM public.workflow_stages s WHERE s.id = v_a.workflow_stage_id;
     RETURN CASE WHEN COALESCE(v_final, false) THEN 100 ELSE 0 END;
@@ -312,7 +312,13 @@ COMMENT ON FUNCTION public.derivar_do_pai(uuid) IS
 -- Sem isto os valores antigos (regua binaria) ficam congelados: a trigger so
 -- dispara em escrita nova. De baixo para cima porque o pai le o derivado da
 -- filha -- fazer na ordem errada propaga numero velho.
+--
+-- Guard: derivar_do_pai faz UPDATE em activities. A regua nova muda o
+-- derived_progress de pais em projeto concluido tambem, e o trigger de projeto
+-- concluido abortaria (mesma razao do guard da fase09). Religado apos o loop.
 -- ───────────────────────────────────────────────────────────────────────────
+SET session_replication_role = replica;
+
 DO $$
 DECLARE
   v_id    uuid;
@@ -340,6 +346,9 @@ BEGIN
 
   RAISE NOTICE 'recalculados % pais, de baixo para cima', v_total;
 END $$;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 5) Verificacao

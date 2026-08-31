@@ -33,6 +33,13 @@
 -- Idempotente. Rodar NA VM:
 --   PGPASSWORD=... ./scripts/apply-pacote-e-posicao.sh
 
+-- Guard: o UPDATE muta activities. Sem ele o trigger de projeto concluido
+-- abortaria se um item nivel-3 caisse em projeto fechado; e a troca de
+-- item_type poderia esbarrar nos triggers de integridade da EAP. E backfill de
+-- alinhamento para um estado valido, entao desliga-se os triggers durante ele.
+-- Religado logo apos.
+SET session_replication_role = replica;
+
 UPDATE public.activities
    SET item_type = 'fase'
  WHERE is_trashed = false
@@ -42,6 +49,8 @@ UPDATE public.activities
    -- Numeracao pontuada de EXATAMENTE 3 niveis: "1.2.1" entra, "1.2" e
    -- "1.2.1.1" ficam de fora. `~` com anchors para nao pegar "Anexo A".
    AND wbs_code ~ '^\d+\.\d+\.\d+$';
+
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
 

@@ -12,6 +12,22 @@
 --
 -- Idempotente.
 
+-- 0) Guarda de ordem ----------------------------------------------------
+-- O passo 4 zera workflow_stages.is_blocked contando que a categoria da coluna
+-- ja preserve a semantica. Aplicada fora de ordem (os apply-*.sh sao avulsos),
+-- a informacao de quais colunas eram de bloqueio se perderia sem substituto.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'workflow_stages'
+      AND column_name = 'categoria'
+  ) THEN
+    RAISE EXCEPTION 'Aplique 20260728233000_add_workflow_stage_category.sql antes desta.';
+  END IF;
+END $$;
+
 -- 1) Campos da flag -----------------------------------------------------
 ALTER TABLE public.activities
   ADD COLUMN IF NOT EXISTS is_blocked boolean NOT NULL DEFAULT false,
@@ -23,6 +39,10 @@ CREATE INDEX IF NOT EXISTS activities_is_blocked_idx
 
 -- 2) Migra o bloqueio vigente: quem está numa coluna de bloqueio hoje
 --    passa a carregar a flag, preservando desde quando está travado.
+-- Desliga os triggers de negocio: sem isto o trigger de projeto concluido
+-- (20260526150000) aborta o backfill em atividades de projetos ja fechados.
+SET session_replication_role = replica;
+
 UPDATE public.activities a
 SET
   is_blocked = true,
@@ -32,6 +52,8 @@ FROM public.workflow_stages s
 WHERE a.workflow_stage_id = s.id
   AND COALESCE(s.is_blocked, false)
   AND NOT a.is_blocked;
+
+SET session_replication_role = origin;
 
 -- 3) Trigger agora acompanha a FLAG, não a coluna ------------------------
 CREATE OR REPLACE FUNCTION public.track_activity_blocked_time()

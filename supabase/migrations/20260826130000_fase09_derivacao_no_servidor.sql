@@ -209,6 +209,12 @@ CREATE TRIGGER trg_marco_sem_esforco
   BEFORE INSERT OR UPDATE OF hours, cost, is_milestone ON public.activities
   FOR EACH ROW EXECUTE FUNCTION public.tg_marco_sem_esforco();
 
+-- Guard: os UPDATE abaixo (limpeza de marcos + backfill via derivar_do_pai)
+-- mutam activities em massa. O trigger de projeto concluido abortaria nos pais
+-- com filhas dos 7 projetos concluidos, e os triggers novos (derivar/marco)
+-- dispariam por baixo do backfill. Religado apos o loop.
+SET session_replication_role = replica;
+
 -- Limpa o que ja existe, senao a trigger nova quebra a primeira edicao de
 -- qualquer marco que tenha herdado horas.
 UPDATE public.activities
@@ -246,6 +252,9 @@ BEGIN
     PERFORM public.derivar_do_pai(r.id);
   END LOOP;
 END $$;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- Verificacao
