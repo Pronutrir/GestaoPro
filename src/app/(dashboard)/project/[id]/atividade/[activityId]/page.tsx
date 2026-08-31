@@ -28,6 +28,7 @@ import {
 } from "@/lib/telaDaAtividadeDados";
 import { capacidadesNaAtividade } from "@/lib/activityAccess";
 import { resolveEapKind, eapToPersisted, EAP_LABELS, type EapKind } from "@/lib/eapModel";
+import { mensagemDeErro } from "@/lib/erroDoBanco";
 import { gutScore } from "@/lib/gutPriority";
 
 // activity_assignees é da fase 02 e não está nos tipos gerados do Supabase —
@@ -386,11 +387,67 @@ export default function PaginaDaAtividade() {
       activity_id: activityId, user_id: userId, papel, created_by: user?.id ?? null,
     } as never);
 
+    /**
+     * QUAL "NÃO" O BANCO DEU — porque nem todo não vira o mesmo caminho.
+     *
+     * ========================================================================
+     * O RELATO (31/08/2026): o responsável pela entrega escolhe alguém e recebe
+     * "sem permissão para incluir na equipe deste projeto". A frase é da RPC
+     * `incluir_e_atribuir`, que exige `can_manage` — e ele não gerencia equipe.
+     *
+     * Só que ele NÃO pediu para incluir ninguém na equipe. A tela é que caía na
+     * RPC toda vez que o insert direto falhava, qualquer que fosse o motivo.
+     *
+     * As duas causas são bem diferentes, e só uma justifica a RPC:
+     *
+     *   trigger trg_assignee_exige_equipe  a pessoa está FORA da equipe.
+     *                                      Aí sim: incluir + atribuir juntos é
+     *                                      exatamente o que a RPC faz.
+     *
+     *   policy "Assignees write"           quem ATRIBUI é que não pode mexer
+     *                                      nesta atividade. A RPC não conserta
+     *                                      isso — ela vai recusar também, e por
+     *                                      um motivo que não tem nada a ver.
+     *
+     * No segundo caso a RPC troca um "você não pode editar esta atividade" por
+     * um "você não pode gerenciar a equipe". A pessoa lê a segunda frase, vai
+     * pedir permissão de equipe, e recebe algo que não resolve o problema dela.
+     *
+     * O gatilho tem mensagem própria — "nao esta na equipe do projeto" — e é
+     * por ela que os dois casos se separam.
+     * ========================================================================
+     */
+    const foraDaEquipe = /n[ãa]o est[áa] na equipe do projeto/i.test(eDireto?.message ?? "");
+
+    if (eDireto && !foraDaEquipe) {
+      // Recusa da policy: o problema é de quem atribui, não de quem é
+      // atribuído. Chamar a RPC aqui só produziria a frase errada.
+      toast({
+        title: "Não deu para atribuir",
+        description: mensagemDeErro(eDireto),
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (eDireto) {
       const { error: eRpc } = await supabase.rpc("incluir_e_atribuir" as never, {
         p_activity_id: activityId, p_user_id: userId,
       } as never);
-      if (eRpc) { toast({ title: "Não deu para atribuir", description: eRpc.message, variant: "destructive" }); return; }
+      if (eRpc) {
+        // A RPC recusou de verdade: a pessoa está fora da equipe E quem atribui
+        // não gerencia equipe. Aí a frase de equipe é a correta — mas precisa
+        // dizer o que fazer, não só o que faltou.
+        const semGerencia = /sem permissao para incluir na equipe/i.test(eRpc.message ?? "");
+        toast({
+          title: semGerencia ? "Essa pessoa não está na equipe do projeto" : "Não deu para atribuir",
+          description: semGerencia
+            ? "Só quem gerencia a equipe pode incluir alguém novo. Peça ao gestor do projeto para adicioná-la — depois você consegue atribuir."
+            : mensagemDeErro(eRpc),
+          variant: "destructive",
+        });
+        return;
+      }
       if (papel === "responsavel") {
         const { error: eP } = await tabelaSemTipo("activity_assignees")
           .update({ papel: "responsavel" } as never).eq("activity_id", activityId).eq("user_id", userId);
