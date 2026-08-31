@@ -3703,6 +3703,22 @@ export function ProjectCronogramaPanel({
     <div className="space-y-4">
       {Toolbar}
 
+      {/* CARGA INTEIRA FALHOU — a faixa do Raphael (mensagem + tentar de novo),
+          restaurada no merge. Complementa o depsErro abaixo: aqui é quando NEM as
+          atividades carregam; ali é quando só as dependências faltam. */}
+      {erroAoCarregar && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12px]">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-destructive">
+            <AlertCircle className="h-3.5 w-3.5" /> O cronograma não pôde ser carregado
+          </span>
+          <span className="text-foreground/80">{erroAoCarregar}</span>
+          <button type="button" onClick={() => { void fetchData(); }}
+            className="ml-auto rounded-md border border-destructive/40 px-2 py-0.5 font-medium text-destructive hover:bg-destructive/10">
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
       {/* DEPENDÊNCIAS NÃO CARREGARAM — degrada, não some. As atividades e datas
           seguem na tela; faltam só as setas e a folga do CPM. Antes isto apagava
           o cronograma inteiro em silêncio. */}
