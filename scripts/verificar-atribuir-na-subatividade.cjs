@@ -67,6 +67,15 @@ check("mover a subatividade de coluna também confere o que o banco fez",
   && /if \(eCol \|\| !nCol\)/.test(dialog),
   "era o mesmo silêncio, uma coluna ao lado");
 
+// E O SALVAR PRINCIPAL. Ele grava na atividade ABERTA — onde quem abriu
+// costuma ter permissão —, então o silêncio ainda não tinha aparecido ali. Mas
+// é o mesmo defeito esperando o caso em que a permissão não alcança: o diálogo
+// fecharia anunciando um salvamento que o banco não fez.
+check("o Salvar da atividade também confere quantas linhas mudaram",
+  /\.update\(compatPayload as any, \{ count: "exact" \}\)/.test(dialog)
+  && /if \(linhas === 0\)/.test(dialog),
+  "error sozinho não vê a recusa da RLS — ela devolve sucesso com zero linhas");
+
 /* ── O BANCO: a quinta via existe, e é estreita ──────────────────────────── */
 const MIG = "supabase/migrations/20260831120000_responsavel_do_pai_atribui_na_filha.sql";
 check("existe a migration da via do pai", fs.existsSync(path.join(raiz, MIG)));

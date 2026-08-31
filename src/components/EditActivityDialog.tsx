@@ -1374,14 +1374,27 @@ export const EditActivityDialog = ({
       const droppedColumns: string[] = [];
       let downgradedItemType = false;
       let error: any = null;
+      /**
+       * Quantas linhas o UPDATE tocou. `null` para o INSERT do rascunho, que
+       * não responde essa pergunta e nem precisa: insert recusado é erro de
+       * verdade.
+       *
+       * Existe porque `error` sozinho não vê a recusa da RLS — ela devolve
+       * sucesso com zero linhas. Aqui o silêncio ainda não apareceu porque o
+       * salvar grava na atividade ABERTA, onde quem abriu costuma ter
+       * permissão; mas é o mesmo defeito das subatividades, esperando o caso
+       * em que a permissão não alcança.
+       */
+      let linhas: number | null = null;
       for (let i = 0; i < 8; i += 1) {
         const result = ehRascunho
           ? await supabase.from("activities").insert(compatPayload as any)
           : await supabase
               .from("activities")
-              .update(compatPayload as any)
+              .update(compatPayload as any, { count: "exact" })
               .eq("id", act.id);
         error = result.error;
+        linhas = ehRascunho ? null : ((result as { count?: number | null }).count ?? null);
         if (!error) break;
 
         const errorText = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
@@ -1416,6 +1429,14 @@ export const EditActivityDialog = ({
       }
 
       if (error) throw error;
+      // Zero linhas não é erro para o PostgREST — é o que a RLS devolve quando
+      // recusa. Sem isto, o diálogo fecharia anunciando um salvamento que o
+      // banco não fez, e o valor voltaria ao antigo na próxima abertura.
+      if (linhas === 0) {
+        throw new Error(
+          "O banco recusou a alteração: você não tem permissão para editar esta atividade. Peça ao gestor do projeto.",
+        );
+      }
 
       // Saiu de dentro de alguém? O pai ANTIGO pode ter ficado vazio.
       // A promoção acima cuida do novo pai; sem esta parte, o antigo continuava

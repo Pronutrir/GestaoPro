@@ -93,3 +93,49 @@ Arquivos:
 lados: a conferência de `count` nos dois pontos da tela, e a forma da via nova
 (um degrau, só o responsável, comparação dupla, vias antigas preservadas, ordem
 do rollback).
+
+---
+
+# Adendo — "mas consigo incluir participante"
+
+> *"o responsável pelo pacote, que é o mesmo que está no grupo, não consegue
+> adicionar e atribuir responsável para as subatividades, mas consegue incluir
+> participante."*
+
+A observação está certa, e a assimetria é real. Mas **não são duas regras
+diferentes** — é a mesma regra, aplicada a **linhas diferentes**.
+
+| | escreve em | quando | a RLS permite? |
+|---|---|---|---|
+| Incluir participante | **1.2.1.5** — a atividade aberta | só no Salvar; até lá é formulário local (`setFormData`) | **sim** |
+| Atribuir responsável da subatividade | **1.2.1.5.1** — a filha | no clique, direto no banco | **não** |
+
+Em `1.2.1.5` você **é** o responsável, então a via 4 (*ator da própria
+atividade*) passa. Em `1.2.1.5.1` você não é nada — não é responsável, não é
+participante, e não tem `can_edit` — e nenhuma das quatro vias alcança.
+
+A diferença de **momento** também importa: incluir participante nem toca o banco
+enquanto você mexe na aba. Só o Salvar escreve, e escreve no pai. Já a
+subatividade grava a cada clique, na filha.
+
+Simulável: `scripts/simular-participante-vs-subatividade.cjs` executa a mesma
+função que o banco espelha e mostra os dois caminhos lado a lado.
+
+## O que a mensagem da captura significa
+
+*"O banco recusou a alteração"* é a mensagem que entrou hoje. Ela **está
+funcionando como deveria**: antes disso, esse mesmo clique falhava em silêncio —
+o popover fechava e nada acontecia. Agora ela diz que a recusa veio do banco.
+
+O que ela ainda não resolve é a recusa em si, porque isso depende da migration
+`20260831120000_responsavel_do_pai_atribui_na_filha.sql`, que continua **escrita
+e não aplicada**.
+
+## Um achado a mais
+
+O **Salvar principal** do diálogo também não conferia `count` — só `error`. Ele
+grava na atividade aberta, onde quem abriu normalmente tem permissão, então o
+silêncio ainda não tinha aparecido ali. Mas era o mesmo defeito esperando o caso
+em que a permissão não alcança: o diálogo fecharia anunciando um salvamento que
+o banco não fez, e o valor voltaria ao antigo na abertura seguinte. Corrigido
+junto.
