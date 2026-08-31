@@ -40,6 +40,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
+import { mensagemDeErro } from "@/lib/erroDoBanco";
 import { cn } from "@/lib/utils";
 import { ehBacklog } from "@/components/kanban/shared";
 
@@ -3200,9 +3201,51 @@ export const EditActivityDialog = ({
 
                         {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
                         {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
+                          /**
+                           * GRAVA UM CAMPO DA SUBATIVIDADE — e CONFERE.
+                           *
+                           * ================================================
+                           * O RELATO: "clico em um e não entra e não salva"
+                           *
+                           * Escolher o responsável de uma subatividade não
+                           * gravava, e a tela não dizia nada. A causa é a que
+                           * já custou caro aqui: **um UPDATE recusado pela RLS
+                           * volta do PostgREST como SUCESSO com zero linhas.**
+                           *
+                           * Sem `count: "exact"` não há como distinguir
+                           * "gravou" de "o banco recusou". O código seguia
+                           * para o `fetchSubActivities`, que relia o valor
+                           * antigo — e o resultado na tela era exatamente o
+                           * relatado: o popover fecha, o avatar não muda,
+                           * nenhuma mensagem.
+                           *
+                           * `error` sozinho também não bastaria: recusa de RLS
+                           * não é erro, é filtro. Zero linhas é o sintoma.
+                           * ================================================
+                           */
                           const updateFields = async (values: Record<string, any>) => {
                             if (!ensureProjectUnlocked()) return;
-                            await supabase.from("activities").update(values as any).eq("id", sub.id);
+                            const { error, count } = await supabase
+                              .from("activities")
+                              .update(values as any, { count: "exact" })
+                              .eq("id", sub.id);
+                            if (error) {
+                              toast({
+                                title: "Não foi possível salvar",
+                                description: mensagemDeErro(error),
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            if (!count) {
+                              toast({
+                                title: "O banco recusou a alteração",
+                                description:
+                                  "Você não tem permissão para editar esta subatividade. Peça ao gestor do projeto.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
                           };
@@ -3420,8 +3463,26 @@ export const EditActivityDialog = ({
                                           upd.status = "completed";
                                           upd.completed_at = new Date().toISOString();
                                         }
-                                        await supabase.from("activities").update(upd).eq("id", sub.id);
+                                        // Mesmo silêncio do responsável, na
+                                        // mesma linha da subatividade: mover de
+                                        // coluna recusado pela RLS volta como
+                                        // sucesso com zero linhas, e o popover
+                                        // fechava como se tivesse funcionado.
+                                        const { error: eCol, count: nCol } = await supabase
+                                          .from("activities")
+                                          .update(upd, { count: "exact" })
+                                          .eq("id", sub.id);
                                         setOpenSubPopover(null);
+                                        if (eCol || !nCol) {
+                                          toast({
+                                            title: "Não foi possível mover",
+                                            description: eCol
+                                              ? mensagemDeErro(eCol)
+                                              : "Você não tem permissão para mover esta subatividade. Peça ao gestor do projeto.",
+                                            variant: "destructive",
+                                          });
+                                          return;
+                                        }
                                         if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                                         onActivityUpdated();
                                       }}
