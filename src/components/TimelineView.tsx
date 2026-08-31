@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { useToast } from "@/hooks/use-toast";
-import { selectInChunks } from "@/lib/chunkedIn";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 
 interface Phase {
   id: string; title: string; description: string | null; display_order: number; project_id: string;
@@ -35,27 +35,18 @@ export const TimelineView = ({ phases, activities, projectDueDate, onActivityCli
   const scheduledActivities = activities.filter(a => a.start_date || a.end_date);
 
   useEffect(() => {
-    const actIds = activities.map(a => a.id);
-    if (actIds.length === 0) return;
-    // Em lotes de 50 — a lista de ids na URL estoura o limite do proxy (502) em
-    // projeto grande. Dedup por id: uma dependência pode casar em dois lotes.
-    selectInChunks<Dependency & { id: string }>(actIds, (batch) =>
-      supabase.from("task_dependencies").select("*")
-        .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
-      // 2: o `.or` acima repete o lote em DOIS filtros, entao cada id custa o
-      // dobro na URL. Sem isto o lote de 50 vira 3.742 chars, o proxy devolve
-      // 502, e a tela abre dizendo que as dependencias nao carregaram.
-      2,
-    )
-      .then((linhas) => {
-        const vistos = new Set<string>();
-        setDependencies(linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true))));
-      })
+    // Uma chamada POST (rpc get_task_dependencies), sem lista de ids na URL —
+    // o mesmo conserto do Kanban/Backlog. projectId vem das fases (Phase tem
+    // project_id; a linha do tempo é sempre de um projeto só).
+    const projectId = phases[0]?.project_id;
+    if (!projectId) return;
+    fetchTaskDependencias(projectId)
+      .then((linhas) => setDependencies(linhas as Dependency[]))
       .catch((err) => {
         console.error("task_dependencies (timeline):", err);
         toast({ title: "Dependências não carregaram", description: "A linha do tempo pode não mostrar os vínculos. Recarregue a página.", variant: "destructive" });
       });
-  }, [activities, toast]);
+  }, [phases, toast]);
 
   const { minDate, maxDate, totalDays } = useMemo(() => {
     const dates: Date[] = [startOfDay(new Date())];

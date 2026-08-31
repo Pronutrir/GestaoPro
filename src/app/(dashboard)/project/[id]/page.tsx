@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -164,6 +164,7 @@ export default function ProjectDetailsPage() {
   const id = params?.id as string | undefined;
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const appConfirm = useAppConfirm();
   const { isAdmin: isRealAdmin, canManage: isAdmin, canWrite, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
@@ -351,6 +352,32 @@ export default function ProjectDetailsPage() {
     if (!activity?.id || !id) return;
     router.push(rotaDaAtividade(id, activity.id));
   }, [id, router]);
+
+  // A PORTA ANTIGA, EM PARALELO — devolvida em 28/08 depois que a tela nova
+  // aposentou o editor antes de saber editar. O EditActivityDialog completo
+  // continua no git e edita os 13 campos; a tela nova ainda não. Até ela ter
+  // tudo, "Editar" reabre o diálogo. Quando o último campo entrar na tela, este
+  // handler e o botão saem. Mantém os guards de edição do fluxo original.
+  const onEditarNoDialogo = useCallback((
+    activity: any,
+    initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
+  ) => {
+    if (isSyntheticPhaseRow(activity)) return;
+    if (isProjectConcluded) { showProjectLockedToast("editar atividades"); return; }
+    if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
+      toast.error("Atividade bloqueada: só pode ser editada após aprovação da solicitação de mudança.");
+      return;
+    }
+    if (activity && !canMutateActivity(activity as Activity)) {
+      toast.error("Você não pode editar esta atividade", {
+        description: "Só a equipe do projeto e quem responde pela atividade podem. Peça ao gestor do projeto para incluir você na equipe.",
+      });
+      return;
+    }
+    setEditActivityInitialTab(initialTab);
+    setEditingActivity(activity);
+    setEditActivityDialogOpen(true);
+  }, [canMutateActivity, isActivityBlocked, isProjectConcluded, showProjectLockedToast, toast]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -433,6 +460,41 @@ export default function ProjectDetailsPage() {
     setEditingActivity(target);
     setEditActivityDialogOpen(true);
   }, [activities, searchParams]);
+
+  // PASSO 3 — a aba vive na URL (?tab=) e no storage, para o F5 não voltar ao
+  // Kanban; e o modal LIMPA o ?activity= ao fechar, para o F5 não reabri-lo.
+  const mudarAba = useCallback((tab: string) => {
+    setActiveTab(tab);
+    try { localStorage.setItem(`project-active-tab:${id}`, tab); } catch { /* quota */ }
+    const sp = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+    sp.set("tab", tab);
+    router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+  }, [id, searchParams, router, pathname]);
+
+  const fecharModalAtividade = useCallback(() => {
+    setEditActivityDialogOpen(false);
+    setEditActivityInitialTab("details");
+    const sp = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+    if (sp.has("activity")) {
+      sp.delete("activity");
+      openedDeepLinkRef.current = null; // permite reabrir a mesma atividade depois
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }, [id, searchParams, router, pathname]);
+
+  // Aba inicial pelo storage quando não há ?tab= — o deep-link de ?tab= tem
+  // prioridade (efeito acima). Sem isto, a "última aba" só valia dentro da SPA.
+  const restaurouAbaRef = useRef(false);
+  useEffect(() => {
+    if (restaurouAbaRef.current) return;
+    if (searchParams?.get("tab")) { restaurouAbaRef.current = true; return; }
+    try {
+      const salva = localStorage.getItem(`project-active-tab:${id}`);
+      if (salva && visibleTabs.includes(salva)) setActiveTab(salva);
+    } catch { /* quota */ }
+    restaurouAbaRef.current = true;
+  }, [id, searchParams, visibleTabs]);
 
   // O cartão de tarefa dentro de um documento escrito ("/tarefa") dispara
   // `open-activity` ao clicar em Abrir. Até agora ninguém escutava esse evento
@@ -1740,7 +1802,7 @@ export default function ProjectDetailsPage() {
                 {riscosResumo.abertos > 0 && (
                   <button
                     type="button"
-                    onClick={() => setActiveTab("risks")}
+                    onClick={() => mudarAba("risks")}
                     title="Ver riscos do projeto"
                     className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
                       riscosResumo.criticos > 0
@@ -1822,7 +1884,7 @@ export default function ProjectDetailsPage() {
                     </>
                   )}
                 </div>
-                <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => setActiveTab("changes")}>
+                <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => mudarAba("changes")}>
                   Ver solicitações
                 </Button>
               </div>
@@ -1830,7 +1892,7 @@ export default function ProjectDetailsPage() {
           )}
 
           {/* Tabs — Phases tab REMOVED */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={mudarAba} className="w-full">
             {(() => {
               const allDefinitions = [
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-violet-500" },
@@ -1864,14 +1926,14 @@ export default function ProjectDetailsPage() {
                 const next = [...visibleTabs, val];
                 setVisibleTabs(next);
                 persistVisibleTabs(next);
-                setActiveTab(val);
+                mudarAba(val);
                 setTabPickerOpen(false);
               };
               const handleRemoveTab = (val: string) => {
                 const next = visibleTabs.filter(v => v !== val);
                 setVisibleTabs(next);
                 persistVisibleTabs(next);
-                if (activeTab === val) setActiveTab(next[0] ?? "kanban");
+                if (activeTab === val) mudarAba(next[0] ?? "kanban");
               };
 
               // "+ Visualização" vai para o FIM da fila (extraSlotPosition
@@ -1968,6 +2030,10 @@ export default function ProjectDetailsPage() {
                 projectIds={[id!]}
                 defaultMode="table"
                 onEditActivity={(activity) => openEditActivity(activity)}
+                /* FONTE ÚNICA: o Cronograma usa as MESMAS atividades da página
+                   (já filtradas por visibilidade, atualizadas nas mutações) — não
+                   carrega as próprias. Fim do "Backlog cheio / Cronograma vazio". */
+                activitiesExternas={activities}
               />
             </TabsContent>
 
@@ -2158,6 +2224,7 @@ export default function ProjectDetailsPage() {
                 phases={phases}
                 projectTitle={project?.title}
                 onEditActivity={(activity) => openEditActivity(activity as any)}
+                onEditarNoDialogo={(activity) => onEditarNoDialogo(activity as any)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
@@ -2218,8 +2285,8 @@ export default function ProjectDetailsPage() {
           activity={editingActivity}
           open={editActivityDialogOpen}
           onOpenChange={(o) => {
-            setEditActivityDialogOpen(o);
-            if (!o) setEditActivityInitialTab("details");
+            if (o) setEditActivityDialogOpen(true);
+            else fecharModalAtividade();
           }}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
           projectId={id!} isQualityProject={isQualityProject}

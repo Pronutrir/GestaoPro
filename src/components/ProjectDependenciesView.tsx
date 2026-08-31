@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link2, ArrowRight, Search, X, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { selectInChunks } from "@/lib/chunkedIn";
+import { fetchTaskDependencias } from "@/lib/taskDependencias";
 
 interface Props {
   projectId: string;
@@ -50,22 +50,11 @@ export const ProjectDependenciesView = ({ projectId, onEditActivity }: Props) =>
       setLoading(false);
       return;
     }
-    const ids = list.map((a) => a.id);
     try {
-      // Em lotes de 50 — a lista de ids na URL estoura o limite do proxy (502)
-      // em projeto grande. Dedup por id: uma dependência pode casar em dois lotes.
-      const linhas = await selectInChunks<DepRow>(ids, (batch) =>
-        supabase
-          .from("task_dependencies")
-          .select("id, predecessor_id, successor_id, dependency_type")
-          .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
-        // 2: o `.or` acima repete o lote em DOIS filtros, entao cada id custa o
-        // dobro na URL. Sem isto o lote de 50 vira 3.742 chars, o proxy devolve
-        // 502, e a tela abre dizendo que as dependencias nao carregaram.
-        2,
-      );
-      const vistos = new Set<string>();
-      setDeps(linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true))));
+      // Uma chamada POST (rpc get_task_dependencies), sem lista de ids na URL —
+      // o mesmo conserto do Kanban/Backlog, agora que a RPC devolve o tipo.
+      const linhas = await fetchTaskDependencias(projectId);
+      setDeps(linhas as DepRow[]);
     } catch (err) {
       console.error("task_dependencies (deps view):", err);
       toast({ title: "Dependências não carregaram", description: "Recarregue a página.", variant: "destructive" });

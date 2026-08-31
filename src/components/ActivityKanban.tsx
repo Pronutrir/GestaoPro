@@ -157,6 +157,7 @@ import {
 import { VisoesMenu } from "./kanban/VisoesMenu";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 import { selectInChunks } from "@/lib/chunkedIn";
+import { fetchTaskDependencias, fetchTaskRelations } from "@/lib/taskDependencias";
 import { rotaDaAtividade } from "@/lib/telaDaAtividade";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
@@ -1204,24 +1205,11 @@ export const ActivityKanban = ({
     // Fetch task dependencies for badge counters
     const ids = activities.map((a) => a.id);
     if (ids.length > 0) {
-      // Em lotes de 50: com muitas atividades a lista de ids na URL estoura o
-      // limite do proxy e volta 502 (ver lib/chunkedIn) — era o único fetch
-      // deste efeito que faltava lotear. O chunking pode repetir uma dependência
-      // que casa em dois lotes (predecessora num, sucessora noutro), então
-      // DEDUPLICA por id antes de contar.
-      selectInChunks<{ id: string; predecessor_id: string; successor_id: string }>(ids, (batch) =>
-        supabase
-          .from("task_dependencies")
-          .select("id, predecessor_id, successor_id")
-          .or(`predecessor_id.in.(${batch.join(",")}),successor_id.in.(${batch.join(",")})`),
-        // 2: o `.or` acima repete o lote em DOIS filtros, entao cada id custa o
-        // dobro na URL. Sem isto o lote de 50 vira 3.742 chars, o proxy devolve
-        // 502, e a tela abre dizendo que as dependencias nao carregaram.
-        2,
-      )
-        .then((linhas) => {
-          const vistos = new Set<string>();
-          const data = linhas.filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
+      // Uma chamada POST (rpc get_task_dependencies), sem lista de ids na URL —
+      // é o que tira o 502 do proxy. Volta as dependências do projeto inteiro; o
+      // que não casar com uma atividade carregada simplesmente não entra no mapa.
+      fetchTaskDependencias(projectId)
+        .then((data) => {
           const map = new Map<string, { pred: number; succ: number }>();
           data.forEach((d) => {
             const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
@@ -1285,26 +1273,10 @@ export const ActivityKanban = ({
           setAttachmentCounts(map);
         })
         .catch(() => setAttachmentCounts(new Map()));
-      // Este era o pior caso: o `.or()` monta a lista de ids DUAS vezes na mesma
-      // URL, então estourava o limite do proxy com metade das atividades.
-      //
-      // CORRIGIDO PELA METADE ATÉ 31/08/2026. O diagnóstico acima estava certo,
-      // a conclusão não: "cada requisição carrega no máximo 2×50 ids" tratava
-      // 2×50 como seguro, e 2×50 é justamente o que estoura — 3.742 chars
-      // contra o limite de ~3.700. O lote virou metade do que era, mas a URL
-      // continuou do mesmo tamanho do problema original.
-      //
-      // O `2` abaixo é o que faltava: ele divide o lote pela repetição, e a URL
-      // cai para 1.892 chars.
-      selectInChunks<{ id: string; source_activity_id: string; target_activity_id: string; relation_type: string }>(
-        ids,
-        (batch) =>
-          supabase
-            .from("task_relations")
-            .select("id, source_activity_id, target_activity_id, relation_type")
-            .or(`source_activity_id.in.(${batch.join(",")}),target_activity_id.in.(${batch.join(",")})`),
-        2,
-      )
+      // Era o pior caso: o `.or()` montava a lista de ids DUAS vezes na mesma URL
+      // e estourava o proxy (502). Agora pela RPC (POST) — o filtro vai no corpo,
+      // não na URL. Mesmo conserto do task_dependencies.
+      fetchTaskRelations(projectId)
         .then((data) => {
           const titleById = new Map<string, string>();
           activities.forEach((a) => titleById.set(a.id, a.title));
