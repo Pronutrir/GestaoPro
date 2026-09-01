@@ -136,21 +136,31 @@ check("os campos vêm de project_members, a mesma fonte da página do projeto",
   /\.from\("project_members"\)[\s\S]{0,200}can_edit_own/.test(tela),
   "duas fontes de permissão divergem — foi o que já produziu o botão que aparece numa tela e não na outra");
 
-/* ── RELATO 2: salvar volta para o Kanban (U15) ──────────────────────────── */
+/* ── RELATO 2: F5/salvar volta para o Kanban (U15 — evoluído em 01/09) ──────
+ *
+ * O primeiro conserto (31/08) foi um EFEITO que espelhava activeTab para a URL.
+ * Esse efeito era ele próprio o bug do "F5 no Backlog cai no Kanban": no mount
+ * gravava ?tab=kanban por cima do ?tab= da sessão. Em 01/09 o efeito saiu — a
+ * URL só muda por navegação EXPLÍCITA (mudarAba, no clique de aba) — e a leitura
+ * passou a resolver a aba com resolveProjectTab (normalizeProjectTabs([tab])[0]
+ * devolvia sempre "kanban"). O INTENTO segue o mesmo; a implementação mudou. */
 const proj = fs.readFileSync(path.join(raiz, "src/app/(dashboard)/project/[id]/page.tsx"), "utf8");
 
-check("a aba ativa é ESCRITA na URL",
-  proj.includes('qs.set("tab", activeTab)'),
-  "sem isso, `useState(\"kanban\")` vence a cada remontagem");
+check("a aba ativa é ESCRITA na URL (mudarAba)",
+  proj.includes('sp.set("tab", tab)'),
+  "sem isso, o F5 volta para o Kanban");
 check("usa replace, não push — trocar de aba não é navegação nova",
-  /router\.replace\(`\/project\/\$\{id\}\?\$\{qs\.toString\(\)\}`/.test(proj),
+  /router\.replace\(`\$\{pathname\}\?\$\{sp\.toString\(\)\}`/.test(proj),
   "com push, o voltar percorreria cada aba visitada");
 check("preserva os outros parâmetros — `?activity=` não é apagado",
-  proj.includes('new URLSearchParams(searchParams?.toString() ?? "")'),
+  proj.includes("new URLSearchParams(Array.from(searchParams?.entries() ?? []))"),
   "apagar a query fecharia a atividade aberta ao trocar de aba");
-check("só grava depois de as abas visíveis resolverem",
-  proj.includes("if (!visibleTabs.length || !visibleTabs.includes(activeTab)) return;"),
-  "antes disso activeTab é o padrão, e gravá-lo apagaria o ?tab= do link");
+check("o clique de aba passa por mudarAba, não por setActiveTab solto",
+  /onTabChange=\{mudarAba\}/.test(proj),
+  "01/09: sem o efeito que espelhava activeTab e apagava o ?tab= no mount");
+check("a aba do ?tab= é resolvida por resolveProjectTab",
+  proj.includes("resolveProjectTab("),
+  "normalizeProjectTabs([tab])[0] injeta 'kanban' e devolvia sempre 'kanban'");
 check("e a leitura de ?tab= continua existindo",
   proj.includes('searchParams?.get("tab")'));
 
