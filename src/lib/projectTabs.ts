@@ -25,6 +25,26 @@ export const ALL_PROJECT_TABS = [
 
 export const ALL_TAB_VALUES = ALL_PROJECT_TABS.map(t => t.value);
 
+/**
+ * Resolve UM valor de aba (ex.: o `?tab=` da URL) ao canônico, migrando o alias
+ * legado, ou devolve null se não for uma aba conhecida.
+ *
+ * NÃO confundir com `normalizeProjectTabs`, que normaliza a LISTA de abas
+ * permitidas e SEMPRE injeta "kanban" no início. Quem usava
+ * `normalizeProjectTabs([tab])[0]` para resolver um valor só recebia "kanban"
+ * de volta em todos os casos — foi por isso que o deep-link de aba (F5 no
+ * Backlog, ?tab=tap de notificação) nunca restaurava nada ≠ Kanban.
+ */
+export const resolveProjectTab = (
+  tab?: string | null,
+): typeof ALL_TAB_VALUES[number] | null => {
+  if (!tab) return null;
+  const migrated = tab === "docpages" ? "documents" : tab;
+  return ALL_TAB_VALUES.includes(migrated as typeof ALL_TAB_VALUES[number])
+    ? (migrated as typeof ALL_TAB_VALUES[number])
+    : null;
+};
+
 export const normalizeProjectTabs = (tabs?: string[] | null) => {
   // Permissões gravadas antes da fusão podem conter "docpages" sozinho. Sem
   // esta troca, quem só tinha Páginas liberada perderia o acesso ao módulo.

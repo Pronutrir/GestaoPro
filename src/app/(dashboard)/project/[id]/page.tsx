@@ -52,7 +52,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
-import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { normalizeProjectTabs, resolveProjectTab } from "@/lib/projectTabs";
 import { rotaDaAtividade } from "@/lib/telaDaAtividade";
 import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
@@ -395,8 +395,11 @@ export default function ProjectDetailsPage() {
   useEffect(() => {
     const tabParam = searchParams?.get("tab");
     if (!tabParam || openedTabRef.current === tabParam) return;
-    // Respeita alias legado (docpages → documents) e o que o usuário pode ver.
-    const alvo = normalizeProjectTabs([tabParam])[0];
+    // resolveProjectTab, NÃO normalizeProjectTabs([tab])[0]: aquele injeta
+    // "kanban" no início da lista, então `[0]` devolvia "kanban" para QUALQUER
+    // ?tab= — o motivo real de o F5 no Backlog cair no Kanban. Este resolve um
+    // valor só (migra alias legado) ou null se a aba não existir.
+    const alvo = resolveProjectTab(tabParam);
     if (alvo && visibleTabs.includes(alvo)) {
       openedTabRef.current = tabParam;
       setActiveTab(alvo);
@@ -404,42 +407,32 @@ export default function ProjectDetailsPage() {
   }, [searchParams, visibleTabs]);
 
   /**
-   * A ABA ATIVA VAI PARA A URL — e é o que faz o F5 não voltar ao Kanban.
+   * A ABA ATIVA VAI PARA A URL — mas por NAVEGAÇÃO EXPLÍCITA, não por efeito.
    *
    * ============================================================================
-   * O DEFEITO (relatado em 31/08/2026, e é o U15 do plano)
+   * HISTÓRICO
    *
-   * A leitura de `?tab=` já existia (efeito acima), mas ninguém ESCREVIA: trocar
-   * de aba mudava só o estado em memória. Então:
+   * 31/08 (U15): a leitura de `?tab=` existia, mas ninguém escrevia — trocar de
+   * aba não mexia na URL, então F5 caía no Kanban. A primeira correção foi um
+   * EFEITO que espelhava `activeTab` para a URL.
    *
-   *   - F5 no Cronograma voltava para o Kanban;
-   *   - salvar uma atividade e voltar caía no Kanban;
-   *   - o link colado no chat abria a aba errada.
+   * 01/09: esse efeito era ele próprio o novo bug. No mount, `activeTab` é o
+   * padrão "kanban"; o efeito corria e gravava `?tab=kanban` POR CIMA do
+   * `?tab=backlog` que veio da sessão — antes de o efeito de leitura restaurar
+   * "backlog". Medido com Playwright: a URL saía de backlog para kanban em
+   * ~500ms e nunca voltava. Gatear por `visibleTabs` ou por `permissionsLoading`
+   * não resolveu: `loadAccess` termina em <500ms, então `permissionsLoading` já
+   * era false quando o efeito corria, e ainda assim `activeTab` não tinha sido
+   * reconciliado para "backlog". É uma corrida que nenhum gate vence.
    *
-   * `useState("kanban")` é o padrão, e ele vencia toda vez que a página
-   * remontava — porque a URL não guardava a escolha.
-   *
-   * `replace`, não `push`: trocar de aba não é navegação nova. Com `push`, o
-   * voltar do navegador percorreria cada aba visitada antes de sair do projeto.
-   *
-   * O `?activity=` é PRESERVADO: ele é outro deep-link, e apagá-lo aqui fecharia
-   * a atividade aberta ao trocar de aba.
+   * A CORREÇÃO é tirar o efeito: a URL só muda por navegação EXPLÍCITA
+   * (`mudarAba`, chamado no clique de aba, no "+ Visualização" e no "ir para" do
+   * TAP). Nada espelha `activeTab` automaticamente, então nada pode sobrescrever
+   * o `?tab=` no mount. O efeito de LEITURA (acima) é a única autoridade sobre a
+   * aba no carregamento, e as reconciliações internas (sanitização, restauro por
+   * storage) mexem só no estado, nunca na URL.
    * ============================================================================
    */
-  useEffect(() => {
-    if (!activeTab || !id) return;
-    const atual = searchParams?.get("tab");
-    if (atual === activeTab) return;
-    // Só depois de as abas visíveis estarem resolvidas: antes disso o
-    // `activeTab` ainda é o padrão, e gravá-lo apagaria o `?tab=` que veio no
-    // link — justamente o caso que o efeito acima existe para atender.
-    if (!visibleTabs.length || !visibleTabs.includes(activeTab)) return;
-
-    const qs = new URLSearchParams(searchParams?.toString() ?? "");
-    qs.set("tab", activeTab);
-    openedTabRef.current = activeTab;
-    router.replace(`/project/${id}?${qs.toString()}`, { scroll: false });
-  }, [activeTab, id, router, searchParams, visibleTabs]);
 
   // do que é editável.
   const openedDeepLinkRef = useRef<string | null>(null);
@@ -1946,7 +1939,11 @@ export default function ProjectDetailsPage() {
                   <DraggableTabBar
                     storageKey={`project-tabs-order-${id}`}
                     activeTab={activeTab}
-                    onTabChange={setActiveTab}
+                    /* mudarAba (não setActiveTab): o clique escreve ?tab= e o
+                       storage. É o que sobrevive ao F5 agora que não há efeito
+                       espelhando activeTab para a URL. Ver o bloco do efeito de
+                       leitura acima (01/09). */
+                    onTabChange={mudarAba}
                     tabs={renderedTabs}
                     onRemoveTab={handleRemoveTab}
                     removableValues={renderedTabs.map(t => t.value)}
@@ -2084,7 +2081,7 @@ export default function ProjectDetailsPage() {
               <ProjectCharter
                 projectId={id!} project={project} phases={phases} members={members}
                 onMembersChanged={fetchMembers}
-                onIrPara={(aba) => { setActiveTab(aba); fetchProjectData(); }}
+                onIrPara={(aba) => { mudarAba(aba); fetchProjectData(); }}
               />
             </TabsContent>
 
