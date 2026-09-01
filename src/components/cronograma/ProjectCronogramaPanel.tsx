@@ -1446,10 +1446,19 @@ export function ProjectCronogramaPanel({
     const visibleIds = new Set(baseRows.map((row) => row.a.id));
     // Raiz = sem pai visível. Um item com phase_id pendura na fase, então só é
     // raiz se a fase não estiver na lista (projeto sem fases, ou item solto).
-    const fasesVisiveis = new Set((phases || []).map((p: any) => `phase:${p.id}`));
+    //
+    // A FASE CONTA COMO PAI VISÍVEL SÓ SE A LINHA EXISTE (01/09/2026). Antes
+    // isto checava a tabela `phases` crua; mas uma fase DEDUPLICADA — que também
+    // existe como atividade — sai do baseRows (linhasFase a remove). Checar a
+    // tabela crua tratava essa fase como pai visível, e os itens pendurados nela
+    // por phase_id deixavam de ser raiz SEM que o pai estivesse na árvore: viravam
+    // órfãos, `roots` caía a zero, e a subárvore inteira sumia. Era o "pisca e
+    // some" do Revitalização Tasy — 212 atividades apareciam e, quando as 4 fases
+    // duplicadas carregavam, roots ia de 16 para 0. `visibleIds` é a verdade: a
+    // fase é pai visível se, e só se, a linha dela está no baseRows.
     const temPaiVisivel = (a: any) => {
       if (a.parent_id) return visibleIds.has(a.parent_id);
-      return a.phase_id ? fasesVisiveis.has(`phase:${a.phase_id}`) : false;
+      return a.phase_id ? visibleIds.has(`phase:${a.phase_id}`) : false;
     };
     const roots = baseRows.filter((row) => !temPaiVisivel(row.a));
     if (!sort) {
