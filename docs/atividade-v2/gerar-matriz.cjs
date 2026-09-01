@@ -83,6 +83,12 @@ function decidir(perfil, papel, vinculo) {
   if (papel === "fora_da_equipe") {
     if (ligado) {
       Object.assign(c, { canView: true, canComment: true, canEditExecucao: true });
+      // 01/09/2026: o RESPONSÁVEL edita o plano e atribui — na própria e, via
+      // subárvore, nas filhas (a subárvore vive num guard próprio, fora destes
+      // 108 casos de vínculo direto). Participante segue execução apenas.
+      if (vinculo === "responsavel") {
+        Object.assign(c, { canEditPlanejamento: true, canAssign: true });
+      }
       return [c, "5-ator-da-atividade", "atividade_e_trilha"];
     }
     return [c, "6-sem-acesso", "nenhum"];

@@ -20,8 +20,11 @@ O projeto é da equipe **e** do gestor. Isso separa dois eixos que nunca podem s
 | Trabalho | quem faz o quê | a equipe, através dos responsáveis da atividade |
 
 **Regra inviolável:** atribuir alguém a uma atividade nunca dá a essa pessoa acesso que ela
-não tinha ao projeto. Quem atribui alguém de fora da equipe recebe a proposta de adicioná-la
-à equipe — e isso é ato de quem gerencia equipe. Essa checagem vive no banco, não na interface.
+não tinha ao **projeto**. Há dois atos distintos, e as duas checagens vivem no banco:
+**incluir na atividade** (vínculo escopado — a pessoa passa a ver e executar aquela atividade
+e a **subárvore** dela, nunca o projeto inteiro) é ato de quem **responde pelo ramo**;
+**incluir na equipe** (acesso ao projeto) é ato de quem **gerencia a equipe**. A primeira é a
+decisão de 01/09/2026 (ver o passo 5 abaixo); a segunda é a de sempre.
 
 ## Ordem de decisão de acesso
 
@@ -31,7 +34,12 @@ Espelhada entre `lib/activityAccess.ts` e a RLS. Se as duas divergirem, **a RLS 
 2. O perfil é Visualizador? → só leitura, **encerra aqui** (`canWrite = false` anula qualquer papel de projeto)
 3. É dono ou gestor deste projeto? → tudo dentro do projeto
 4. Está na equipe do projeto? → o papel manda
-5. É responsável ou participante desta atividade? → execução apenas
+5. É responsável desta atividade **ou de um ancestral**? → edita a atividade e **toda a
+   subárvore** (execução e planejamento) e inclui pessoas (escopadas) nela. É só participante?
+   → **execução apenas**. *(01/09/2026: o responsável do ramo passou a alcançar a subárvore
+   inteira, revertendo de propósito o "só o pai direto" de 31/08. Espelhado entre a RLS —
+   `eh_descendente_de_atividade_do_responsavel`, `can_update_activity_v2` — e
+   `lib/activityAccess.ts`. Excluir continua fora desta via; a equipe do projeto, também.)*
 6. Nada disso → a atividade não existe para essa pessoa
 
 `matriz-acesso.json` tem os 108 casos com o resultado esperado e qual passo decidiu cada um.

@@ -63,6 +63,22 @@ export interface AtividadeParaAcesso {
    */
   responsavel_do_pai?: string | null;
   responsavel_do_pai_id?: string | null;
+
+  /**
+   * O usuário é RESPONSÁVEL de um ANCESTRAL desta atividade (a subárvore).
+   *
+   * Pré-resolvido: a página chama a função SQL
+   * `eh_descendente_de_atividade_do_responsavel(activityId, userId)` (que sobe a
+   * árvore inteira) e passa o booleano aqui. A função de acesso não carrega a
+   * árvore — pergunta de permissão não deve puxar dados. `responsavel_do_pai`
+   * (pai DIRETO) continua honrado como atalho quando este não vier.
+   *
+   * Espelha, no cliente, a via de EDIÇÃO da subárvore que a RLS concede em
+   * `can_update_activity_v2` via `eh_descendente_de_atividade_do_responsavel`
+   * (migration 20260901120000). Decisão do dono do produto em 01/09/2026:
+   * quem responde por um ramo edita e atribui em todo o ramo.
+   */
+  souResponsavelDeAncestral?: boolean;
 }
 
 /**
@@ -237,6 +253,28 @@ export function ehAtividadeDaPessoa(
     && anyMatchesIdentity(atividade.participants, candidatos);
 }
 
+/**
+ * A pessoa é o RESPONSÁVEL desta atividade? (não participante, não criador.)
+ *
+ * Espelho de `eh_responsavel_da_atividade_v2` (SQL): só o vínculo de
+ * responsável — a FK `assigned_to_id` quando presente, senão a coluna legada
+ * `assigned_to`. NUNCA `participants`. É o que distingue quem ganha o poder
+ * sobre a subárvore (responsável) de quem não ganha (participante).
+ */
+export function ehResponsavelDaAtividade(
+  atividade: AtividadeParaAcesso | null | undefined,
+  usuario: Pick<UsuarioParaAcesso, "id" | "email" | "fullName" | "profileId">,
+): boolean {
+  if (!atividade) return false;
+  if (usuario.id && atividade.assigned_to_id && atividade.assigned_to_id === usuario.id) return true;
+  // `assigned_to_id` presente e diferente = convertido: o texto não decide mais.
+  if (atividade.assigned_to_id) return false;
+  const candidatos = buildUserCandidates([
+    usuario.fullName, usuario.email, usuario.profileId, usuario.id,
+  ]);
+  return matchesIdentity(atividade.assigned_to, candidatos);
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * FASE 03 — CAPACIDADES NOMEADAS
  *
@@ -320,6 +358,20 @@ export function capacidadesNaAtividade(
   const lideraProjeto = !!projeto
     && (matchesIdentity(projeto.owner, candidatos) || matchesIdentity(projeto.manager, candidatos));
 
+  // RESPONSÁVEL DO RAMO — desta atividade OU de um ancestral (a subárvore).
+  // Espelha `eh_descendente_de_atividade_do_responsavel` (RLS, 20260901120000):
+  // quem responde por um ramo edita o plano e atribui em todo o ramo. O
+  // ancestral vem pré-resolvido em `souResponsavelDeAncestral` (a página chama a
+  // função SQL, que sobe a árvore inteira); `responsavel_do_pai` segue honrado
+  // como atalho do pai direto quando o booleano não vier.
+  const ehResponsavelDeAncestral =
+    !!atividade?.souResponsavelDeAncestral
+    || matchesIdentity(atividade?.responsavel_do_pai, candidatos)
+    || (!!atividade?.responsavel_do_pai_id && !!usuario.id
+        && atividade.responsavel_do_pai_id === usuario.id);
+  const ehResponsavelDoRamo =
+    ehResponsavelDaAtividade(atividade, usuario) || ehResponsavelDeAncestral;
+
   /**
    * 2 — Visualizador ENCERRA.
    *
@@ -381,56 +433,20 @@ export function capacidadesNaAtividade(
         canView: true,
         canComment: true,
         canAssumir: true,
-        // Só onde já atua. E atribuir, só sendo o responsável.
-        canEditExecucao: ator,
-        canEditPlanejamento: ator,
+        // Edita a própria (ator) OU a subárvore de que responde (ramo).
+        canEditExecucao: ator || ehResponsavelDoRamo,
+        canEditPlanejamento: ator || ehResponsavelDoRamo,
         /**
-         * ATRIBUIR: sendo o responsável DESTA atividade — ou do PAI dela.
+         * ATRIBUIR: sendo responsável DESTA atividade OU de um ANCESTRAL.
          *
-         * ============================================================================
-         * O IMPASSE QUE ISTO RESOLVE (relatado em 31/08/2026)
-         *
-         * A regra era só `assigned_to` da própria atividade. Numa subatividade
-         * recém-criada esse campo está VAZIO — ninguém é responsável por ela
-         * ainda. Então `canAssign` dava false, e não havia como atribuir a
-         * PRIMEIRA vez. O campo só se preenchia se já estivesse preenchido.
-         *
-         * Relatado com captura: o responsável da entrega "1.2.1.5 Exames e
-         * procedimentos" não conseguia designar ninguém para as quatro filhas.
-         * Ele responde pela entrega e não podia distribuir o trabalho dela —
-         * que é exatamente o que se espera de quem responde por ela.
-         *
-         * POR QUE O PAI, E NÃO "QUALQUER ATOR": porque distribuir trabalho é
-         * ato de quem responde pelo conjunto. Um participante da entrega
-         * continua sem poder atribuir; quem responde por ela, pode. É a mesma
-         * lógica do gestor de projeto, um degrau abaixo.
-         *
-         * NÃO ALARGA PARA A ÁRVORE INTEIRA: só o pai DIRETO. Subir até a raiz
-         * daria ao dono da fase o poder de atribuir em qualquer neta, o que é
-         * gerência de projeto — e essa via já existe no passo 3.
-         * ------------------------------------------------------------------
-         * O `ator &&` QUE ANULAVA ESTA REGRA (corrigido em 31/08/2026, tarde)
-         *
-         * A primeira versão desta cláusula ficou escrita assim:
-         *
-         *     canAssign: ator && ( ...assigned_to... || ...responsavel_do_pai... )
-         *
-         * E `ator` é sobre a PRÓPRIA atividade — `ehAtividadeDaPessoa`. Na
-         * filha recém-criada, quem responde pelo pai NÃO é ator dela: não é
-         * responsável (o campo está vazio, que é a premissa do relato) nem
-         * participante. O `&&` então zerava exatamente o caso que a segunda
-         * metade da expressão existia para atender.
-         *
-         * A regra passou no teste porque o cenário montado lá punha a pessoa
-         * como participante da filha (`participants: [EU]`) — e participante é
-         * ator. O teste confirmava a expressão, não o relato.
-         *
-         * Responder pelo pai é via PRÓPRIA, não um refinamento da via de ator.
-         * ------------------------------------------------------------------
+         * Em 31/08 esta regra alcançava só o pai DIRETO ("NÃO ALARGA PARA A
+         * ÁRVORE INTEIRA"), de propósito. Em 01/09 o dono do produto pediu o
+         * contrário: quem responde por um ramo distribui o trabalho de todo o
+         * ramo. `ehResponsavelDoRamo` (responsável desta atividade ou de um
+         * ancestral) espelha `eh_descendente_de_atividade_do_responsavel` da RLS.
+         * Participante segue sem atribuir — só o responsável.
          */
-        canAssign:
-          (ator && matchesIdentity(atividade?.assigned_to, candidatos))
-          || matchesIdentity(atividade?.responsavel_do_pai, candidatos),
+        canAssign: ehResponsavelDoRamo,
       },
       "4-equipe-editar-apenas-as-minhas",
       "projeto",
@@ -438,17 +454,25 @@ export function capacidadesNaAtividade(
   }
 
   /**
-   * 5 — chega só pela atribuição.
+   * 5 — chega pela atribuição (ator desta atividade) OU por responder por um
+   * ANCESTRAL (a subárvore).
    *
-   * Execução apenas: mexe no andamento do próprio trabalho, não no plano.
-   * E NÃO exclui — a policy de DELETE não aceita esta via.
+   * RESPONSÁVEL DO RAMO edita o plano E atribui em toda a subárvore — espelha
+   * `eh_descendente_de_atividade_do_responsavel` da RLS (01/09/2026). Quem é só
+   * PARTICIPANTE/criador (ator sem responder pelo ramo): execução apenas, no
+   * próprio trabalho. Nenhum dos dois EXCLUI — a policy de DELETE não aceita
+   * esta via. Escopo de leitura: a atividade e a subárvore.
    */
-  if (ator) {
-    return monta(
-      { ...NADA, canView: true, canComment: true, canEditExecucao: true },
-      "5-ator-da-atividade",
-      "atividade_e_trilha",
-    );
+  if (ator || ehResponsavelDoRamo) {
+    const base = ehResponsavelDoRamo
+      ? {
+          ...NADA,
+          canView: true, canComment: true,
+          canEditExecucao: true, canEditPlanejamento: true,
+          canAssign: true,
+        }
+      : { ...NADA, canView: true, canComment: true, canEditExecucao: true };
+    return monta(base, "5-ator-da-atividade", "atividade_e_trilha");
   }
 
   return monta(NADA, "6-sem-acesso", "nenhum");

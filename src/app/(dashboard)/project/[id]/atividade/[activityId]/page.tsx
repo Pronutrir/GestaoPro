@@ -209,17 +209,32 @@ export default function PaginaDaAtividade() {
        *
        * A coluna do sino mostra o que houver; se não houver nada, diz isso.
        */
-      const [t, ps, evs, nl] = await Promise.all([
+      const [t, ps, evs, nl, ramo] = await Promise.all([
         carregarTrilha(activityId),
         carregarPessoas(activityId),
         carregarFeed(activityId).catch(() => [] as EventoDoBanco[]),
         user?.id ? contarNaoLidos(activityId, user.id).catch(() => 0) : Promise.resolve(0),
+        // SOU RESPONSÁVEL DESTE RAMO? A função SQL sobe a árvore inteira e diz se
+        // respondo por esta atividade ou por um ancestral. É o sinal que
+        // `capacidadesNaAtividade` usa para liberar edição/atribuição na
+        // subárvore além do pai direto (que já vem por responsavel_do_pai).
+        // Defensivo: se falhar, o atalho do pai direto ainda cobre o caso comum.
+        user?.id
+          ? (async () => {
+              try {
+                const r = await supabase.rpc("eh_descendente_de_atividade_do_responsavel" as never,
+                  { _activity_id: activityId, _user_id: user.id } as never);
+                return (r as { data?: unknown })?.data === true;
+              } catch { return false; }
+            })()
+          : Promise.resolve(false),
       ]);
 
       setAtividade({
         ...(a as Record<string, unknown>),
         responsavel_do_pai: (pai as Record<string, unknown> | null)?.assigned_to ?? null,
         responsavel_do_pai_id: (pai as Record<string, unknown> | null)?.assigned_to_id ?? null,
+        souResponsavelDeAncestral: ramo,
       });
       setProjeto((p ?? null) as Record<string, unknown> | null);
       setFilhas((fs ?? []) as Record<string, unknown>[]);
@@ -373,29 +388,25 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, projectId, carregar, toast]);
 
-  // ATRIBUIR — dois caminhos, e a regra inviolável no meio.
-  //   1) DIRETO: a pessoa já está na equipe → insere o vínculo de atividade. O
-  //      gatilho trg_assignee_exige_equipe barra quem está fora, e é esse "não"
-  //      que separa os dois casos sem uma consulta extra — quem só tem canAssign
-  //      (e não gerencia equipe) atribui um colega de equipe por aqui.
-  //   2) DE FORA: cai na RPC incluir_e_atribuir, que inclui na equipe E atribui
-  //      na MESMA transação (só quem gerencia equipe pode). Assina como
-  //      participante; para responsável, promove o papel depois.
+  // ATRIBUIR — inserção ESCOPADA, direta na tabela.
+  //
+  // A pessoa incluída ganha um vínculo de ATIVIDADE (activity_assignees), não
+  // uma linha de equipe: acesso à atividade e à subárvore, nunca ao projeto
+  // inteiro. É a regra inviolável do CLAUDE.md, e é o que a migration
+  // 20260901120000 destrava — o gatilho trg_assignee_exige_equipe saiu, e a RLS
+  // de escrita (can_update_activity_v2) já deixa o RESPONSÁVEL do ramo atribuir
+  // nas descendentes. Quem não tem essa permissão recebe o "não" do banco.
+  //
+  // Sem a antiga queda para incluir_e_atribuir: aquela via ADICIONA À EQUIPE
+  // (acesso ao projeto todo) e é ato de quem gerencia equipe — não é o que o
+  // "+" desta tela faz. Incluir na equipe vive na tela de Equipe do projeto.
   const aoAtribuir = useCallback(async (userId: string, papel: "responsavel" | "participante") => {
-    const { error: eDireto } = await tabelaSemTipo("activity_assignees").insert({
+    const { error } = await tabelaSemTipo("activity_assignees").insert({
       activity_id: activityId, user_id: userId, papel, created_by: user?.id ?? null,
     } as never);
-
-    if (eDireto) {
-      const { error: eRpc } = await supabase.rpc("incluir_e_atribuir" as never, {
-        p_activity_id: activityId, p_user_id: userId,
-      } as never);
-      if (eRpc) { toast({ title: "Não deu para atribuir", description: eRpc.message, variant: "destructive" }); return; }
-      if (papel === "responsavel") {
-        const { error: eP } = await tabelaSemTipo("activity_assignees")
-          .update({ papel: "responsavel" } as never).eq("activity_id", activityId).eq("user_id", userId);
-        if (eP) toast({ title: "Atribuído como participante", description: `Não deu para tornar responsável: ${eP.message}`, variant: "destructive" });
-      }
+    if (error) {
+      toast({ title: "Não deu para atribuir", description: error.message, variant: "destructive" });
+      return;
     }
     await carregar();
   }, [activityId, user?.id, carregar, toast]);
