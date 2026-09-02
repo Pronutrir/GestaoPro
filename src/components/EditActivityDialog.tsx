@@ -1328,7 +1328,8 @@ export const EditActivityDialog = ({
         tags: formData.tags,
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
-        participants: formData.participants.filter((p) => p && p.trim().length > 0),
+        // participants não é mais gravado pelo dialog: a gestão centraliza nos
+        // Responsáveis (só da equipe). A coluna existente fica intacta.
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
@@ -1774,17 +1775,10 @@ export const EditActivityDialog = ({
               <TabsTrigger value="details" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                 <FileText className="w-3.5 h-3.5" /> Detalhes
               </TabsTrigger>
-              <TabsTrigger value="team" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
-                {/* "Equipe" sugeria a equipe do PROJETO, que se configura em
-                    Editar projeto e vale para todas as atividades. Aqui são as
-                    pessoas desta atividade — e o conteúdo da aba já dizia
-                    "Participantes da atividade". O rótulo estava contradizendo
-                    o próprio conteúdo. */}
-                <Users className="w-3.5 h-3.5" /> Participantes
-                {formData.participants.filter(Boolean).length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0 rounded-full bg-primary/15 text-primary font-semibold">{formData.participants.filter(Boolean).length}</span>
-                )}
-              </TabsTrigger>
+              {/* ABA "PARTICIPANTES" REMOVIDA (01/09/2026): a gestão da atividade
+                  centraliza nos Responsáveis (só da equipe). O conteúdo da aba
+                  ficou órfão abaixo (sem gatilho, o Radix nunca o renderiza) e
+                  não é mais alcançável. */}
               {/* Subatividades: só para itens que AGRUPAM na EAP. Marco é um ponto
                   no tempo (folha) — nunca tem subitens, então a aba é ocultada. */}
               {act && projectId && !formData.is_milestone && (
@@ -2439,8 +2433,21 @@ export const EditActivityDialog = ({
                     <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Responsável">
                       <div className="w-full">
                         <PersonCombobox
-                          people={allProfiles}
-                          value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                          /* SÓ A EQUIPE (01/09/2026): o responsável é escolhido
+                             só entre os membros do projeto (`members`). O valor
+                             atual entra como opção própria se for legado fora da
+                             equipe, para não sumir do campo. */
+                          people={(() => {
+                            const equipe = allProfiles.filter((m) => members.some((x) => x.id === m.id));
+                            if (formData.assigned_to && !equipe.some((m) => m.full_name === formData.assigned_to)) {
+                              return [{ id: `__livre__:${formData.assigned_to}`, full_name: formData.assigned_to }, ...equipe];
+                            }
+                            return equipe;
+                          })()}
+                          value={
+                            allProfiles.find((m) => m.full_name === formData.assigned_to)?.id
+                              ?? (formData.assigned_to ? `__livre__:${formData.assigned_to}` : null)
+                          }
                           placeholder="Sem responsável"
                           onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
                           onClear={() => setFormData({ ...formData, assigned_to: "" })}

@@ -34,6 +34,10 @@ test("a tela tem só Responsáveis — Participantes saiu", async ({ page }) => 
     "o campo Participantes deveria ter saído da tela").toHaveCount(0);
 });
 
+// (o dialog "Editar" vive na página do projeto, que rlgt — só responsável, não
+//  membro — não acessa. Ele é validado em e2e/editar-sem-participantes.spec.ts,
+//  com uma conta que alcança a página do projeto.)
+
 test("o seletor de responsável só oferece a equipe, e inclui sem toast (vários)", async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto(`/project/${PROJ}/atividade/${ATIV}`);
