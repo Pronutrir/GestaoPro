@@ -474,14 +474,25 @@ export default function PaginaDaAtividade() {
     toast({ title: "Lição criada", description: "Complete o problema e a solução na aba Lições." });
   }, [atividade, activityId, projectId, nomeDeQuemFez, user?.id, toast]);
 
-  // BUSCAR pessoas para atribuir: perfis ativos, filtrados pelo texto. A
-  // inclusão na equipe (se faltar) acontece dentro de incluir_e_atribuir.
+  // BUSCAR pessoas para atribuir — SÓ A EQUIPE DO PROJETO (01/09/2026).
+  //
+  // O responsável é escolhido exclusivamente entre os membros da equipe
+  // (project_members). É o par, no seletor, da regra que o gatilho
+  // trg_assignee_exige_equipe garante no banco: assignee tem de ser da equipe.
+  // Sem esta restrição, o seletor ofereceria gente que o banco recusaria.
   const buscarPessoas = useCallback(async (q: string): Promise<{ id: string; nome: string }[]> => {
-    let query = supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name").limit(8);
+    const { data: membros } = await tabelaSemTipo("project_members")
+      .select("user_id").eq("project_id", projectId);
+    const ids = ((membros ?? []) as Record<string, unknown>[])
+      .map((m) => String(m.user_id ?? "")).filter(Boolean);
+    if (ids.length === 0) return [];
+    let query = supabase.from("profiles").select("id, full_name")
+      .eq("is_active", true).in("id", ids).order("full_name").limit(8);
     if (q.trim()) query = query.ilike("full_name", `%${q.trim()}%`);
     const { data } = await query;
-    return ((data ?? []) as Record<string, unknown>[]).map((p) => ({ id: String(p.id), nome: String(p.full_name ?? "sem nome") }));
-  }, []);
+    return ((data ?? []) as Record<string, unknown>[])
+      .map((p) => ({ id: String(p.id), nome: String(p.full_name ?? "sem nome") }));
+  }, [projectId]);
 
   /* ── TRADUÇÃO PARA O VOCABULÁRIO DA TELA ───────────────────────────────── */
   const dados: DadosDaTela | null = useMemo(() => {

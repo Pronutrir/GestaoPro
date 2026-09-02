@@ -98,7 +98,8 @@ AS $$
              AND aa.user_id = _user_id
              AND aa.papel = 'responsavel'
         )
-        -- VIA LEGADA -- SÓ assigned_to, NUNCA participants
+        -- VIA LEGADA -- só a coluna do responsável (assigned_to), não a de quem
+        -- executa junto (a verificação abaixo trava se esta função ler aquela).
         OR (a.assigned_to IS NOT NULL AND (
           -- uuid em texto: identificador
           lower(trim(a.assigned_to)) = lower(trim(_user_id::text))

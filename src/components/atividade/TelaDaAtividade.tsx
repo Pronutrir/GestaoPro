@@ -189,7 +189,6 @@ export function TelaDaAtividade({
     pode && aoGravarCampo ? (v: string) => aoGravarCampo(campo, v) : undefined;
 
   const responsaveis = pessoas.filter((p) => p.papel === "responsavel");
-  const participantes = pessoas.filter((p) => p.papel === "participante");
 
   const concluidas = subatividades.filter((s) => s.concluida).length;
   const resumoSubs = resumoDasSubatividades(totais, formatarDataBR, concluidas);
@@ -297,6 +296,10 @@ export function TelaDaAtividade({
         {/* ── RESUMO ─────────────────────────────────────────────────── */}
         <div className="rounded-[6px] border border-border bg-card p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-3">
+            {/* SÓ RESPONSÁVEIS (01/09/2026). "Participantes" saiu: a gestão da
+                atividade fica centralizada nos responsáveis, escolhidos só entre
+                a equipe do projeto (buscarPessoas). Vários responsáveis são
+                permitidos — o seletor SOMA em vez de trocar. */}
             <PessoasNoResumo
               rotulo="Responsáveis"
               papel="responsavel"
@@ -304,17 +307,6 @@ export function TelaDaAtividade({
               vazioTexto="sem responsável"
               vazioVerbo="+ atribuir alguém"
               bloqueiaSeVazio
-              podeEditar={!!capacidades.editarPessoas}
-              aoAtribuir={aoAtribuir}
-              aoRemover={aoRemoverPessoa}
-              buscarPessoas={buscarPessoas}
-            />
-            <PessoasNoResumo
-              rotulo="Participantes"
-              papel="participante"
-              pessoas={participantes}
-              vazioTexto="ninguém"
-              vazioVerbo="+ incluir participante"
               podeEditar={!!capacidades.editarPessoas}
               aoAtribuir={aoAtribuir}
               aoRemover={aoRemoverPessoa}

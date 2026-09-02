@@ -20,11 +20,11 @@ O projeto é da equipe **e** do gestor. Isso separa dois eixos que nunca podem s
 | Trabalho | quem faz o quê | a equipe, através dos responsáveis da atividade |
 
 **Regra inviolável:** atribuir alguém a uma atividade nunca dá a essa pessoa acesso que ela
-não tinha ao **projeto**. Há dois atos distintos, e as duas checagens vivem no banco:
-**incluir na atividade** (vínculo escopado — a pessoa passa a ver e executar aquela atividade
-e a **subárvore** dela, nunca o projeto inteiro) é ato de quem **responde pelo ramo**;
-**incluir na equipe** (acesso ao projeto) é ato de quem **gerencia a equipe**. A primeira é a
-decisão de 01/09/2026 (ver o passo 5 abaixo); a segunda é a de sempre.
+não tinha ao **projeto**. Por isso o responsável é escolhido **só entre a equipe do projeto**
+— quem já tem acesso — e o banco recusa assignee de fora (`trg_assignee_exige_equipe`). Trazer
+alguém **novo** ao projeto é **incluir na equipe**, ato de quem **gerencia a equipe**.
+*(01/09/2026: chegou a existir por algumas horas uma inclusão escopada de gente de fora; foi
+revertida no mesmo dia. A decisão final é responsável só da equipe.)*
 
 ## Ordem de decisão de acesso
 
@@ -35,11 +35,12 @@ Espelhada entre `lib/activityAccess.ts` e a RLS. Se as duas divergirem, **a RLS 
 3. É dono ou gestor deste projeto? → tudo dentro do projeto
 4. Está na equipe do projeto? → o papel manda
 5. É responsável desta atividade **ou de um ancestral**? → edita a atividade e **toda a
-   subárvore** (execução e planejamento) e inclui pessoas (escopadas) nela. É só participante?
-   → **execução apenas**. *(01/09/2026: o responsável do ramo passou a alcançar a subárvore
-   inteira, revertendo de propósito o "só o pai direto" de 31/08. Espelhado entre a RLS —
-   `eh_descendente_de_atividade_do_responsavel`, `can_update_activity_v2` — e
-   `lib/activityAccess.ts`. Excluir continua fora desta via; a equipe do projeto, também.)*
+   subárvore** (execução e planejamento) e define os **responsáveis** dela e das filhas —
+   sempre **entre a equipe do projeto**. É só participante? → **execução apenas**.
+   *(01/09/2026: o responsável do ramo alcança a subárvore inteira —
+   `eh_descendente_de_atividade_do_responsavel`, `can_update_activity_v2`, espelhado em
+   `lib/activityAccess.ts`. Excluir continua fora desta via. A tela v2 tem só "Responsáveis"
+   — o campo "Participantes" saiu — e os responsáveis vêm só da equipe.)*
 6. Nada disso → a atividade não existe para essa pessoa
 
 `matriz-acesso.json` tem os 108 casos com o resultado esperado e qual passo decidiu cada um.
@@ -51,8 +52,11 @@ fase 03.
 
 ## Vocabulário
 
-- **Responsável** — responde pela entrega. No máximo um por atividade. Hoje: `assigned_to`.
-- **Participante** — executa junto. N por atividade. Conta para carga de trabalho. Hoje: `participants`.
+- **Responsável** — responde pela entrega. **Um ou mais** por atividade (o teto de um só saiu
+  em 01/09/2026), escolhido **só entre a equipe** do projeto. Hoje: `assigned_to` + `activity_assignees`.
+- **Participante** — executava junto. **Saiu da tela da atividade v2** (01/09/2026): a gestão
+  centraliza nos responsáveis. A coluna `participants` e o efeito em carga seguem no banco, sem
+  campo na tela.
 - **Observador** — só acompanha. **Nenhum efeito em permissão.** Não existe hoje.
 - **Promover** — mover do backlog para o quadro. É decisão de escopo (`canEditPlanejamento`).
 - **Assumir** — pegar para si atividade sem responsável que já está no quadro. É execução.
