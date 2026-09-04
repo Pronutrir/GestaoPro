@@ -1,5 +1,12 @@
 # Divergências entre o kit e o repositório
 
+> **ATUALIZAÇÃO 04/09/2026:** este arquivo registra o estado do repositório em
+> 25/08/2026, antes de instalar o kit. Desde então, **todas as migrations
+> relevantes (P00 incluída) foram confirmadas aplicadas em produção** — ver
+> `docs/atividade-v2/LEIAME.md` e `docs/DEPLOY.md` para o estado atual. As seções
+> abaixo continuam válidas como registro histórico de decisão, não como estado
+> presente do banco.
+
 O `CLAUDE.md` do kit diz: *"o repositório é a verdade; quando divergir, o código ganha — e me
 avise da divergência em vez de corrigir o código para bater com o documento."*
 
@@ -109,7 +116,7 @@ Registrado para não se perder no meio das correções:
 | V1 · medir quem perde acesso | **FEITO** — 95 membros, 7 só-leitura, **0** com `can_edit_own=false`: ninguém perde acesso |
 | V2 · rótulos do diálogo | **feito** — commit `81494c1` |
 | V3 · front respeita `can_edit_own` | **feito** — commit `acb5307` |
-| V4 · RLS respeita `can_edit_own` | **escrito, não aplicado** (conferido: não consta em `schema_migrations`) — `20260825150000`, roda por `scripts/apply-visualizar-nao-edita.sh` |
+| V4 · RLS respeita `can_edit_own` | **APLICADA** (confirmado por esquema em 04/09/2026: `project_members.can_edit_own` existe e é lida por `can_update_activity_v2`) — `20260825150000` |
 
 A migration `20260825140000` (Gestor do Projeto na via da equipe) **JÁ FOI APLICADA** — consta
 em `schema_migrations` e `can_member_action` responde. Não há prova empírica isolada do

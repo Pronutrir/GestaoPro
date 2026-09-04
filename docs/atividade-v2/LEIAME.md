@@ -1,5 +1,14 @@
 # Atividade v2 - kit de execucao
 
+> **ATUALIZAÇÃO 04/09/2026 — CONFIRMADO EM PRODUÇÃO:** todas as 16 migrations desta
+> leva (fase 00 a 09, homônimos, progresso, conversão, P00, congelar item_type,
+> responsável edita a subárvore e responsável da equipe/vários) foram conferidas
+> **pelo esquema real** da VM (`20.65.208.119`, app `pronutrir/gestaopro:v2026-09-02-01`)
+> via PostgREST — não pela tabela `schema_migrations`, que já divergiu do esquema
+> antes. **16 de 16 confirmadas.** As seções abaixo que descrevem migrations como
+> "pendentes na VM" ou "estado B" são **históricas** — o texto foi mantido para
+> registro, mas a situação real hoje é: aplicado.
+
 > **LEIA PRIMEIRO:** `DIVERGENCIAS.md`. Quatro premissas do kit nao batem com este
 > repositorio - a principal e que **`lider_id` nao existe** (o que existe e `assigned_to`
 > + `participants`). As fases 02, 03 e 05 foram anotadas com a correcao.
@@ -100,16 +109,19 @@ código que parece pronto e não está — e o próximo a mexer confiaria nele.
 Com a aplicação de pé e as migrations aplicadas, essa parte se faz com
 segurança, uma tela por vez.
 
-### Migrations pendentes na VM, NESTA ORDEM
+### Migrations — histórico do que estava pendente (TODAS aplicadas em 04/09/2026)
 
 ```bash
-./scripts/apply-visualizar-nao-edita.sh              # 20260825150000
-./scripts/apply-fase02-assignees.sh                  # 20260826120000 (recusa se a anterior faltar)
-./scripts/apply-fase09-derivacao.sh                  # 20260826130000
-./scripts/apply-fase04-estagio.sh                    # 20260826140000
+./scripts/apply-visualizar-nao-edita.sh              # 20260825150000 — APLICADA
+./scripts/apply-fase02-assignees.sh                  # 20260826120000 — APLICADA
+./scripts/apply-fase09-derivacao.sh                  # 20260826130000 — APLICADA
+./scripts/apply-fase04-estagio.sh                    # 20260826140000 — APLICADA
 ```
 
 `20260825140000` (Gestor do Projeto) **já está aplicada** — conferido em produção.
+**04/09/2026: confirmado por esquema que as quatro acima, mais P00 (20260826150000),
+20260826160000/170000/180000/190000/200000, 20260827120000/130000, e as duas de
+01/09 (20260901120000, 20260901140000) — todas estão no ar.**
 
 Cada script tem sonda antes, confirmação, e sonda depois. O da fase 04 imprime a
 consulta do **critério de abandono** — guarde a saída.

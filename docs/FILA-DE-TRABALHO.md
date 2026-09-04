@@ -1,5 +1,14 @@
 # Fila de trabalho — o que está esperando, e esperando o quê
 
+> **ATUALIZAÇÃO 04/09/2026:** os itens abaixo foram registrados durante o
+> incidente de 27/08/2026 e nos dias seguintes. Confirmado por esquema real em
+> produção (04/09/2026) que **todas as migrations de permissão/acesso desta
+> leva estão aplicadas** (P00, fase 02/04/09, homônimos, progresso, conversão,
+> congelar item_type, responsável edita subárvore, responsável da equipe).
+> A VM roda `pronutrir/gestaopro:v2026-09-02-01`. Itens de UI/dado abaixo podem
+> ainda valer — não foram reconferidos nesta atualização — mas o bloqueio de
+> migration pendente **não existe mais**.
+
 > Um item por bloco. Cada um diz **o que fazer**, **por que**, e sobretudo
 > **o que precisa acontecer antes** — porque a ordem aqui não é preferência,
 > é dependência.
