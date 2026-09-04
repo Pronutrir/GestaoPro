@@ -305,8 +305,12 @@ export default function ProjectDetailsPage() {
       // zeram TODA escrita e já são testados em canCreate/canEdit/... Esta
       // coluna é sobre o papel do membro, e só afeta a via do ator.
       canEditOwn: userPerms?.can_edit_own ?? true,
+      // Visualizador (perfil de SISTEMA) encerra dentro da própria função —
+      // não é papel de equipe, e sem isto um Visualizador responsável por
+      // uma atividade editava por essa via mesmo sendo só-leitura.
+      ehVisualizador: !canWrite,
     });
-  }, [canEdit, canMove, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own]);
+  }, [canEdit, canMove, canWrite, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own]);
 
   /**
    * "É MINHA?" — a mesma fonte de `canMutateActivity`, não uma cópia.

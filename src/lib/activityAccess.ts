@@ -177,6 +177,18 @@ export function podeMutarAtividade(
   if (!atividade) return false;
   if (usuario.isAdmin) return true;
 
+  /**
+   * 2. Visualizador ENCERRA — precisa vir ANTES de qualquer outro passo.
+   *
+   * Sem este teste, um Visualizador que fosse responsável/participante de uma
+   * atividade (via `assigned_to`/`participants`) editava por essa via: a via
+   * do ator só olha `canEditOwn` (coluna de EQUIPE), que não tem relação
+   * nenhuma com o perfil Visualizador do SISTEMA. Era possível editar mesmo
+   * sendo só-leitura. Espelha o passo 2 de `capacidadesNaAtividade` — a
+   * mesma regra vivia em dois lugares e só um deles a aplicava.
+   */
+  if (usuario.ehVisualizador) return false;
+
   // 3. Equipe com permissão: vale para QUALQUER atividade do projeto, então é
   //    testado antes de montar os candidatos de identidade (mais barato).
   if (usuario.canEdit || usuario.canMove) return true;

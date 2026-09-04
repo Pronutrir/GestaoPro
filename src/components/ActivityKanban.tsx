@@ -265,7 +265,7 @@ export const ActivityKanban = ({
   // é a verdade — ver lib/kanbanPrefs.ts.
   //
   // FILTROS continuam locais de propósito (busca do momento, não gosto).
-  const { user, profile } = useAuth();
+  const { user, profile, canWrite } = useAuth();
   // `restaurarPrefs` existe no hook mas não é usado aqui: o "Restaurar" da tela
   // fica sob "Campos do card" e restaura só eles — zerar larguras e raias num
   // clique com esse rótulo surpreenderia.
@@ -1078,8 +1078,12 @@ export const ActivityKanban = ({
       canEdit,
       canMove,
       canEditOwn,
+      // Mesma correção da página do projeto: Visualizador encerra dentro da
+      // função, não só por fora — sem isto, responsável/participante que
+      // fosse Visualizador editava pela via do ator.
+      ehVisualizador: !canWrite,
     });
-  }, [isAdmin, canEdit, canMove, canEditOwn, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id]);
+  }, [isAdmin, canEdit, canMove, canEditOwn, canWrite, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
