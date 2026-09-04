@@ -65,7 +65,7 @@ const tabelaSemTipo = (nome: string) => supabase.from(nome as never);
 export default function PaginaDaAtividade() {
   const params = useParams();
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { user, profile, canWrite } = useAuth();
   const { toast } = useToast();
 
   /** O nome que vai para o feed. Nunca UUID: o histórico é para gente ler. */
@@ -263,7 +263,11 @@ export default function PaginaDaAtividade() {
         fullName: (profile as Record<string, unknown>)?.full_name as string | undefined,
         email: user?.email,
         isAdmin: !!(profile as Record<string, unknown>)?.is_admin,
-        ehVisualizador: false,
+        // Antes fixo em `false` — um Visualizador que abrisse esta tela direto
+        // (por link, ou ator de uma atividade) escapava do teto que as outras
+        // duas telas já aplicam (ver lib/activityAccess.ts). `canWrite` vem de
+        // AuthContext e é `false` só para o perfil Visualizador do sistema.
+        ehVisualizador: !canWrite,
         /**
          * O PAPEL NA EQUIPE — sem isto o passo 4 nunca é alcançado.
          *
@@ -282,7 +286,7 @@ export default function PaginaDaAtividade() {
       },
     );
     return c;
-  }, [atividade, projeto, user, profile, papelNaEquipe]);
+  }, [atividade, projeto, user, profile, papelNaEquipe, canWrite]);
 
   /* ── GRAVAR UM CAMPO ───────────────────────────────────────────────────
    *
