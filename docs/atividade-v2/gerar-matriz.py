@@ -22,6 +22,7 @@ def decidir(perfil, papel, vinculo):
         if papel == "fora_da_equipe" and not ligado:
             return c, "6-sem-acesso", "nenhum"
         c["canView"] = True
+        c["canComment"] = True  # decisão de produto (04/09/2026): Visualizador comenta
         return c, "2-perfil-visualizador", "projeto" if papel != "fora_da_equipe" else "atividade_e_trilha"
     if papel == "dono_gestor":
         return {k: True for k in CAPS}, "3-dono-gestor-do-projeto", "projeto"

@@ -1325,7 +1325,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1343,7 +1343,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1361,7 +1361,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1379,7 +1379,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1397,7 +1397,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1415,7 +1415,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1433,7 +1433,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1451,7 +1451,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1469,7 +1469,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1487,7 +1487,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1505,7 +1505,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1523,7 +1523,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1541,7 +1541,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1559,7 +1559,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1577,7 +1577,7 @@
       "escopoDeLeitura": "projeto",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1613,7 +1613,7 @@
       "escopoDeLeitura": "atividade_e_trilha",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,
@@ -1631,7 +1631,7 @@
       "escopoDeLeitura": "atividade_e_trilha",
       "esperado": {
         "canView": true,
-        "canComment": false,
+        "canComment": true,
         "canEditExecucao": false,
         "canEditPlanejamento": false,
         "canAssign": false,

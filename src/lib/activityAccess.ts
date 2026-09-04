@@ -385,16 +385,21 @@ export function capacidadesNaAtividade(
     ehResponsavelDaAtividade(atividade, usuario) || ehResponsavelDeAncestral;
 
   /**
-   * 2 — Visualizador ENCERRA.
+   * 2 — Visualizador ENCERRA A ESCRITA — mas comenta.
    *
-   * Sem nem comentar: decisão de 26/08/2026. O papel do projeto chamado
-   * "Visualizar e comentar" é outra coisa — ali comentar vale (passo 4).
-   * Aqui é o PERFIL DE SISTEMA, que zera toda escrita, e comentário é escrita.
+   * Decisão de produto revista em 04/09/2026: o perfil de sistema Visualizador
+   * pode comentar. Antes (26/08/2026) nem isso valia — a leitura desta versão
+   * é que "comentário é escrita" e por isso caía junto com o resto. A decisão
+   * nova separa as duas coisas: quem só acompanha ainda pode opinar/perguntar
+   * sobre o que vê, sem poder editar nada. O papel de projeto "Visualizar e
+   * comentar" (passo 4) já tratava comentário como algo à parte da edição —
+   * esta mudança alinha o perfil de SISTEMA ao mesmo raciocínio.
    *
-   * O QUE O TETO NÃO FAZ É CEGAR. Ele anula a ESCRITA, não a leitura: um
-   * Visualizador que lidera o projeto continua enxergando o projeto inteiro —
-   * só não mexe em nada. Confundir os dois faria o teto esconder de alguém
-   * justamente o que ele foi posto ali para acompanhar.
+   * O QUE O TETO NÃO FAZ É CEGAR. Ele anula EDIÇÃO, não leitura nem comentário:
+   * um Visualizador que lidera o projeto continua enxergando o projeto
+   * inteiro e pode comentar — só não mexe em nada. Confundir os dois faria o
+   * teto esconder de alguém justamente o que ele foi posto ali para
+   * acompanhar.
    *
    * `lideraProjeto` é calculado antes deste bloco por isso: ele decide o
    * ESCOPO mesmo quando o passo 3 não chega a ser alcançado.
@@ -403,7 +408,7 @@ export function capacidadesNaAtividade(
     const alcanca = usuario.naEquipe || lideraProjeto || ator;
     if (!alcanca) return monta(NADA, "6-sem-acesso", "nenhum");
     return monta(
-      { ...NADA, canView: true },
+      { ...NADA, canView: true, canComment: true },
       "2-perfil-visualizador",
       usuario.naEquipe || lideraProjeto ? "projeto" : "atividade_e_trilha",
     );

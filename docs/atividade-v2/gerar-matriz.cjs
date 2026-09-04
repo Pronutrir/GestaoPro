@@ -37,10 +37,14 @@ function decidir(perfil, papel, vinculo) {
   // 1
   if (perfil === "admin") return [tudo(), "1-admin", "projeto"];
 
-  // 2 — canWrite = false anula qualquer papel de projeto
+  // 2 — canWrite = false anula qualquer papel de EDIÇÃO, mas não comentário.
+  // Decisão de produto (04/09/2026): Visualizador pode comentar — ele
+  // acompanha e pode opinar/perguntar, só não edita. Só leitura + comentário
+  // onde alcança; escrita continua vedada em todo o resto.
   if (perfil === "visualizador") {
     if (papel === "fora_da_equipe" && !ligado) return [c, "6-sem-acesso", "nenhum"];
     c.canView = true;
+    c.canComment = true;
     return [c, "2-perfil-visualizador", papel !== "fora_da_equipe" ? "projeto" : "atividade_e_trilha"];
   }
 
