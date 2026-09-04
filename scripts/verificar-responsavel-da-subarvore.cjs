@@ -73,7 +73,9 @@ check("...decidido no passo 5 (ator/subárvore)", cSub.passoQueDecidiu === "5-at
   `passo obtido: ${cSub.passoQueDecidiu}`);
 check("...com escopo de leitura atividade_e_trilha", cSub.escopoDeLeitura === "atividade_e_trilha",
   `escopo obtido: ${cSub.escopoDeLeitura}`);
-check("mas NÃO exclui (a via do ator não vale para DELETE)", cSub.canDelete === false);
+// 04/09/2026: decisão de produto reverteu a trava de 01/09 — o responsável
+// do ramo agora EXCLUI (soft-delete) dentro da própria subárvore.
+check("e TAMBÉM exclui dentro da própria subárvore (decisão 04/09/2026)", cSub.canDelete === true);
 check("e NÃO gerencia a equipe do projeto", cSub.canManageTeam === false);
 
 // PARTICIPANTE de um ancestral NÃO herda nada da subárvore.

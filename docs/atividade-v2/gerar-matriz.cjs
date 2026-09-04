@@ -16,7 +16,7 @@ const PAPEIS = ["dono_gestor", "editar_excluir", "editar_tudo", "editar_minhas",
 const VINCULOS = ["nenhum", "participante", "responsavel"];
 
 const CAPS = ["canView", "canComment", "canEditExecucao", "canEditPlanejamento",
-  "canAssign", "canPromover", "canAssumir", "canDelete", "canManageTeam"];
+  "canAssign", "canPromover", "canAssumir", "canCreate", "canDelete", "canManageTeam"];
 
 const nada = () => CAPS.reduce((o, c) => (o[c] = false, o), {});
 const tudo = () => CAPS.reduce((o, c) => (o[c] = true, o), {});
@@ -55,7 +55,7 @@ function decidir(perfil, papel, vinculo) {
   if (papel === "editar_excluir") {
     Object.assign(c, {
       canView: true, canComment: true, canEditExecucao: true, canEditPlanejamento: true,
-      canAssign: true, canPromover: true, canAssumir: true, canDelete: true,
+      canAssign: true, canPromover: true, canAssumir: true, canCreate: true, canDelete: true,
     });
     return [c, "4-equipe-editar-e-excluir", "projeto"];
   }
@@ -72,8 +72,12 @@ function decidir(perfil, papel, vinculo) {
     Object.assign(c, { canView: true, canComment: true, canAssumir: true });
     if (ligado) {
       Object.assign(c, { canEditExecucao: true, canEditPlanejamento: true });
-      // só o responsável atribui, e só dentro da própria atividade
-      c.canAssign = (vinculo === "responsavel");
+      // só o responsável atribui/cria/exclui, e só dentro da própria atividade
+      // (04/09/2026: criar e excluir passam a seguir a mesma regra de atribuir)
+      const souResponsavel = (vinculo === "responsavel");
+      c.canAssign = souResponsavel;
+      c.canCreate = souResponsavel;
+      c.canDelete = souResponsavel;
     }
     return [c, "4-equipe-editar-apenas-as-minhas", "projeto"];
   }
@@ -90,8 +94,11 @@ function decidir(perfil, papel, vinculo) {
       // 01/09/2026: o RESPONSÁVEL edita o plano e atribui — na própria e, via
       // subárvore, nas filhas (a subárvore vive num guard próprio, fora destes
       // 108 casos de vínculo direto). Participante segue execução apenas.
+      // 04/09/2026: o mesmo responsável passa a também criar (subatividade) e
+      // excluir (soft-delete) dentro do próprio ramo — reverte a trava de
+      // 01/09 que vedava DELETE à via do ator.
       if (vinculo === "responsavel") {
-        Object.assign(c, { canEditPlanejamento: true, canAssign: true });
+        Object.assign(c, { canEditPlanejamento: true, canAssign: true, canCreate: true, canDelete: true });
       }
       return [c, "5-ator-da-atividade", "atividade_e_trilha"];
     }

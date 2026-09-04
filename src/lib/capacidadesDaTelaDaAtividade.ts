@@ -31,6 +31,7 @@ export function capacidadesDaTela(c: {
   canEditExecucao: boolean;
   canEditPlanejamento: boolean;
   canAssign: boolean;
+  canCreate: boolean;
 }): CapacidadesDaTela {
   return {
     // Renomear é decidir o que a atividade É — escopo, não execução.
@@ -47,8 +48,16 @@ export function capacidadesDaTela(c: {
     // Custo é planejamento (CLAUDE.md: previsto, GUT, custo, posição na EAP).
     editarCusto: c.canEditPlanejamento,
     editarPessoas: c.canAssign,
-    // Criar subatividade é decidir escopo: quebra o trabalho em partes.
-    criarSubatividade: c.canEditPlanejamento,
+    /**
+     * Criar subatividade é decisão de RESPONSÁVEL DO RAMO, não de quem só
+     * planeja o próprio campo. Antes usava `canEditPlanejamento`, que também é
+     * `true` para um participante/ator simples no papel "Editar apenas as
+     * minhas" (passo 4 de `capacidadesNaAtividade`) — deixava esse
+     * participante criar subatividade sem ser responsável por nada, o que a
+     * decisão de 04/09/2026 fecha: só quem responde pelo ramo cria
+     * (`can_create_activity_v2`/RLS 20260904150000).
+     */
+    criarSubatividade: c.canCreate,
     concluir: c.canEditExecucao,
     comentar: c.canComment,
     // Mudar Fase/Entrega/Atividade/Marco é decidir o que a atividade É — escopo.

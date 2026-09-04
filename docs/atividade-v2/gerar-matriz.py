@@ -8,7 +8,7 @@ PAPEIS = ["dono_gestor","editar_excluir","editar_tudo","editar_minhas","ver_come
 VINCULOS = ["nenhum","participante","responsavel"]
 
 CAPS = ["canView","canComment","canEditExecucao","canEditPlanejamento",
-        "canAssign","canPromover","canAssumir","canDelete","canManageTeam"]
+        "canAssign","canPromover","canAssumir","canCreate","canDelete","canManageTeam"]
 
 def nada():
     return {c: False for c in CAPS}
@@ -28,7 +28,7 @@ def decidir(perfil, papel, vinculo):
         return {k: True for k in CAPS}, "3-dono-gestor-do-projeto", "projeto"
     if papel == "editar_excluir":
         c.update(canView=True, canComment=True, canEditExecucao=True, canEditPlanejamento=True,
-                 canAssign=True, canPromover=True, canAssumir=True, canDelete=True)
+                 canAssign=True, canPromover=True, canAssumir=True, canCreate=True, canDelete=True)
         return c, "4-equipe-editar-e-excluir", "projeto"
     if papel == "editar_tudo":
         c.update(canView=True, canComment=True, canEditExecucao=True, canEditPlanejamento=True,
@@ -38,7 +38,12 @@ def decidir(perfil, papel, vinculo):
         c.update(canView=True, canComment=True, canAssumir=True)
         if ligado:
             c.update(canEditExecucao=True, canEditPlanejamento=True)
-            c["canAssign"] = (vinculo == "responsavel")
+            # 04/09/2026: criar e excluir seguem a mesma regra de atribuir —
+            # só o responsável, nunca o simples participante.
+            sou_responsavel = (vinculo == "responsavel")
+            c["canAssign"] = sou_responsavel
+            c["canCreate"] = sou_responsavel
+            c["canDelete"] = sou_responsavel
         return c, "4-equipe-editar-apenas-as-minhas", "projeto"
     if papel == "ver_comentar":
         c.update(canView=True, canComment=True)
@@ -46,6 +51,11 @@ def decidir(perfil, papel, vinculo):
     if papel == "fora_da_equipe":
         if ligado:
             c.update(canView=True, canComment=True, canEditExecucao=True)
+            # 01/09/2026: responsável edita o plano e atribui na própria (e,
+            # via subárvore, nas filhas — guard próprio, fora destes 108
+            # casos). 04/09/2026: o mesmo responsável também cria e exclui.
+            if vinculo == "responsavel":
+                c.update(canEditPlanejamento=True, canAssign=True, canCreate=True, canDelete=True)
             return c, "5-ator-da-atividade", "atividade_e_trilha"
         return c, "6-sem-acesso", "nenhum"
     return c, "6-sem-acesso", "nenhum"

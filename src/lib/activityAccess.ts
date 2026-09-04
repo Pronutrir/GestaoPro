@@ -44,6 +44,13 @@ export interface AtividadeParaAcesso {
   assigned_to?: string | null;
   participants?: string[] | null;
 
+  /**
+   * O pai desta atividade — só usado para subir a árvore localmente
+   * (`souResponsavelDeAncestralNaArvore`). Ausente/`null` em consultas que
+   * não pedem a coluna: nesse caso a subida simplesmente não acontece.
+   */
+  parent_id?: string | null;
+
   // ── Identificador, quando a conversão já respondeu ──────────────────────
   // Migration 20260826200000. Quando presentes, MANDAM: são FK, e homônimo
   // não os confunde. Quando ausentes (pendente, ou consulta que não pediu a
@@ -224,6 +231,15 @@ export function podeMutarAtividade(
   // 4a. Criador da atividade — comparação por id, que é FK de verdade aqui.
   if (usuario.id && atividade.created_by && atividade.created_by === usuario.id) return true;
 
+  // 4c ANTES de 4b terminar. Motivo: quando as colunas de identificador ja
+  // vieram convertidas, vinculoPorIdentificador devolve `false` DEFINITIVO
+  // (nao null) -- e um `return porId` ali encerraria a funcao ANTES de
+  // chegar no teste da subarvore. Era exatamente o caso de A.1 (colunas
+  // convertidas, vinculo direto nenhum, mas RESP responde por A, o pai):
+  // a funcao retornava false sem nunca olhar `souResponsavelDeAncestral`.
+  // Reportado em 04/09/2026 (teste 3.2 do checklist).
+  if (atividade.souResponsavelDeAncestral) return true;
+
   // 4b. Responsável OU participante — a RLS reconhece os dois.
   //     IDENTIFICADOR primeiro: quando a conversão já respondeu, homônimo não
   //     confunde. Só cai no texto quando a resposta por id é "não sei".
@@ -231,8 +247,16 @@ export function podeMutarAtividade(
   if (porId !== null) return porId;
 
   if (matchesIdentity(atividade.assigned_to, candidatos)) return true;
-  return Array.isArray(atividade.participants)
-    && anyMatchesIdentity(atividade.participants, candidatos);
+  if (Array.isArray(atividade.participants) && anyMatchesIdentity(atividade.participants, candidatos)) {
+    return true;
+  }
+
+  // 4c (continuacao). O atalho do PAI DIRETO (responsavel_do_pai) e a
+  // comparacao textual continuam aqui para quem nao tem `souResponsavelDeAncestral`
+  // pre-calculado (ex.: telas que so mandam o pai direto, nao o RPC completo).
+  return matchesIdentity(atividade.responsavel_do_pai, candidatos)
+    || (!!atividade.responsavel_do_pai_id && !!usuario.id
+        && atividade.responsavel_do_pai_id === usuario.id);
 }
 
 /**
@@ -287,6 +311,96 @@ export function ehResponsavelDaAtividade(
   return matchesIdentity(atividade.assigned_to, candidatos);
 }
 
+/**
+ * Sobe a árvore, a partir de `atividade.parent_id`, em busca de um ANCESTRAL
+ * do qual `usuario` é responsável — versão CLIENT-SIDE de
+ * `eh_descendente_de_atividade_do_responsavel` (RLS, 20260901120000), para
+ * telas que já têm a lista de atividades do projeto em memória (o Kanban) e
+ * não querem pagar um round-trip de RPC por card.
+ *
+ * `porId` é o mapa id -> atividade (mesmo formato de `AtividadeParaAcesso`,
+ * com pelo menos `id`, `parent_id`, `assigned_to_id`, `assigned_to`).
+ */
+export function souResponsavelDeAncestralNaArvore(
+  atividade: AtividadeParaAcesso | null | undefined,
+  porId: Map<string, AtividadeParaAcesso>,
+  usuario: Pick<UsuarioParaAcesso, "id" | "email" | "fullName" | "profileId">,
+): boolean {
+  if (!atividade?.parent_id || !usuario.id) return false;
+  const candidatos = buildUserCandidates([
+    usuario.fullName, usuario.email, usuario.profileId, usuario.id,
+  ]);
+  const visitados = new Set<string>();
+  let paiId: string | null | undefined = atividade.parent_id;
+  while (paiId && !visitados.has(paiId)) {
+    visitados.add(paiId);
+    const pai = porId.get(paiId);
+    if (!pai) break;
+    if (pai.assigned_to_id) {
+      if (pai.assigned_to_id === usuario.id) return true;
+    } else if (matchesIdentity(pai.assigned_to, candidatos)) {
+      return true;
+    }
+    paiId = pai.parent_id;
+  }
+  return false;
+}
+
+/**
+ * A pessoa pode EXCLUIR (arquivar/soft-delete) esta atividade?
+ *
+ * NÃO é sinônimo de `podeMutarAtividade` — excluir é uma capacidade própria,
+ * mais estreita. `podeMutarAtividade` também retorna `true` para quem só tem
+ * `canEdit`/`canMove` (sem `canDelete`) e para PARTICIPANTE simples (via
+ * ator, sem ser responsável) — nenhum dos dois deveria poder excluir.
+ *
+ * FALTAVA. O card do Kanban usava `podeMexer` (== `canMutateActivity` ==
+ * `podeMutarAtividade`) para desenhar o botão "Arquivar", e por isso:
+ *   - participante sem responsabilidade via e conseguia excluir (a decisão de
+ *     04/09/2026 é `canDelete: ehResponsavelDoRamo`, não "qualquer ator");
+ *   - papel "Editar tudo" (`canEdit`/`canMove`, sem `canDelete`) via e
+ *     conseguia excluir, quando o roteiro do produto nunca deu exclusão a
+ *     este papel.
+ * Reportado em 04/09/2026 (testes 2.6 e 4.1 do checklist).
+ *
+ * Espelha `capacidadesNaAtividade` (passo 4: `canDelete: ehResponsavelDoRamo`
+ * quando `equipe.canDelete` não veio `true`; passo 5: responsável do ramo).
+ */
+export function podeExcluirAtividade(
+  atividade: AtividadeParaAcesso | null | undefined,
+  projeto: ProjetoParaAcesso | null | undefined,
+  usuario: UsuarioParaAcesso,
+): boolean {
+  if (!atividade) return false;
+  if (usuario.isAdmin) return true;
+  if (usuario.ehVisualizador) return false;
+
+  // Equipe: só quem tem `canDelete` de verdade — `canEdit`/`canMove` sozinhos
+  // NÃO bastam (é exatamente o que os distingue de "Editar tudo").
+  if (usuario.canDelete) return true;
+
+  const candidatos = buildUserCandidates([
+    usuario.fullName, usuario.email, usuario.profileId, usuario.id,
+  ]);
+
+  // Líder ou gestor do projeto exclui qualquer atividade dele.
+  if (projeto && (matchesIdentity(projeto.owner, candidatos) || matchesIdentity(projeto.manager, candidatos))) {
+    return true;
+  }
+
+  // "Visualizar e comentar" (can_edit_own = false) não exclui nem as suas.
+  if (usuario.canEditOwn === false) return false;
+
+  // Responsável do ramo — direto (assigned_to/assigned_to_id) ou de um
+  // ancestral (a subárvore). NUNCA participante simples, NUNCA criador sem
+  // ser responsável — excluir é mais estreito que editar.
+  if (ehResponsavelDaAtividade(atividade, usuario)) return true;
+  return !!atividade.souResponsavelDeAncestral
+    || matchesIdentity(atividade.responsavel_do_pai, candidatos)
+    || (!!atividade.responsavel_do_pai_id && !!usuario.id
+        && atividade.responsavel_do_pai_id === usuario.id);
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * FASE 03 — CAPACIDADES NOMEADAS
  *
@@ -327,6 +441,8 @@ export interface CapacidadesNaAtividade {
   canAssign: boolean;
   canPromover: boolean;
   canAssumir: boolean;
+  /** criar subatividade dentro do ramo (RLS: 20260904150000). */
+  canCreate: boolean;
   canDelete: boolean;
   canManageTeam: boolean;
   passoQueDecidiu: PassoDeAcesso;
@@ -335,11 +451,11 @@ export interface CapacidadesNaAtividade {
 
 const NADA: Omit<CapacidadesNaAtividade, "passoQueDecidiu" | "escopoDeLeitura"> = {
   canView: false, canComment: false, canEditExecucao: false, canEditPlanejamento: false,
-  canAssign: false, canPromover: false, canAssumir: false, canDelete: false, canManageTeam: false,
+  canAssign: false, canPromover: false, canAssumir: false, canCreate: false, canDelete: false, canManageTeam: false,
 };
 const TUDO: typeof NADA = {
   canView: true, canComment: true, canEditExecucao: true, canEditPlanejamento: true,
-  canAssign: true, canPromover: true, canAssumir: true, canDelete: true, canManageTeam: true,
+  canAssign: true, canPromover: true, canAssumir: true, canCreate: true, canDelete: true, canManageTeam: true,
 };
 
 /**
@@ -464,6 +580,23 @@ export function capacidadesNaAtividade(
          * Participante segue sem atribuir — só o responsável.
          */
         canAssign: ehResponsavelDoRamo,
+        /**
+         * CRIAR subatividade dentro do próprio ramo — decisão de produto de
+         * 04/09/2026 (RLS: 20260904150000/can_create_activity_v2). Só o
+         * responsável do ramo, não o simples participante: criar uma peça
+         * nova é decisão de quem responde pelo trabalho, não de quem só
+         * executa uma tarefa dentro dele.
+         */
+        canCreate: ehResponsavelDoRamo,
+        /**
+         * EXCLUIR (soft-delete) dentro do próprio ramo — decisão de produto
+         * de 04/09/2026, revertendo a trava de 01/09 ("responsável edita,
+         * não exclui"). Só o responsável do ramo — participante continua sem
+         * excluir. A UI/RLS efetivas de exclusão usam `canMutateActivity`
+         * (UPDATE is_trashed), que já libera o responsável; este campo é o
+         * que a tela consulta para decidir se MOSTRA o botão.
+         */
+        canDelete: ehResponsavelDoRamo,
       },
       "4-equipe-editar-apenas-as-minhas",
       "projeto",
@@ -474,11 +607,12 @@ export function capacidadesNaAtividade(
    * 5 — chega pela atribuição (ator desta atividade) OU por responder por um
    * ANCESTRAL (a subárvore).
    *
-   * RESPONSÁVEL DO RAMO edita o plano E atribui em toda a subárvore — espelha
-   * `eh_descendente_de_atividade_do_responsavel` da RLS (01/09/2026). Quem é só
-   * PARTICIPANTE/criador (ator sem responder pelo ramo): execução apenas, no
-   * próprio trabalho. Nenhum dos dois EXCLUI — a policy de DELETE não aceita
-   * esta via. Escopo de leitura: a atividade e a subárvore.
+   * RESPONSÁVEL DO RAMO edita o plano, atribui e agora também cria/exclui em
+   * toda a subárvore — espelha `eh_descendente_de_atividade_do_responsavel`
+   * da RLS (01/09/2026 para editar/atribuir; 04/09/2026 estendeu para
+   * criar/excluir). Quem é só PARTICIPANTE/criador (ator sem responder pelo
+   * ramo): execução apenas, no próprio trabalho — nunca cria nem exclui.
+   * Escopo de leitura: a atividade e a subárvore.
    */
   if (ator || ehResponsavelDoRamo) {
     const base = ehResponsavelDoRamo
@@ -486,7 +620,7 @@ export function capacidadesNaAtividade(
           ...NADA,
           canView: true, canComment: true,
           canEditExecucao: true, canEditPlanejamento: true,
-          canAssign: true,
+          canAssign: true, canCreate: true, canDelete: true,
         }
       : { ...NADA, canView: true, canComment: true, canEditExecucao: true };
     return monta(base, "5-ator-da-atividade", "atividade_e_trilha");

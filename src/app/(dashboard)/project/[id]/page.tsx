@@ -58,7 +58,7 @@ import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity, definirNomesAmbiguos, nomesRepetidosEm } from "@/lib/identityMatch";
-import { ehAtividadeDaPessoa, podeMutarAtividade } from "@/lib/activityAccess";
+import { ehAtividadeDaPessoa, podeMutarAtividade, souResponsavelDeAncestralNaArvore } from "@/lib/activityAccess";
 import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
@@ -292,8 +292,36 @@ export default function ProjectDetailsPage() {
    * numa tela e não via na outra. Cada uma foi corrigida numa data, por um
    * sintoma. Agora as duas chamam a mesma fonte, que espelha a RLS.
    */
+  const activityByIdParaSubarvore = useMemo(() => {
+    const m = new Map<string, Activity>();
+    activities.forEach((a) => m.set(a.id, a));
+    return m;
+  }, [activities]);
+
+  /**
+   * "Sou responsável de um ANCESTRAL desta atividade?" — a mesma lógica do
+   * ActivityKanban (souResponsavelDeAncestralNaArvore), calculada localmente
+   * subindo `parent_id` na lista já carregada em memória.
+   *
+   * FALTAVA aqui. O Kanban ganhou este sinal em 04/09/2026 e a página não —
+   * resultado: o card movia (o drag da coluna não passa por este gate), mas
+   * arquivar/concluir/reabrir/editar recusavam com "só a equipe... ou quem
+   * responde pela atividade", mesmo para quem responde por um ANCESTRAL.
+   * Reportado em 04/09/2026 (reteste 2.4 do checklist).
+   */
+  const souResponsavelDeAncestralLocal = useCallback((activity: Activity | null | undefined): boolean => {
+    if (!activity) return false;
+    return souResponsavelDeAncestralNaArvore(activity, activityByIdParaSubarvore, {
+      id: currentUser?.id, email: currentUser?.email ?? profile?.email,
+      fullName: profile?.full_name, profileId: profile?.id,
+    });
+  }, [activityByIdParaSubarvore, currentUser?.id, currentUser?.email, profile?.email, profile?.full_name, profile?.id]);
+
   const canMutateActivity = useCallback((activity?: Activity | null) => {
-    return podeMutarAtividade(activity, project, {
+    const comSinalDeSubarvore = activity
+      ? { ...activity, souResponsavelDeAncestral: souResponsavelDeAncestralLocal(activity) }
+      : activity;
+    return podeMutarAtividade(comSinalDeSubarvore, project, {
       isAdmin: isRealAdmin,
       id: currentUser?.id,
       email: currentUser?.email || profile?.email,
@@ -310,7 +338,7 @@ export default function ProjectDetailsPage() {
       // uma atividade editava por essa via mesmo sendo só-leitura.
       ehVisualizador: !canWrite,
     });
-  }, [canEdit, canMove, canWrite, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own]);
+  }, [canEdit, canMove, canWrite, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own, souResponsavelDeAncestralLocal]);
 
   /**
    * "É MINHA?" — a mesma fonte de `canMutateActivity`, não uma cópia.
@@ -2007,6 +2035,7 @@ export default function ProjectDetailsPage() {
                 projectOwner={project?.manager?.trim() || project?.owner?.trim() || null}
                 canEdit={canEdit}
                 canMove={canMove}
+                canDelete={canDelete}
                 canEditOwn={userPerms?.can_edit_own ?? true}
                 projectLocked={isProjectConcluded}
                 isQualityProject={isQualityProject}

@@ -484,6 +484,8 @@ export interface ActivityKanbanProps {
    * "não edita nem as dela". Omitido conta como `true`.
    */
   canEditOwn?: boolean;
+  /** `project_members.can_delete` — permissão de EXCLUIR do membro no projeto. */
+  canDelete?: boolean;
   projectLocked?: boolean;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { podeMutarAtividade } from "@/lib/activityAccess";
+import { podeMutarAtividade, podeExcluirAtividade, souResponsavelDeAncestralNaArvore } from "@/lib/activityAccess";
 import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
@@ -195,6 +195,7 @@ export const ActivityKanban = ({
   canEdit = false,
   canMove = false,
   canEditOwn = true,
+  canDelete = false,
   projectLocked = false,
   isQualityProject = false,
   onOpenCreateTask,
@@ -680,6 +681,32 @@ export const ActivityKanban = ({
     return s;
   }, [activities]);
 
+  // Atividade por id — base para subir a árvore sem round-trip ao banco.
+  const activityById = useMemo(() => {
+    const m = new Map<string, Activity>();
+    activities.forEach((a) => m.set(a.id, a));
+    return m;
+  }, [activities]);
+
+  /**
+   * "Sou responsável de um ANCESTRAL desta atividade?" — calculado LOCALMENTE
+   * subindo `parent_id` na lista já carregada em memória (`souResponsavelDeAncestralNaArvore`
+   * em `lib/activityAccess`), em vez de chamar o RPC
+   * `eh_descendente_de_atividade_do_responsavel` por card (o Kanban já tem a
+   * árvore inteira; um RPC por card seria N chamadas de rede).
+   *
+   * FALTAVA. `podeMutarAtividade` nunca recebia este sinal aqui — só a tela de
+   * atividade individual chamava o RPC. Resultado: responsável de subárvore
+   * via a RLS liberar e a tela de atividade liberar, mas o Kanban continuava
+   * com o cadeado (drag, menu, arquivar) — reportado em 04/09/2026 (teste 3.2).
+   */
+  const souResponsavelDeAncestralLocal = useCallback((activity: Activity | null | undefined): boolean => {
+    if (!activity) return false;
+    return souResponsavelDeAncestralNaArvore(activity, activityById, {
+      id: myId, email: user?.email, fullName: profile?.full_name, profileId: profile?.id,
+    });
+  }, [activityById, myId, profile?.full_name, profile?.id, user?.email]);
+
   /** Filhos por pai — a barra de progresso passa a medir trabalho feito
    *  (subatividades concluídas) em vez de posição no quadro. */
   const filhosPorPai = useMemo(() => {
@@ -1069,7 +1096,10 @@ export const ActivityKanban = ({
    * esta decisão eles valem igual, exatamente como em `is_project_leader_v2`.
    */
   const canMutateActivity = useCallback((a?: Activity | null) => {
-    return podeMutarAtividade(a, { owner: projectOwner, manager: projectOwner }, {
+    const comSinalDeSubarvore = a
+      ? { ...a, souResponsavelDeAncestral: souResponsavelDeAncestralLocal(a) }
+      : a;
+    return podeMutarAtividade(comSinalDeSubarvore, { owner: projectOwner, manager: projectOwner }, {
       isAdmin,
       id: myId,
       email: user?.email || profile?.email,
@@ -1083,7 +1113,31 @@ export const ActivityKanban = ({
       // fosse Visualizador editava pela via do ator.
       ehVisualizador: !canWrite,
     });
-  }, [isAdmin, canEdit, canMove, canEditOwn, canWrite, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id]);
+  }, [isAdmin, canEdit, canMove, canEditOwn, canWrite, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id, souResponsavelDeAncestralLocal]);
+
+  /**
+   * "Posso EXCLUIR (arquivar) esta atividade?" — capacidade PRÓPRIA, distinta
+   * de `canMutateActivity`. Ver `podeExcluirAtividade` em lib/activityAccess
+   * para o porquê (participante sem responsabilidade e papel "Editar tudo"
+   * não devem excluir, mesmo podendo mover/editar). Reportado em 04/09/2026
+   * (testes 2.6 e 4.1 do checklist).
+   */
+  const canDeleteActivity = useCallback((a?: Activity | null) => {
+    const comSinalDeSubarvore = a
+      ? { ...a, souResponsavelDeAncestral: souResponsavelDeAncestralLocal(a) }
+      : a;
+    return podeExcluirAtividade(comSinalDeSubarvore, { owner: projectOwner, manager: projectOwner }, {
+      isAdmin,
+      id: myId,
+      email: user?.email || profile?.email,
+      fullName: profile?.full_name,
+      profileId: profile?.id,
+      canDelete,
+      canEditOwn,
+      ehVisualizador: !canWrite,
+    });
+  }, [isAdmin, canDelete, canEditOwn, canWrite, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id, souResponsavelDeAncestralLocal]);
+
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
@@ -3552,6 +3606,7 @@ export const ActivityKanban = ({
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
                 podeMutar={canMutateActivity}
+                podeExcluir={canDeleteActivity}
                 selecionados={selecionados}
                 onToggleSelecao={(id, e) => alternarSelecao(id, e)}
                 cardFields={cardFields}

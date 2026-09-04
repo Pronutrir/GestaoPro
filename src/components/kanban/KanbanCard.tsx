@@ -89,6 +89,7 @@ import {
 export function SortableKanbanCard({
   activity,
   podeMexer = true,
+  podeExcluirAtividade = true,
   phases,
   onEdit,
   onDelete,
@@ -165,6 +166,7 @@ export function SortableKanbanCard({
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
   podeMexer?: boolean;
+  podeExcluirAtividade?: boolean;
 }) {
   // `disabled` na RAIZ, não só o cadeado no lugar da alça: o dnd-kit também
   // ativa o arrasto pelo corpo do card. Sem isto o card ainda saía do lugar
@@ -193,6 +195,7 @@ export function SortableKanbanCard({
         onLinkParent={onLinkParent}
         dragListeners={listeners}
         podeMexer={podeMexer}
+        podeExcluirAtividade={podeExcluirAtividade}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         onToggleBlocked={onToggleBlocked}
@@ -268,6 +271,7 @@ function KanbanCardBase({
   modoSelecao = false,
   onToggleSelecao,
   podeMexer = true,
+  podeExcluirAtividade = true,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -333,6 +337,9 @@ function KanbanCardBase({
    * soltar — a pessoa descobria o bloqueio pelo erro.
    */
   podeMexer?: boolean;
+  /** Pode EXCLUIR (arquivar) esta atividade? Ver `podeExcluirAtividade`
+   * em lib/activityAccess — capacidade própria, mais estreita que podeMexer. */
+  podeExcluirAtividade?: boolean;
 }) {
   // estaAtrasado compara DIA com DIA. A conta local anterior montava a data às
   // 00:00 e comparava com `new Date()` (com hora), então tudo que vencia HOJE
@@ -711,7 +718,10 @@ function KanbanCardBase({
                       </DropdownMenuItem>
                     )}
 
-                    {isAdmin && (
+                    {/* Era isAdmin sozinho, depois virou podeMexer — ambos
+                        errados: podeMexer mede EDITAR/MOVER, não EXCLUIR.
+                        Capacidade própria via podeExcluirAtividade. */}
+                    {podeExcluirAtividade && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
