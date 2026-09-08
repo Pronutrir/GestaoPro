@@ -2162,7 +2162,16 @@ export const ActivityKanban = ({
       const overActivity = activities.find((a) => a.id === overId);
       if (!overActivity || overActivity.id === activityId) return;
 
-      const naColuna = (activitiesByStage[targetStageId] || []).filter((a) => !a.parent_id);
+      // ERA `!a.parent_id` (só raiz) — excluía a maioria dos cards reais,
+      // já que quase todo card pende de uma Fase. Um card com pai nunca era
+      // encontrado (de = -1) e a função retornava calada, sem toast: o card
+      // só voltava ao lugar, parecendo que nada aconteceu. Achado no
+      // reteste do Bloco C (04/09/2026).
+      //
+      // O critério certo é IRMÃOS na mesma coluna: mesmo `parent_id` (ou
+      // ambos sem pai), e não necessariamente raiz.
+      const naColuna = (activitiesByStage[targetStageId] || [])
+        .filter((a) => (a.parent_id ?? null) === (draggedActivity?.parent_id ?? null));
       const de = naColuna.findIndex((a) => a.id === activityId);
       const para = naColuna.findIndex((a) => a.id === overId);
       if (de < 0 || para < 0 || de === para) return;

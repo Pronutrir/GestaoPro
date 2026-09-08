@@ -125,6 +125,9 @@ export function SortableKanbanCard({
   hoursStat,
   profilesMap = {},
   profileAvatarMap = {},
+  selecionado,
+  modoSelecao,
+  onToggleSelecao,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -167,6 +170,9 @@ export function SortableKanbanCard({
   profileAvatarMap?: Record<string, string>;
   podeMexer?: boolean;
   podeExcluirAtividade?: boolean;
+  selecionado?: boolean;
+  modoSelecao?: boolean;
+  onToggleSelecao?: (e: React.MouseEvent) => void;
 }) {
   // `disabled` na RAIZ, não só o cadeado no lugar da alça: o dnd-kit também
   // ativa o arrasto pelo corpo do card. Sem isto o card ainda saía do lugar
@@ -196,6 +202,9 @@ export function SortableKanbanCard({
         dragListeners={listeners}
         podeMexer={podeMexer}
         podeExcluirAtividade={podeExcluirAtividade}
+        selecionado={selecionado}
+        modoSelecao={modoSelecao}
+        onToggleSelecao={onToggleSelecao}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         onToggleBlocked={onToggleBlocked}

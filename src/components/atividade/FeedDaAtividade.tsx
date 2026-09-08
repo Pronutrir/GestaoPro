@@ -1,6 +1,7 @@
 'use client';
 
-import { Diamond } from "lucide-react";
+import { useState } from "react";
+import { Diamond, SendHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iniciaisDe } from "@/lib/telaDaAtividadeDados";
 
@@ -164,24 +165,58 @@ export function FeedDaAtividade({
  * é alterar — é a via que quem acompanha tem para participar.
  */
 function CaixaDeComentario({ aoComentar }: { aoComentar: (t: string) => Promise<void> }) {
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  // FALTAVA um caminho de envio: era <form> com <textarea> e nenhum botão.
+  // Enter em <textarea> só quebra linha (não submete um form sem input de
+  // texto único) -- ninguém, em NENHUM papel, conseguia comentar. Reportado
+  // no reteste de 04/09/2026 (4.4).
+  const enviar = async () => {
+    const t = texto.trim();
+    if (!t || enviando) return;
+    setEnviando(true);
+    try {
+      await aoComentar(t);
+      setTexto("");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   return (
     <form
-      className="shrink-0 border-t border-border p-3"
-      onSubmit={async (ev) => {
+      className="shrink-0 border-t border-border p-3 flex items-end gap-2"
+      onSubmit={(ev) => {
         ev.preventDefault();
-        const el = (ev.currentTarget.elements.namedItem("texto") as HTMLTextAreaElement);
-        const t = el.value.trim();
-        if (!t) return;
-        await aoComentar(t);
-        el.value = "";
+        void enviar();
       }}
     >
       <textarea
         name="texto"
         rows={2}
+        value={texto}
+        onChange={(ev) => setTexto(ev.target.value)}
+        onKeyDown={(ev) => {
+          // Ctrl+Enter / Cmd+Enter envia. Enter sozinho continua quebrando
+          // linha -- comportamento normal de textarea, não é bug.
+          if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+            ev.preventDefault();
+            void enviar();
+          }
+        }}
         placeholder="Escreva algo — use @ para citar alguém"
         className="w-full resize-none bg-background border border-border rounded-[4px] px-2 py-1.5 text-[12.5px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
+      <button
+        type="submit"
+        disabled={!texto.trim() || enviando}
+        title="Enviar (Ctrl+Enter)"
+        aria-label="Enviar comentário"
+        className="shrink-0 h-7 w-7 grid place-items-center rounded-[4px] text-primary hover:bg-primary/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+      >
+        <SendHorizontal className="w-4 h-4" />
+      </button>
     </form>
   );
 }
