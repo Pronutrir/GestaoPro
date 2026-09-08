@@ -99,7 +99,8 @@ const TELAS = [
   "src/components/ActivityKanban.tsx",
   "src/components/BacklogSection.tsx",
   "src/components/ProjectDependenciesView.tsx",
-  "src/components/TimelineView.tsx",
+  // TimelineView.tsx removido em 04/09/2026: componente orfao, ninguem o
+  // montava (RELATORIO-DA-FILA.md ja marcava como "so exibe - pode esperar").
 ];
 
 // ATUALIZADO NO MERGE (main venceu no 502): a RPC — get_task_dependencies /
