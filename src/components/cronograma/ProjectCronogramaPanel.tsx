@@ -563,11 +563,28 @@ export function ProjectCronogramaPanel({
      *
      * O cast existe porque `activity_assignees` é mais nova que os tipos
      * gerados — mesmo padrão já usado para `categoria` acima.
+     *
+     * ESCOPADA POR PROJETO VIA JOIN EMBUTIDO. `activity_assignees` não tem
+     * `project_id` (só `activity_id`), e até 04/09/2026 esta consulta lia a
+     * TABELA INTEIRA, sem nenhum predicado — a política de RLS era avaliada
+     * linha a linha em toda `activity_assignees`, sem índice para usar.
+     * Medido na aplicação real: 20,5s para devolver 2 linhas (<1KB). Como
+     * está dentro do `Promise.allSettled` abaixo, essa ÚNICA consulta
+     * acessória segurava o painel inteiro — atividades, fases, estágios,
+     * responsáveis E a RPC de dependências (que respondia 0,2s depois dela).
+     * Achado no Bloco L (04/09/2026): "Predecessoras" parecia vazia porque
+     * ninguém esperava os ~21s reais antes de ler a tela.
+     *
+     * `activities!inner(project_id)` + `.in("activities.project_id", ...)`
+     * vira JOIN real no PostgREST — o planner filtra linhas pelo índice de
+     * `activities.project_id` antes de aplicar RLS a cada uma, em vez de
+     * varrer a tabela toda.
      */
     const respQ = (supabase
       .from("activity_assignees" as never)
-      .select("activity_id, user_id, papel")
-      .eq("papel" as never, "responsavel" as never)) as unknown as
+      .select("activity_id, user_id, papel, activities!inner(project_id)")
+      .eq("papel" as never, "responsavel" as never)
+      .in("activities.project_id" as never, scopedProjectIds as never)) as unknown as
       Promise<{ data: { activity_id: string; user_id: string }[] | null }>;
 
     /**
@@ -674,18 +691,22 @@ export function ProjectCronogramaPanel({
     // ids na URL que estourava 15 KB e voltava 502. E DEGRADA: se falhar, as
     // atividades continuam listadas; só as setas/folga ficam de fora, com aviso.
     //
-    // ERA gateado em `if (ids.length)`, com `ids` vindo de `acts` — que quando
-    // a página usa `activitiesExternas` (fonte única) é só o SNAPSHOT que
-    // existia no momento desta chamada. Se `carregarDados` rodasse antes de a
-    // página terminar de carregar as próprias atividades (accessLoading já
-    // false, activitiesExternas ainda `[]`), `ids.length` dava 0, o `else`
-    // zerava `deps` e a RPC nunca era chamada. Como este callback não
-    // depende de `activitiesExternas` (só recarrega com projectIds/
-    // accessLoading/filterProjects), as atividades reais chegavam depois
-    // pelo useEffect direto (linha ~719) mas as dependências ficavam
-    // congeladas em `[]` para sempre — zero requisição, zero erro. Achado
-    // no Bloco L (04/09/2026): coluna "Predecessoras" sempre vazia, mesmo
-    // com a dependência gravada certa no banco.
+    // ERA gateado em `if (ids.length)`, com `ids` vindo de `acts` — quando a
+    // página usa `activitiesExternas`, esse é um SNAPSHOT que poderia estar
+    // vazio no instante desta chamada. Esse gate era um bug real e a
+    // correção abaixo (usar scopedProjectIds, sempre > 0 aqui) é a certa.
+    //
+    // MAS NÃO ERA A CAUSA DO SINTOMA OBSERVADO ("zero chamadas, zero
+    // erros" nos primeiros ~20s). Medido no Bloco L (04/09/2026): quem
+    // segurava o painel inteiro era a consulta a `activity_assignees`
+    // logo acima, sem filtro de projeto — RLS avaliada linha a linha na
+    // tabela inteira, ~20,5s para devolver 2 linhas. Ela está no mesmo
+    // `Promise.allSettled` de tudo daqui pra baixo (activities, phases,
+    // stages, responsáveis E esta RPC), então nada saía até ela terminar.
+    // Corrigida acima com `activities!inner(project_id)` + filtro por
+    // `scopedProjectIds`. Os dois bugs coexistiam; o gate por `ids.length`
+    // era invisível na prática porque a RPC nunca chegava a ser tentada
+    // dentro da janela em que alguém media.
     //
     // Dependências são por PROJETO, não por atividade — o gate correto é
     // `scopedProjectIds.length`, que já é > 0 aqui (a função retornou antes,
