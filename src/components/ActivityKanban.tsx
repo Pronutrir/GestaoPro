@@ -2838,6 +2838,7 @@ export const ActivityKanban = ({
           color: l.color,
           progress_percent: l.progress_percent,
           wip_limit: l.wip_limit,
+          wip_strict: l.wip_strict,
           is_visible: l.is_visible,
           categoria: l.categoria,
           // `is_final` é a leitura legada de "concluída" — o quadro pré-migration
@@ -2871,6 +2872,7 @@ export const ActivityKanban = ({
         display_order: ordemLivre++,
         progress_percent: l.progress_percent,
         wip_limit: l.wip_limit,
+        wip_strict: l.wip_strict,
         is_visible: l.is_visible,
         categoria,
         is_final: categoria === "concluida",

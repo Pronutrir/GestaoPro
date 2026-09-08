@@ -2,6 +2,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1365,6 +1366,7 @@ export function StageMenuItems({
    */
   fecharAoRenomear?: boolean;
 }) {
+  const confirm = useAppConfirm();
   return (
     <>
       <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
@@ -1472,16 +1474,25 @@ export function StageMenuItems({
         onSelect={(e) => {
           e.preventDefault();
           // Com cartões dentro, confirma: some do quadro de todo mundo sem
-          // deixar rastro, e as tarefas continuam lá.
-          if (stage.is_visible && quantidade > 0) {
-            const ok = window.confirm(
-              `"${stage.title}" tem ${quantidade} ${quantidade === 1 ? "tarefa" : "tarefas"} e vai sumir do quadro de TODOS do projeto.\n\n` +
-              `As tarefas continuam existindo e mantêm o status — só deixam de aparecer aqui.\n\n` +
-              `Para limpar apenas a sua visão, use "Recolher coluna".`
-            );
-            if (!ok) return;
-          }
-          acoes.onToggleVisible(stage.id, stage.is_visible);
+          // deixar rastro, e as tarefas continuam lá. ERA window.confirm — o
+          // único ponto do quadro usando o diálogo nativo do navegador em
+          // vez do estilizado do app (useAppConfirm), destoando de todas as
+          // outras confirmações. Achado no reteste do Bloco D (04/09/2026).
+          (async () => {
+            if (stage.is_visible && quantidade > 0) {
+              const ok = await confirm({
+                title: `Ocultar "${stage.title}" para todos?`,
+                description:
+                  `Tem ${quantidade} ${quantidade === 1 ? "tarefa" : "tarefas"} e vai sumir do quadro de TODOS do projeto. ` +
+                  `As tarefas continuam existindo e mantêm o status — só deixam de aparecer aqui. ` +
+                  `Para limpar apenas a sua visão, use "Recolher coluna".`,
+                confirmText: "Ocultar para todos",
+                cancelText: "Cancelar",
+              });
+              if (!ok) return;
+            }
+            acoes.onToggleVisible(stage.id, stage.is_visible);
+          })();
         }}
       >
         {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}

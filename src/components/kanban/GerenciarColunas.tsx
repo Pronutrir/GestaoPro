@@ -57,6 +57,8 @@ export type LinhaColuna = {
   color: string;
   progress_percent: number | null;
   wip_limit: number | null;
+  /** Rígido: o quadro IMPEDE ultrapassar o wip_limit. Sem limite, não tem efeito. */
+  wip_strict: boolean;
   is_visible: boolean;
   is_final: boolean;
   /**
@@ -86,6 +88,7 @@ const paraLinha = (s: WorkflowStage): LinhaColuna => ({
   color: s.color,
   progress_percent: s.progress_percent ?? null,
   wip_limit: s.wip_limit ?? null,
+  wip_strict: s.wip_strict === true,
   is_visible: s.is_visible !== false,
   is_final: s.is_final === true,
   // Quadro anterior à migration da categoria: deriva das flags legadas, mesma
@@ -151,7 +154,7 @@ function LinhaArrastavel({
         "relative grid items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors",
         // A grade acompanha a legenda do cabeçalho. Em tela estreita as duas
         // colunas do meio descem para uma segunda linha, sem quebrar o resto.
-        "grid-cols-[22px_minmax(0,1fr)_132px_136px_64px_78px_30px]",
+        "grid-cols-[22px_minmax(0,1fr)_132px_136px_96px_64px_78px_30px]",
         "max-[860px]:grid-cols-[22px_minmax(0,1fr)_64px_78px_30px]",
         isDragging ? "opacity-60 bg-muted/50" : "hover:bg-muted/40",
         ehEntrada && "bg-primary/[0.06]",
@@ -326,6 +329,53 @@ function LinhaArrastavel({
             <span className="text-[11.5px] text-muted-foreground">%</span>
           </div>
         )}
+      </div>
+
+      {/* LIMITE (WIP) — quantos cards em andamento a coluna aceita, e se o
+          limite é rígido (impede) ou só sinaliza. Existia gravado (wip_limit,
+          wip_strict) e usado pelo quadro (handleDragEnd), mas sem controle
+          nenhum nesta tela — só dava para configurar via SQL direto. Achado
+          no reteste do Bloco D (04/09/2026). Some em tela estreita, como
+          Significa/Progresso: o rótulo do cabeçalho já se esconde do mesmo
+          jeito ali. */}
+      <div className="flex items-center gap-1.5 max-[860px]:hidden">
+        <input
+          value={linha.wip_limit ?? ""}
+          onChange={(e) => {
+            const t = e.target.value.trim();
+            const n = t === "" ? null : Math.max(0, Math.round(Number(t)));
+            onMudar(linha.id, { wip_limit: Number.isFinite(n as number) || n === null ? n : linha.wip_limit });
+          }}
+          placeholder="—"
+          inputMode="numeric"
+          className="w-11 px-1 py-1 text-[12px] text-center tabular-nums rounded-md border border-border bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          aria-label={`Limite de WIP de "${linha.title}"`}
+          title="Cards em andamento nesta coluna. Em branco = sem limite."
+        />
+        <button
+          type="button"
+          role="switch"
+          aria-checked={linha.wip_strict}
+          disabled={linha.wip_limit == null}
+          onClick={() => onMudar(linha.id, { wip_strict: !linha.wip_strict })}
+          className={cn(
+            "px-1.5 py-1 rounded-md border text-[10px] font-medium transition-colors shrink-0",
+            linha.wip_limit == null
+              ? "opacity-30 cursor-not-allowed border-border text-muted-foreground"
+              : linha.wip_strict
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground",
+          )}
+          title={
+            linha.wip_limit == null
+              ? "Defina um limite para poder torná-lo rígido"
+              : linha.wip_strict
+                ? "Rígido: o quadro IMPEDE trazer mais cards ao atingir o limite. Clique para tornar flexível."
+                : "Flexível: só sinaliza. Clique para tornar rígido (impede)."
+          }
+        >
+          {linha.wip_strict ? "Rígido" : "Flexível"}
+        </button>
       </div>
 
       {/* ENTRADA — marcador redondo em TODAS as linhas, para se ver que é
@@ -515,6 +565,7 @@ export function GerenciarColunas({
       return o.title !== l.title || o.color !== l.color
         || o.progress_percent !== l.progress_percent
         || o.wip_limit !== l.wip_limit
+        || o.wip_strict !== l.wip_strict
         || o.is_visible !== l.is_visible
         || o.categoria !== l.categoria;
     });
@@ -550,7 +601,7 @@ export function GerenciarColunas({
     setNovos((n) => n + 1);
     setLinhas((ls) => [...ls, {
       id, title: "", color: STAGE_PRESET_COLORS[0],
-      progress_percent: null, wip_limit: null, is_visible: true, is_final: false,
+      progress_percent: null, wip_limit: null, wip_strict: false, is_visible: true, is_final: false,
       categoria: "andamento",
     }]);
   };
@@ -596,6 +647,7 @@ export function GerenciarColunas({
         return o.title !== l.title || o.color !== l.color
           || o.progress_percent !== l.progress_percent
           || o.wip_limit !== l.wip_limit
+          || o.wip_strict !== l.wip_strict
           || o.is_visible !== l.is_visible
           || o.categoria !== l.categoria;
       });
@@ -645,7 +697,7 @@ export function GerenciarColunas({
               colunas do meio quando a tela estreita. */}
           <div className={cn(
             "grid gap-2.5 px-2.5 pb-1.5 border-b border-border",
-            "grid-cols-[22px_minmax(0,1fr)_132px_136px_64px_78px_30px]",
+            "grid-cols-[22px_minmax(0,1fr)_132px_136px_96px_64px_78px_30px]",
             "max-[860px]:grid-cols-[22px_minmax(0,1fr)_64px_78px_30px]",
           )}>
             <span />
@@ -655,6 +707,10 @@ export function GerenciarColunas({
               title="O que a coluna significa para o sistema — decide progresso, limite e indicadores. O nome é livre; a categoria, não."
             >Significa</span>
             <span className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground max-[860px]:hidden">Progresso</span>
+            <span
+              className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground max-[860px]:hidden"
+              title="Cards em andamento aceitos. Rígido impede ultrapassar; flexível só sinaliza."
+            >Limite (WIP)</span>
             <span
               className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground text-center"
               title="Onde a tarefa nasce: criação rápida, importação de EAP e reabertura. Uma por projeto."
