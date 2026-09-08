@@ -2258,7 +2258,8 @@ export default function ProjectDetailsPage() {
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
-                isAdmin={canDelete}
+                canDelete={canDelete}
+                podeMexer={canMutateActivity}
                 /**
                  * QUAL ATIVIDADE É DELA — para o filtro "minhas" e a marca na
                  * linha.

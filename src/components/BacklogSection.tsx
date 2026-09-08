@@ -52,7 +52,7 @@ import {
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
 } from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
-import { mutateInChunks } from "@/lib/chunkedIn";
+import { mutateInChunks, chunkIds } from "@/lib/chunkedIn";
 import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
@@ -150,7 +150,26 @@ interface BacklogSectionProps {
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onDataChanged: () => void;
-  isAdmin?: boolean;
+  /**
+   * Pode ARQUIVAR (a página já passa `canDelete`, não "é admin"). O nome
+   * antigo era `isAdmin` — ARMADILHA de leitura: quem lesse o código achava
+   * que só admin arquiva, quando na verdade é a permissão específica de
+   * excluir (equipe com `can_delete`, ou responsável do ramo). Renomeado
+   * sem mudar comportamento — achado no reteste do Bloco H (04/09/2026).
+   */
+  canDelete?: boolean;
+  /**
+   * Pode MEXER nesta atividade (mover/editar/mudar prioridade etc.)?
+   *
+   * FALTAVA nas 5 ações de lote (mudar status, responsável, prazo, ligar em
+   * sequência, prioridade) — só Arquivar e Mover para dentro de tinham gate.
+   * Um responsável de subárvore conseguia selecionar atividades FORA do seu
+   * alcance e a barra dizia "sucesso" mesmo com a RLS recusando em silêncio
+   * (UPDATE sem match não é erro no PostgREST). Achado no reteste do Bloco H
+   * (04/09/2026). Mesma fonte que o Kanban usa (`canMutateActivity`, com o
+   * sinal de subárvore) — `undefined` = sem gate (quem edita tudo).
+   */
+  podeMexer?: (a: Activity) => boolean;
   /** Por que arquivar está indisponível (projeto concluído, sem permissão…).
    *  Quando vem preenchido, o botão fica DESABILITADO com este texto no
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
@@ -187,7 +206,7 @@ interface BacklogSectionProps {
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onEditarNoDialogo, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters, ehMinha,
+  onDataChanged, canDelete = false, podeMexer, deleteBlockedReason, hasActiveFilters, ehMinha,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
   search = "", onSearchChange, acoes,
@@ -627,7 +646,7 @@ export const BacklogSection = ({
   };
   const handlePermanentDelete = async () => {
     if (!permanentDeleteId) return;
-    if (!isAdmin) {
+    if (!canDelete) {
       toast({
         title: "Sem permissão",
         description: "Só quem gerencia o projeto exclui definitivamente.",
@@ -689,7 +708,7 @@ export const BacklogSection = ({
     onDataChanged();
   };
   const handleEmptyTrash = async () => {
-    if (!isAdmin) {
+    if (!canDelete) {
       toast({
         title: "Sem permissão",
         description: "Só quem gerencia o projeto esvazia a lixeira.",
@@ -1742,21 +1761,49 @@ export const BacklogSection = ({
      */
     estrutural = false,
   ) => {
-    const ids = estrutural ? Array.from(selectedIds) : idsFolhaSelecionados();
+    let ids = estrutural ? Array.from(selectedIds) : idsFolhaSelecionados();
+
+    // GATE POR ATIVIDADE — faltava aqui. `podeMexer` é a mesma fonte que o
+    // Kanban usa (`canMutateActivity`, com o sinal de subárvore); sem isto,
+    // um responsável de subárvore selecionava atividades FORA do seu alcance
+    // e a barra "aplicava" — na verdade a RLS recusava em silêncio (UPDATE
+    // sem match não é erro no PostgREST) e a interface dizia sucesso mesmo
+    // assim. Achado no reteste do Bloco H (04/09/2026).
+    let semPermissaoCount = 0;
+    if (podeMexer) {
+      const antes = ids.length;
+      ids = ids.filter((id) => {
+        const a = activities.find((x) => x.id === id);
+        return a ? podeMexer(a) : false;
+      });
+      semPermissaoCount = antes - ids.length;
+    }
+
     if (ids.length === 0) {
       setBulkField(null);
       toast({
-        title: "Nenhuma tarefa recebeu a mudança",
-        description: "A seleção só tem fases e entregas — o valor delas vem das tarefas de dentro.",
+        title: semPermissaoCount > 0 ? "Sem permissão sobre a seleção" : "Nenhuma tarefa recebeu a mudança",
+        description: semPermissaoCount > 0
+          ? "Você não pode mexer em nenhuma das atividades selecionadas."
+          : "A seleção só tem fases e entregas — o valor delas vem das tarefas de dentro.",
         variant: "destructive",
       });
       return;
     }
     setBulkField(null);
 
-    const { error } = await mutateInChunks(ids, (batch) =>
-      (supabase.from("activities").update(patch as never) as any).in("id", batch),
-    );
+    // CONTAGEM REAL, não `ids.length`. Um UPDATE do PostgREST que a RLS
+    // recusa volta SEM erro e SEM linha afetada — contar quantos ids
+    // "tentamos" (o padrão antigo) é dizer sucesso mesmo quando o banco não
+    // gravou nada. `count: "exact"` soma só o que de fato mudou.
+    let totalAfetado = 0;
+    let erroLote: { message: string } | null = null;
+    for (const batch of chunkIds(ids)) {
+      const { error, count } = await (supabase.from("activities").update(patch as never, { count: "exact" }) as any).in("id", batch);
+      if (error) { erroLote = error; break; }
+      totalAfetado += count ?? 0;
+    }
+    const error = erroLote;
 
     /**
      * A FASE QUE FICOU VAZIA VAI JUNTO.
@@ -1774,7 +1821,12 @@ export const BacklogSection = ({
      * o alvo é o conteúdo e a fase é que perde a razão de existir.
      */
     let fasesArquivadas = 0;
-    if (!error && (patch as { is_trashed?: boolean }).is_trashed === true) {
+    if (!error && totalAfetado > 0 && (patch as { is_trashed?: boolean }).is_trashed === true) {
+      // `arquivados` usa a lista TENTADA, não a confirmada por id — o
+      // PostgREST só devolve a CONTAGEM, não quais linhas específicas
+      // passaram. Na pior hipótese (recusa parcial) uma fase pode ser
+      // avaliada como vazia por engano; ainda assim é melhor que o estado
+      // anterior (nunca considerava permissão nenhuma).
       const arquivados = new Set(ids);
       // Fases tocadas pela operação — as demais nem entram na conta.
       const candidatas = new Set(
@@ -1814,13 +1866,27 @@ export const BacklogSection = ({
       });
       return;
     }
+    if (totalAfetado === 0) {
+      toast({
+        title: "Nada foi atualizado",
+        description: "O banco recusou a mudança em todas as linhas selecionadas.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const avisoPermissao = semPermissaoCount > 0
+      ? ` (${semPermissaoCount} ${semPermissaoCount === 1 ? "ficou de fora — sem permissão" : "ficaram de fora — sem permissão"})`
+      : "";
+    const avisoRecusaSilenciosa = totalAfetado < ids.length
+      ? ` — ${ids.length - totalAfetado} recusada(s) pelo banco`
+      : "";
     toast({
       title: descricao,
-      description: fasesArquivadas > 0
+      description: (fasesArquivadas > 0
         // Dizer que a fase foi junto: ela some da tela e some do seletor de
         // fase das outras telas — silêncio aqui vira "sumiu sozinha".
-        ? `${ids.length} tarefa(s) e ${fasesArquivadas} fase(s) que ficaram vazias.`
-        : `${ids.length} tarefa(s) atualizada(s).`,
+        ? `${totalAfetado} tarefa(s) e ${fasesArquivadas} fase(s) que ficaram vazias.`
+        : `${totalAfetado} tarefa(s) atualizada(s).`) + avisoRecusaSilenciosa + avisoPermissao,
     });
   };
 
@@ -1842,7 +1908,19 @@ export const BacklogSection = ({
     // SÓ AS FOLHAS. Encadear fases criaria dependência entre coisas que já se
     // relacionam por hierarquia — e a data da fase é rollup dos filhos, então a
     // dependência não teria o que mover.
-    const folhas = new Set(idsFolhaSelecionados());
+    //
+    // GATE POR ATIVIDADE — mesmo motivo do `aplicarEmLote`: sem isto, alguém
+    // sem permissão sobre uma das folhas via a ligação "funcionar" na tela
+    // mesmo que a RLS de `task_dependencies` recusasse por trás. Achado no
+    // reteste do Bloco H (04/09/2026).
+    let folhasIds = idsFolhaSelecionados();
+    if (podeMexer) {
+      folhasIds = folhasIds.filter((id) => {
+        const a = activities.find((x) => x.id === id);
+        return a ? podeMexer(a) : false;
+      });
+    }
+    const folhas = new Set(folhasIds);
     const ordenadas = backlogActs
       .filter((a) => folhas.has(a.id))
       .sort((a, b) => {
@@ -1854,7 +1932,14 @@ export const BacklogSection = ({
         return (a.display_order ?? 9999) - (b.display_order ?? 9999);
       });
 
-    if (ordenadas.length < 2) return;
+    if (ordenadas.length < 2) {
+      toast({
+        title: "Não deu para ligar",
+        description: "Sobraram menos de duas tarefas com permissão na seleção.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSequenciando(true);
 
     try {
@@ -2870,13 +2955,13 @@ export const BacklogSection = ({
                   <Maximize2 className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
                 </DropdownMenuItem>
                 {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban
-                    (isAdmin). Desabilitado COM o motivo em vez de oculto —
+                    (canDelete). Desabilitado COM o motivo em vez de oculto —
                     sumir vira "não consigo mover" sem pista do porquê. */}
                 <DropdownMenuItem
-                  disabled={!isAdmin}
-                  title={isAdmin ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  disabled={!canDelete}
+                  title={canDelete ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
                   onSelect={() => {
-                    if (!isAdmin) return;
+                    if (!canDelete) return;
                     setMoveIntoIds([activity.id]);
                     setMoveIntoCurrentParent(activity.parent_id ?? null);
                   }}
@@ -2887,12 +2972,12 @@ export const BacklogSection = ({
                 {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
                     "não consigo excluir" sem pista nenhuma do porquê. */}
                 <DropdownMenuItem
-                  disabled={!isAdmin}
-                  className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
-                  title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
+                  disabled={!canDelete}
+                  className={canDelete ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={canDelete ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
                   // preventDefault: sem ele o menu fecha e leva o foco junto,
                   // brigando com o diálogo de confirmação que abre em seguida.
-                  onSelect={(e) => { e.preventDefault(); if (isAdmin) onDeleteActivity(activity.id); }}
+                  onSelect={(e) => { e.preventDefault(); if (canDelete) onDeleteActivity(activity.id); }}
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar
                 </DropdownMenuItem>
@@ -3124,10 +3209,10 @@ export const BacklogSection = ({
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    disabled={!isAdmin}
-                    className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
-                    title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
-                    onSelect={(e) => { e.preventDefault(); if (isAdmin) handleDeletePhase(phaseId, phaseTitle); }}
+                    disabled={!canDelete}
+                    className={canDelete ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                    title={canDelete ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                    onSelect={(e) => { e.preventDefault(); if (canDelete) handleDeletePhase(phaseId, phaseTitle); }}
                   >
                     <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar fase
                   </DropdownMenuItem>
@@ -3359,10 +3444,10 @@ export const BacklogSection = ({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  disabled={!isAdmin}
-                  className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
-                  title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
-                  onSelect={(e) => { e.preventDefault(); if (isAdmin) onDeleteActivity(phaseAct.id); }}
+                  disabled={!canDelete}
+                  className={canDelete ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={canDelete ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                  onSelect={(e) => { e.preventDefault(); if (canDelete) onDeleteActivity(phaseAct.id); }}
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar fase
                 </DropdownMenuItem>
@@ -3793,8 +3878,8 @@ export const BacklogSection = ({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!isAdmin}
-                  title={isAdmin ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  disabled={!canDelete}
+                  title={canDelete ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
                   className="h-7 text-xs gap-1.5"
                   onClick={() => { setMoveIntoIds([...selectedIds]); setMoveIntoCurrentParent(null); }}
                 >
@@ -3926,15 +4011,15 @@ export const BacklogSection = ({
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-                  // `isAdmin` MANDA, não `deleteBlockedReason`. A página envia
+                  // `canDelete` MANDA, não `deleteBlockedReason`. A página envia
                   // esse texto SEMPRE — o último ramo é um padrão ("você não
                   // tem permissão") que chega mesmo com permissão. Ele existe
                   // para EXPLICAR o bloqueio, não para causá-lo: os outros
-                  // botões de arquivar do arquivo já testam `isAdmin` e só usam
+                  // botões de arquivar do arquivo já testam `canDelete` e só usam
                   // o texto no tooltip. O meu testava o texto, então o botão
                   // nascia desabilitado para todo mundo.
-                  disabled={!isAdmin}
-                  title={isAdmin ? "Arquivar as selecionadas" : (deleteBlockedReason || "Você não tem permissão para arquivar")}
+                  disabled={!canDelete}
+                  title={canDelete ? "Arquivar as selecionadas" : (deleteBlockedReason || "Você não tem permissão para arquivar")}
                   onClick={async () => {
                     const n = selectedIds.size;
                     const g = totalAgrupadoresSelecionados;
@@ -4029,7 +4114,7 @@ export const BacklogSection = ({
               </Button>
             )}
 
-            {groupBy === "phase" && isAdmin && (
+            {groupBy === "phase" && canDelete && (
               <Button
                 type="button"
                 variant="outline"
@@ -4414,7 +4499,7 @@ export const BacklogSection = ({
                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleRestoreAll}>
                       <RotateCcw className="w-3.5 h-3.5" /> Restaurar todas
                     </Button>
-                    {isAdmin && (
+                    {canDelete && (
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-destructive hover:bg-destructive/10" onClick={handleEmptyTrash}>
                         <Trash2 className="w-3.5 h-3.5" /> Esvaziar lixeira
                       </Button>
@@ -4442,7 +4527,7 @@ export const BacklogSection = ({
                           <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2" onClick={() => handleRestore(activity.id)}>
                             <RotateCcw className="w-3 h-3" /> Restaurar
                           </Button>
-                          {isAdmin && (
+                          {canDelete && (
                             <Button
                               size="icon" variant="ghost"
                               className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
@@ -4596,7 +4681,7 @@ export const BacklogSection = ({
         open={!!editingPhase}
         onOpenChange={(o) => { if (!o) setEditingPhase(null); }}
         onSaved={onDataChanged}
-        canEdit={isAdmin}
+        canEdit={canDelete}
         resumo={(() => {
           if (!editingPhase) return undefined;
           const acts = (topLevelByPhase.get(editingPhase.id) || []);
