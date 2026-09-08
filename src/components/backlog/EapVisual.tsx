@@ -746,7 +746,25 @@ export function EapVisual({ projectTitle, items, phases, onSelect, className }: 
         <svg
           ref={svgRef}
           viewBox={vb}
-          className="w-full min-h-[420px] cursor-grab active:cursor-grabbing"
+          // ERA className="w-full ...": o SVG sempre esticava até 100% da
+          // largura do CONTAINER, independente do tamanho real do desenho
+          // (viewBox). Com poucos itens, o viewBox é pequeno (ex.: 248×308) e
+          // o navegador ampliava até caber no container inteiro (~1457px) —
+          // um projeto de 5 atividades virava retângulos gigantes, e
+          // "Ajustar" não resolvia porque ele só reseta zoom/pan, nunca essa
+          // CSS. Achado no reteste do Bloco K (04/09/2026).
+          //
+          // width/height explícitos = o tamanho REAL do desenho (viewBox já
+          // incorpora o zoom). Diagrama pequeno nasce pequeno; diagrama maior
+          // que a tela rola no container (`overflow-auto` acima), sem
+          // distorcer nada — exatamente a suposição de "zoom 1 já mostra a
+          // árvore toda" que os comentários deste arquivo descrevem.
+          width={Math.max(1, Math.round(vbW))}
+          height={Math.max(1, Math.round(vbH))}
+          // SEM CSS de tamanho (min-h etc.) de proposito: sobrescreveria os
+          // atributos width/height acima em navegadores modernos e
+          // reintroduziria o mesmo esticamento que este patch corrige.
+          className="cursor-grab active:cursor-grabbing"
           onMouseDown={onDown}
           onMouseMove={onMove}
           onMouseUp={onUp}
