@@ -841,3 +841,129 @@ export function eapMotivoNaoCriaDentro(paiKind: EapKind | null): string | null {
   }
   return null;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * PRÓXIMO CÓDIGO SOB UM PAI — fonte única (04/09/2026)
+ *
+ * Três caminhos calculavam isto de formas divergentes:
+ *
+ *   • BacklogSection.proximoCodigoDeFase — só para fase raiz (sem pai), OK.
+ *   • [activityId]/page.tsx aoCriarSubatividade — ad-hoc, calculado local
+ *     (correção de 04/09/2026 pela manhã).
+ *   • LinkParentDialog (mover para dentro de) — NÃO calculava nada: o
+ *     wbs_code do item movido ficava intocado, criando código fora do lugar
+ *     na árvore (achado no reteste do Bloco B, mesmo dia à tarde).
+ *
+ * Esta função substitui os dois primeiros e resolve o terceiro. Quem tem
+ * pai usa `eapProximoCodigoFilho`; quem é raiz continua com `eapRootCode()`
+ * + a mesma lógica, só que parametrizada por prefixo.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** Item mínimo para calcular o próximo código livre. */
+export interface EapItemComCodigo {
+  wbs_code?: string | null;
+}
+
+/**
+ * Próximo código livre sob `prefixoPai` (ex.: "1.2.3" → tenta "1.2.3.1",
+ * "1.2.3.2"…), OU na raiz quando `prefixoPai` é null/vazio (ex.: "1", "2"…).
+ *
+ * `irmaos` é a lista de itens que JÁ estão nesse mesmo nível (mesmo pai) —
+ * normalmente `activities.filter(a => a.parent_id === paiId)` para o caso
+ * com pai, ou as fases de topo para o caso raiz. Só os `wbs_code` deles
+ * importam aqui.
+ */
+export function eapProximoCodigoFilho(
+  prefixoPai: string | null | undefined,
+  irmaos: EapItemComCodigo[],
+): string {
+  const prefixo = (prefixoPai ?? "").trim();
+  const usados = new Set(
+    irmaos
+      .map((i) => (i.wbs_code ?? "").trim())
+      .filter((c): c is string => !!c),
+  );
+  for (let i = 1; i <= 999; i++) {
+    const candidato = prefixo ? `${prefixo}.${i}` : `${i}`;
+    if (!usados.has(candidato)) return candidato;
+  }
+  // Praticamente inalcançável (999 irmãos no mesmo nível), mas devolve um
+  // valor determinístico em vez de lançar.
+  return prefixo ? `${prefixo}.999` : "999";
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * RENUMERAR AO MOVER (reparentar) — "Mover para dentro de…"
+ *
+ * Ao mover um item para dentro de outro pai, o item ganha um novo código
+ * (próximo livre sob o novo pai) — e toda a SUBÁRVORE dele precisa seguir,
+ * preservando a estrutura relativa. Mover "1.3" (com filha "1.3.1") para
+ * dentro de "1.1" produz "1.1.4" (próximo livre) e "1.1.4.1" — não apaga a
+ * relação pai/filha entre os dois, só desloca o prefixo comum.
+ *
+ * Itens sem `wbs_code` (criados à mão, maioria da base) não entram no plano:
+ * não há o que renumerar neles, e forçar um código do nada seria inventar
+ * uma posição na EAP que ninguém decidiu.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+export interface EapPassoRenumeracao {
+  id: string;
+  wbs_code: string;
+}
+
+/**
+ * Plano de renumeração ao mover `itemMovidoId` (com toda sua subárvore) para
+ * dentro de um novo pai.
+ *
+ * @param itemMovidoId id do item que está sendo reparentado
+ * @param todosOsItens TODOS os itens do projeto (id, wbs_code, parent_id) —
+ *   usado para achar a subárvore do item movido
+ * @param novoPrefixoPai o `wbs_code` do novo pai, ou null se for para a raiz
+ * @param irmaosDoNovoPai itens que já estão sob o novo pai (ou na raiz)
+ * @returns passos {id, wbs_code} a persistir; vazio se o item movido não tem
+ *   código (nada a renumerar)
+ */
+export function eapPlanoRenumerarAoMover(
+  itemMovidoId: string,
+  todosOsItens: { id: string; wbs_code?: string | null; parent_id?: string | null }[],
+  novoPrefixoPai: string | null | undefined,
+  irmaosDoNovoPai: EapItemComCodigo[],
+): EapPassoRenumeracao[] {
+  const porId = new Map(todosOsItens.map((i) => [i.id, i]));
+  const item = porId.get(itemMovidoId);
+  const codigoAntigo = (item?.wbs_code ?? "").trim();
+  if (!codigoAntigo) return []; // sem código: nada a renumerar
+
+  const novoCodigo = eapProximoCodigoFilho(novoPrefixoPai, irmaosDoNovoPai);
+
+  // Subárvore inteira do item movido (filhos, netos…), pelo parent_id — não
+  // pelo prefixo do código, que pode estar desatualizado por um move anterior
+  // que também não renumerou (o próprio bug que esta função corrige).
+  const porPai = new Map<string, string[]>();
+  for (const i of todosOsItens) {
+    if (!i.parent_id) continue;
+    const lista = porPai.get(i.parent_id) ?? [];
+    lista.push(i.id);
+    porPai.set(i.parent_id, lista);
+  }
+  const descendentes: string[] = [];
+  const fila = [itemMovidoId];
+  while (fila.length) {
+    const atual = fila.shift()!;
+    for (const filhoId of porPai.get(atual) ?? []) {
+      descendentes.push(filhoId);
+      fila.push(filhoId);
+    }
+  }
+
+  const passos: EapPassoRenumeracao[] = [{ id: itemMovidoId, wbs_code: novoCodigo }];
+  for (const descId of descendentes) {
+    const desc = porId.get(descId);
+    const codigoDesc = (desc?.wbs_code ?? "").trim();
+    if (!codigoDesc || !codigoDesc.startsWith(`${codigoAntigo}.`)) continue; // sem código ou fora do padrão: não mexe
+    const sufixo = codigoDesc.slice(codigoAntigo.length); // ex.: ".1" ou ".1.2"
+    passos.push({ id: descId, wbs_code: `${novoCodigo}${sufixo}` });
+  }
+  return passos;
+}
+

@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { EAP_FASE_LEVEL, eapCanGroup, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { EAP_FASE_LEVEL, eapCanGroup, eapIsFaseLevel, eapLevel, eapRootCode, eapProximoCodigoFilho, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { podePromover, motivoNaoPromove } from "@/lib/quadroDeExecucao";
 import { traduzirErroDoBanco } from "@/lib/erroDoBanco";
 import { EapVisual } from "@/components/backlog/EapVisual";
@@ -1968,17 +1968,11 @@ export const BacklogSection = ({
    */
   const proximoCodigoDeFase = (): string => {
     const raiz = eapRootCode() ?? "1";
-    const usados = new Set(
-      activities
-        .filter((a) => !a.is_trashed)
-        .map((a) => (a as { wbs_code?: string | null }).wbs_code)
-        .filter((c): c is string => !!c && eapIsFaseLevel(eapLevel(c))),
-    );
-    for (let i = 1; i <= 999; i++) {
-      const candidato = `${raiz}.${i}`;
-      if (!usados.has(candidato)) return candidato;
-    }
-    return `${raiz}.999`;
+    const irmaos = activities
+      .filter((a) => !a.is_trashed)
+      .map((a) => ({ wbs_code: (a as { wbs_code?: string | null }).wbs_code }))
+      .filter((i) => !!i.wbs_code && eapIsFaseLevel(eapLevel(i.wbs_code)));
+    return eapProximoCodigoFilho(raiz, irmaos);
   };
 
   const criarFase = async () => {

@@ -27,7 +27,7 @@ import {
   type EventoDoBanco,
 } from "@/lib/telaDaAtividadeDados";
 import { capacidadesNaAtividade } from "@/lib/activityAccess";
-import { resolveEapKind, eapToPersisted, EAP_LABELS, type EapKind } from "@/lib/eapModel";
+import { resolveEapKind, eapToPersisted, eapProximoCodigoFilho, EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { gutScore } from "@/lib/gutPriority";
 
 // activity_assignees é da fase 02 e não está nos tipos gerados do Supabase —
@@ -377,20 +377,30 @@ export default function PaginaDaAtividade() {
 
   // SUBATIVIDADE — cria uma filha com nome só; nasce no Backlog (não vira cartão
   // sozinha, a regra continua). O resto se preenche na tela dela.
+  //
+  // wbs_code: próximo livre sob o código do PAI (1.2.3 → 1.2.3.1, 1.2.3.2…).
+  // Antes o INSERT não gravava wbs_code nenhum — a subatividade nascia com
+  // código vazio (— na tela, null no banco) enquanto as irmãs criadas por
+  // outros caminhos tinham o próprio. Achado no reteste de 04/09/2026.
   const aoCriarSubatividade = useCallback(async (nome: string) => {
     const titulo = nome.trim();
     if (!titulo) return;
     const { data: backlog } = await supabase
       .from("workflow_stages").select("id")
       .eq("project_id", projectId).eq("categoria", "backlog").limit(1).maybeSingle();
+    const codigoDoPai = (atividade?.wbs_code as string | null | undefined)?.trim();
+    const wbsCode = codigoDoPai
+      ? eapProximoCodigoFilho(codigoDoPai, filhas.map((f) => ({ wbs_code: (f as { wbs_code?: string | null }).wbs_code })))
+      : null;
     const { error } = await supabase.from("activities").insert({
       project_id: projectId, parent_id: activityId, title: titulo,
       item_type: "atividade", is_milestone: false, status: "not_started",
+      wbs_code: wbsCode,
       workflow_stage_id: (backlog as Record<string, unknown> | null)?.id ?? null,
     } as never);
     if (error) { toast({ title: "Não deu para criar a subatividade", description: error.message, variant: "destructive" }); return; }
     await carregar();
-  }, [activityId, projectId, carregar, toast]);
+  }, [activityId, projectId, atividade, filhas, carregar, toast]);
 
   // ATRIBUIR — inserção ESCOPADA, direta na tabela.
   //

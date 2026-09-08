@@ -20,9 +20,12 @@ import {
   eapDescendantIds,
   eapDepthOf,
   eapShouldDemote,
+  eapPlanoRenumerarAoMover,
   resolveEapKind,
   EAP_LABELS,
   type EapNodeLike,
+  type EapItemComCodigo,
+  type EapPassoRenumeracao,
 } from "@/lib/eapModel";
 import { mutateInChunks } from "@/lib/chunkedIn";
 
@@ -233,6 +236,47 @@ export const LinkParentDialog = ({
       );
 
       if (error) throw error;
+
+      // RENUMERAR A EAP — o item movido (e sua subárvore) ganham código sob
+      // o NOVO pai. Sem isto, "1.3" reparentado para dentro de "1.1" ficava
+      // com o código velho, fora do lugar na árvore (achado no reteste do
+      // Bloco B, 04/09/2026). `all` já é a lista completa do projeto, no
+      // formato que `eapPlanoRenumerarAoMover` espera.
+      //
+      // Vários itens no mesmo lote (mover múltiplos pelo Backlog) não podem
+      // colidir entre si: cada plano usa os "irmãos" JÁ RENUMERADOS pelos
+      // itens anteriores do mesmo lote, não só os que já estavam no banco.
+      try {
+        const irmaosDoNovoPai = all.filter((a) =>
+          validatedParent ? a.parent_id === validatedParent.id : !a.parent_id,
+        );
+        const codigosJaUsados: EapItemComCodigo[] = [...irmaosDoNovoPai];
+        const todosOsPassos: EapPassoRenumeracao[] = [];
+        for (const idMovido of activityIds) {
+          const passos = eapPlanoRenumerarAoMover(
+            idMovido,
+            all,
+            validatedParent?.wbs_code ?? null,
+            codigosJaUsados,
+          );
+          if (passos.length > 0) {
+            todosOsPassos.push(...passos);
+            // O código novo do item movido entra no conjunto "usado" para o
+            // próximo item do lote não repeti-lo.
+            codigosJaUsados.push({ wbs_code: passos[0].wbs_code });
+          }
+        }
+        for (const passo of todosOsPassos) {
+          const { error: renumErr } = await supabase
+            .from("activities")
+            .update({ wbs_code: passo.wbs_code } as any)
+            .eq("id", passo.id);
+          // Falha na renumeração não desfaz o move (que já persistiu); o
+          // pior caso é o código antigo sobreviver, igual ao comportamento
+          // anterior a esta correção — não piora nada.
+          if (renumErr) break;
+        }
+      } catch { /* renumeração é best-effort; o move em si já valeu */ }
 
       // Mover para dentro de outro item deixa o pai anterior possivelmente
       // vazio. Sem isto, ele continuava com cara de agrupador (cubo azul,
