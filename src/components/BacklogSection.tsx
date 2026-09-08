@@ -4530,8 +4530,16 @@ export const BacklogSection = ({
                           {canDelete && (
                             <Button
                               size="icon" variant="ghost"
-                              className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                              // ERA opacity-0 group-hover:opacity-100 e sem
+                              // title/aria-label: um ícone invisível até o
+                              // hover, sem nome — quem inspecionava a linha
+                              // sem passar o mouse concluía (corretamente,
+                              // pela experiência) que a ação não existia.
+                              // Achado no reteste do Bloco J (04/09/2026).
+                              className="h-6 w-6 text-destructive opacity-60 group-hover:opacity-100 hover:bg-destructive/10 transition-opacity"
                               onClick={() => setPermanentDeleteId(activity.id)}
+                              title="Excluir permanentemente"
+                              aria-label="Excluir permanentemente"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
