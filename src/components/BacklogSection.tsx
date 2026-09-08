@@ -1924,6 +1924,20 @@ export const BacklogSection = ({
       }
     }
 
+    // wbs_code: próximo livre sob o PAI (1.2.3 → 1.2.3.1, 1.2.3.2…). Sem pai
+    // (tarefa direta na fase LEGADA, não a "fase" da EAP), não há de onde
+    // derivar o código — fica vazio, como sempre foi nesse caso específico.
+    // Era o único dos 4 caminhos de criação sem esse cálculo: `criarFase` e
+    // `aoCriarSubatividade` (correção da manhã) já usam `eapProximoCodigoFilho`;
+    // este ("+ adicionar subitem" do Backlog) ficava de fora. Achado no
+    // reteste do Bloco G (04/09/2026).
+    const codigoDoPai = (parent?.wbs_code ?? "").trim();
+    const wbsCode = codigoDoPai
+      ? eapProximoCodigoFilho(codigoDoPai, backlogActs
+          .filter((a) => a.parent_id === parentId)
+          .map((a) => ({ wbs_code: a.wbs_code ?? null })))
+      : null;
+
     // Herda o stage do pai (fase) em vez do stage fixo "Backlog": uma tarefa
     // criada dentro de uma fase precisa nascer na MESMA coluna do quadro que a
     // fase, senão fica presa no stage 0 (que nunca vira coluna do Kanban) e
@@ -1935,6 +1949,7 @@ export const BacklogSection = ({
       title,
       phase_id: phaseId,
       parent_id: parentId,
+      wbs_code: wbsCode,
       workflow_stage_id: inheritedStageId,
       status: "pending",
       priority: "pendente",
@@ -2731,13 +2746,21 @@ export const BacklogSection = ({
                     distância que variava com o número de dígitos — e o nome é
                     o que a pessoa lê. */}
                 <span
-                  className={`text-[13px] font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
-                  onDoubleClick={(e) => {
+                  className={`text-[13px] font-normal truncate cursor-text hover:underline decoration-dotted underline-offset-2 ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
+                  onClick={(e) => {
+                    // ERA onDoubleClick — e o duplo-clique estruturalmente
+                    // nunca vence: o navegador dispara DOIS eventos "click"
+                    // (que a linha usa para navegar) ANTES do "dblclick".
+                    // stopPropagation() dentro do dblclick não ajudava porque
+                    // roda depois que os clicks já borbulharam. A correção é
+                    // clique SIMPLES no título, com stopPropagation no
+                    // próprio click — impede a linha de navegar. Achado no
+                    // reteste do Bloco G (04/09/2026).
                     e.stopPropagation();
                     setEditingTitleId(activity.id);
                     setEditingTitleValue(activity.title);
                   }}
-                  title={activity.description || "Duplo-clique para editar"}
+                  title={activity.description || "Clique para editar o título"}
                 >
                   {activity.title}
                 </span>
@@ -3249,17 +3272,31 @@ export const BacklogSection = ({
             ) : (
               <h4
                 className="text-[13px] font-semibold text-foreground cursor-pointer truncate"
-                // stopPropagation: a faixa colapsa, o título abre os detalhes.
+                // stopPropagation: a faixa colapsa, o clique no título abre os detalhes.
                 onClick={(e) => { e.stopPropagation(); onEditActivity(phaseAct); }}
-                onDoubleClick={(e) => {
+                title="Clique para editar"
+              >
+                {phaseAct.title}
+              </h4>
+            )}
+            {/* Renomear tinha gatilho por duplo-clique no MESMO elemento do
+                clique simples (que abre detalhes) — o duplo-clique nunca
+                vencia: o navegador dispara dois "click" (abrindo os detalhes)
+                antes do "dblclick". Ícone próprio, só no hover, resolve sem
+                disputar o mesmo gesto. Achado no reteste do Bloco G (04/09/2026). */}
+            {!isEditingTitle && (
+              <button
+                type="button"
+                className="h-5 w-5 shrink-0 hidden group-hover:flex items-center justify-center rounded hover:bg-muted text-muted-foreground/70 hover:text-foreground"
+                onClick={(e) => {
                   e.stopPropagation();
                   setEditingTitleId(phaseAct.id);
                   setEditingTitleValue(phaseAct.title);
                 }}
-                title="Clique para editar · duplo-clique para renomear"
+                title="Renomear"
               >
-                {phaseAct.title}
-              </h4>
+                <Pencil className="w-3 h-3" />
+              </button>
             )}
           </div>
           {/* gap-2: mesmo alinhamento do cabeçalho de fase real.
