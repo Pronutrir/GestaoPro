@@ -438,21 +438,69 @@ export const ActivityKanban = ({
   // Filtros do board: busca textual + responsável + fase + prioridade.
   const filtersKey = `kanban-filters:${projectId}`;
   const [search, setSearch] = useState("");
+
+  // Carga PREGUIÇOSA (lazy initializer), não useEffect pós-montagem.
+  //
+  // Os 12 filtros abaixo nasciam vazios e só recebiam o valor salvo dentro
+  // de um useEffect (linha ~486, ver histórico). Só que o useEffect QUE
+  // SALVA roda no mesmo commit inicial — com o estado ainda vazio — e
+  // sobrescrevia o localStorage ANTES do useEffect de carga aplicar o
+  // setState. Resultado: F5 sempre voltava com filtro zerado, mesmo com o
+  // valor certo gravado no disco. Achado no reteste do Bloco A (04/09/2026).
+  //
+  // `columnFilters` (abaixo) e `onlyMine` já usavam este padrão e por isso
+  // nunca tiveram o bug — a correção é só igualar o padrão, sem mecanismo
+  // novo.
+  const lerFiltrosSalvos = useCallback((): Record<string, unknown> => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(filtersKey);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }, [filtersKey]);
+
   // Multi-seleção: cada filtro é um Set de valores; vazio = "todos".
-  const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set());
-  const [filterPhases, setFilterPhases] = useState<Set<string>>(new Set());
-  const [filterPriorities, setFilterPriorities] = useState<Set<string>>(new Set());
+  const [filterAssignees, setFilterAssignees] = useState<Set<string>>(
+    () => new Set(Array.isArray(lerFiltrosSalvos().assignees) ? lerFiltrosSalvos().assignees as string[] : []),
+  );
+  const [filterPhases, setFilterPhases] = useState<Set<string>>(
+    () => new Set(Array.isArray(lerFiltrosSalvos().phases) ? lerFiltrosSalvos().phases as string[] : []),
+  );
+  const [filterPriorities, setFilterPriorities] = useState<Set<string>>(
+    () => new Set(Array.isArray(lerFiltrosSalvos().priorities) ? lerFiltrosSalvos().priorities as string[] : []),
+  );
   // Prazo: intervalo de datas (YYYY-MM-DD). Vazio = qualquer prazo.
-  const [filterDueRange, setFilterDueRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
-  const [filterTags, setFilterTags] = useState<Set<string>>(new Set());
-  const [filterBlocked, setFilterBlocked] = useState(false);
+  const [filterDueRange, setFilterDueRange] = useState<{ from: string; to: string }>(() => {
+    const f = lerFiltrosSalvos();
+    const dr = f.dueRange as { from?: unknown; to?: unknown } | undefined;
+    return dr && typeof dr.from === "string" && typeof dr.to === "string" ? { from: dr.from, to: dr.to } : { from: "", to: "" };
+  });
+
+  const [filterTags, setFilterTags] = useState<Set<string>>(
+    () => new Set(Array.isArray(lerFiltrosSalvos().tags) ? lerFiltrosSalvos().tags as string[] : []),
+  );
+  const [filterBlocked, setFilterBlocked] = useState(() => typeof lerFiltrosSalvos().blocked === "boolean" ? lerFiltrosSalvos().blocked as boolean : false);
   // Filtros adicionais (Frente A): aproveitam campos que já existem no card.
-  const [filterStages, setFilterStages] = useState<Set<string>>(new Set());     // workflow_stage_id
-  const [filterSectors, setFilterSectors] = useState<Set<string>>(new Set());   // setor do responsável
-  const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set());       // item_type/marco
-  const [filterParticipants, setFilterParticipants] = useState<Set<string>>(new Set());
-  const [filterStartRange, setFilterStartRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
-  const [filterHoursRange, setFilterHoursRange] = useState<{ min: string; max: string }>({ min: "", max: "" });
+  const [filterStages, setFilterStages] = useState<Set<string>>(     // workflow_stage_id
+    () => new Set(Array.isArray(lerFiltrosSalvos().stages) ? lerFiltrosSalvos().stages as string[] : []),
+  );
+  const [filterSectors, setFilterSectors] = useState<Set<string>>(   // setor do responsável
+    () => new Set(Array.isArray(lerFiltrosSalvos().sectors) ? lerFiltrosSalvos().sectors as string[] : []),
+  );
+  const [filterTypes, setFilterTypes] = useState<Set<string>>(       // item_type/marco
+    () => new Set(Array.isArray(lerFiltrosSalvos().types) ? lerFiltrosSalvos().types as string[] : []),
+  );
+  const [filterParticipants, setFilterParticipants] = useState<Set<string>>(
+    () => new Set(Array.isArray(lerFiltrosSalvos().participants) ? lerFiltrosSalvos().participants as string[] : []),
+  );
+  const [filterStartRange, setFilterStartRange] = useState<{ from: string; to: string }>(() => {
+    const sr = lerFiltrosSalvos().startRange as { from?: unknown; to?: unknown } | undefined;
+    return sr && typeof sr.from === "string" && typeof sr.to === "string" ? { from: sr.from, to: sr.to } : { from: "", to: "" };
+  });
+  const [filterHoursRange, setFilterHoursRange] = useState<{ min: string; max: string }>(() => {
+    const hr = lerFiltrosSalvos().hoursRange as { min?: unknown; max?: unknown } | undefined;
+    return hr && typeof hr.min === "string" && typeof hr.max === "string" ? { min: hr.min, max: hr.max } : { min: "", max: "" };
+  });
   // Filtro por coluna (Frente B): map stageId -> ColumnFilter, persistido por projeto.
   const columnFiltersKey = `kanban-col-filters:${projectId}`;
   const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>(() => {
@@ -482,25 +530,30 @@ export const ActivityKanban = ({
   // Seção aberta no painel de filtros (accordion). null = todas fechadas.
   const [filterOpenSection, setFilterOpenSection] = useState<string | null>(null);
 
-  // Carrega filtros salvos ao montar.
+  // Recarrega os filtros quando o PROJETO MUDA (troca de projeto sem
+  // remontar o componente). Na montagem inicial, os states já nasceram
+  // carregados pelo inicializador preguiçoso acima — este efeito só age
+  // depois disso, guardado por `primeiraMontagemFiltros`, para não repetir
+  // a mesma leitura e (o bug de 04/09/2026) sobrescrever com vazio.
+  const primeiraMontagemFiltros = useRef(true);
   useEffect(() => {
+    if (primeiraMontagemFiltros.current) { primeiraMontagemFiltros.current = false; return; }
     if (typeof window === "undefined") return;
     try {
       const raw = window.localStorage.getItem(filtersKey);
-      if (!raw) return;
-      const f = JSON.parse(raw);
-      if (Array.isArray(f.assignees)) setFilterAssignees(new Set(f.assignees));
-      if (Array.isArray(f.phases)) setFilterPhases(new Set(f.phases));
-      if (Array.isArray(f.priorities)) setFilterPriorities(new Set(f.priorities));
-      if (f.dueRange && typeof f.dueRange.from === "string" && typeof f.dueRange.to === "string") setFilterDueRange(f.dueRange);
-      if (Array.isArray(f.tags)) setFilterTags(new Set(f.tags));
-      if (typeof f.blocked === "boolean") setFilterBlocked(f.blocked);
-      if (Array.isArray(f.stages)) setFilterStages(new Set(f.stages));
-      if (Array.isArray(f.sectors)) setFilterSectors(new Set(f.sectors));
-      if (Array.isArray(f.types)) setFilterTypes(new Set(f.types));
-      if (Array.isArray(f.participants)) setFilterParticipants(new Set(f.participants));
-      if (f.startRange && typeof f.startRange.from === "string" && typeof f.startRange.to === "string") setFilterStartRange(f.startRange);
-      if (f.hoursRange && typeof f.hoursRange.min === "string" && typeof f.hoursRange.max === "string") setFilterHoursRange(f.hoursRange);
+      const f = raw ? JSON.parse(raw) : {};
+      setFilterAssignees(new Set(Array.isArray(f.assignees) ? f.assignees : []));
+      setFilterPhases(new Set(Array.isArray(f.phases) ? f.phases : []));
+      setFilterPriorities(new Set(Array.isArray(f.priorities) ? f.priorities : []));
+      setFilterDueRange(f.dueRange && typeof f.dueRange.from === "string" && typeof f.dueRange.to === "string" ? f.dueRange : { from: "", to: "" });
+      setFilterTags(new Set(Array.isArray(f.tags) ? f.tags : []));
+      setFilterBlocked(typeof f.blocked === "boolean" ? f.blocked : false);
+      setFilterStages(new Set(Array.isArray(f.stages) ? f.stages : []));
+      setFilterSectors(new Set(Array.isArray(f.sectors) ? f.sectors : []));
+      setFilterTypes(new Set(Array.isArray(f.types) ? f.types : []));
+      setFilterParticipants(new Set(Array.isArray(f.participants) ? f.participants : []));
+      setFilterStartRange(f.startRange && typeof f.startRange.from === "string" && typeof f.startRange.to === "string" ? f.startRange : { from: "", to: "" });
+      setFilterHoursRange(f.hoursRange && typeof f.hoursRange.min === "string" && typeof f.hoursRange.max === "string" ? f.hoursRange : { min: "", max: "" });
     } catch { /* ignore */ }
   }, [filtersKey]);
   // Persiste os filtros (nao a busca textual, que e efemera).
