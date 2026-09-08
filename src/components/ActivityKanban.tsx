@@ -1571,9 +1571,18 @@ export const ActivityKanban = ({
 
       const colunaDe = (a: Activity) => optimisticMoves[a.id] || a.workflow_stage_id;
       if (e?.shiftKey && daAncora && atual && colunaDe(daAncora) === colunaDe(atual)) {
-        // A ordem é a de `activities`, que é a mesma que alimenta a coluna —
-        // `activitiesByStage` só existe mais abaixo no arquivo.
-        const naColuna = activities.filter((a) => colunaDe(a) === colunaDe(atual)).map((a) => a.id);
+        // ERA `activities.filter(...)` puro — incluía agrupador (Fase/Pacote)
+        // e marco, que NUNCA viram card no quadro (ver `activitiesByStage`).
+        // O intervalo "pegava" um item invisível: a barra e o selo contavam
+        // 4 quando só 3 cards apareciam marcados na tela. Achado no reteste
+        // do Bloco E (04/09/2026). Mesmo filtro e mesma ordem que o quadro
+        // usa para desenhar a coluna.
+        const naColuna = activities
+          .filter((a) => colunaDe(a) === colunaDe(atual))
+          .filter((a) => !a.is_milestone && !ehAgrupadorDoQuadro(a as never, filhasPorPaiParaRegra))
+          .slice()
+          .sort((a, b) => (a.display_order ?? 999999) - (b.display_order ?? 999999))
+          .map((a) => a.id);
         const i = naColuna.indexOf(ancora!);
         const j = naColuna.indexOf(id);
         if (i >= 0 && j >= 0) {
@@ -1587,7 +1596,7 @@ export const ActivityKanban = ({
       ultimoMarcado.current = next.has(id) ? id : null;
       return next;
     });
-  }, [activities, optimisticMoves]);
+  }, [activities, optimisticMoves, filhasPorPaiParaRegra]);
 
   const limparSelecao = useCallback(() => {
     setSelecionados(new Set());
