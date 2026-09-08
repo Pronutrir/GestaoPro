@@ -673,21 +673,36 @@ export function ProjectCronogramaPanel({
     // DEPENDÊNCIAS PELA RPC (POST), uma por projeto do escopo — sem a lista de
     // ids na URL que estourava 15 KB e voltava 502. E DEGRADA: se falhar, as
     // atividades continuam listadas; só as setas/folga ficam de fora, com aviso.
-    const ids = (acts || []).map((a: any) => a.id);
-    if (ids.length) {
-      try {
-        const listas = await Promise.all(scopedProjectIds.map((pid) => fetchTaskDependencias(pid)));
-        const vistos = new Set<string>();
-        setDeps(listas.flat().filter((dep) => (vistos.has(dep.id) ? false : (vistos.add(dep.id), true))));
-        setDepsErro(false);
-      } catch (err) {
-        // Falhar em silêncio aqui apagava a tela inteira. Agora: log com
-        // contexto, deps vazio (a tela degrada) e o aviso liga.
-        console.error("task_dependencies (cronograma):", err);
-        setDeps([]);
-        setDepsErro(true);
-      }
-    } else { setDeps([]); setDepsErro(false); }
+    //
+    // ERA gateado em `if (ids.length)`, com `ids` vindo de `acts` — que quando
+    // a página usa `activitiesExternas` (fonte única) é só o SNAPSHOT que
+    // existia no momento desta chamada. Se `carregarDados` rodasse antes de a
+    // página terminar de carregar as próprias atividades (accessLoading já
+    // false, activitiesExternas ainda `[]`), `ids.length` dava 0, o `else`
+    // zerava `deps` e a RPC nunca era chamada. Como este callback não
+    // depende de `activitiesExternas` (só recarrega com projectIds/
+    // accessLoading/filterProjects), as atividades reais chegavam depois
+    // pelo useEffect direto (linha ~719) mas as dependências ficavam
+    // congeladas em `[]` para sempre — zero requisição, zero erro. Achado
+    // no Bloco L (04/09/2026): coluna "Predecessoras" sempre vazia, mesmo
+    // com a dependência gravada certa no banco.
+    //
+    // Dependências são por PROJETO, não por atividade — o gate correto é
+    // `scopedProjectIds.length`, que já é > 0 aqui (a função retornou antes,
+    // na linha 513, se fosse 0). Por isso a busca roda sempre a partir daqui,
+    // sem depender do snapshot de `acts`.
+    try {
+      const listas = await Promise.all(scopedProjectIds.map((pid) => fetchTaskDependencias(pid)));
+      const vistos = new Set<string>();
+      setDeps(listas.flat().filter((dep) => (vistos.has(dep.id) ? false : (vistos.add(dep.id), true))));
+      setDepsErro(false);
+    } catch (err) {
+      // Falhar em silêncio aqui apagava a tela inteira. Agora: log com
+      // contexto, deps vazio (a tela degrada) e o aviso liga.
+      console.error("task_dependencies (cronograma):", err);
+      setDeps([]);
+      setDepsErro(true);
+    }
   }, [projectIds, accessLoading, filterProjects]);
 
   /**
