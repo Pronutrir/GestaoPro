@@ -110,8 +110,13 @@ export const PAPEIS_PROJETO: PapelProjeto[] = [
     /* "vê o projeto inteiro" e não "vê todas as atividades": a segunda frase
        sugeria um contraste com alguém que NÃO vê, e o contraste é outro —
        quem entra só por atividade (sem vínculo de equipe) é que tem a visão
-       recortada. Membro da equipe, mesmo com este papel, vê tudo. */
-    hint: "vê o projeto inteiro. Edita só onde é responsável ou participante",
+       recortada. Membro da equipe, mesmo com este papel, vê tudo.
+
+       Texto do hint atualizado em 08/09/2026 para refletir o que a regra já
+       fazia desde a migration 20260904150000 (responsável de subárvore cria,
+       move e exclui, não só edita). Relato completo do achado que motivou o
+       ajuste: docs/validacao-testes-04-09-2026.html. */
+    hint: "vê o projeto inteiro. Cria, edita, move e exclui o que está sob sua responsabilidade",
     rank: 2,
     perms: { can_create: false, can_edit: false, can_delete: false, can_move: false, can_edit_own: true },
   },

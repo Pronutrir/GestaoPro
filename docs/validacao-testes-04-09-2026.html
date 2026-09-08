@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Gestão_Pro — Relatório de Validação (04/09/2026)</title>
+<style>
+  :root {
+    --verde: #16a34a; --verde-bg: #f0fdf4;
+    --laranja: #ea580c; --laranja-bg: #fff7ed;
+    --azul: #2563eb; --azul-bg: #eff6ff;
+    --cinza: #6b7280; --cinza-bg: #f9fafb;
+    --texto: #1f2937; --texto-suave: #4b5563;
+    --borda: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--texto); background: #fff; margin: 0; padding: 0;
+    line-height: 1.55;
+  }
+  .capa {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    color: #fff; padding: 56px 40px 40px;
+  }
+  .capa h1 { margin: 0 0 8px; font-size: 28px; }
+  .capa p { margin: 0; opacity: .92; font-size: 15px; max-width: 720px; }
+  .capa .meta { margin-top: 20px; display: flex; gap: 28px; flex-wrap: wrap; font-size: 13px; }
+  .capa .meta b { display: block; font-size: 20px; }
+  main { max-width: 880px; margin: 0 auto; padding: 32px 24px 80px; }
+  h2.secao {
+    font-size: 20px; margin: 48px 0 6px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--borda); color: #111827;
+  }
+  .intro-secao { color: var(--texto-suave); font-size: 14px; margin: 0 0 20px; }
+  .card {
+    border: 1px solid var(--borda); border-radius: 10px; padding: 18px 20px;
+    margin-bottom: 14px; background: #fff;
+  }
+  .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .card-header h3 { margin: 0; font-size: 16px; color: #111827; }
+  .tag {
+    font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .03em; white-space: nowrap;
+  }
+  .tag-ok { background: var(--verde-bg); color: var(--verde); }
+  .tag-fix { background: var(--laranja-bg); color: var(--laranja); }
+  .tag-obs { background: var(--azul-bg); color: var(--azul); }
+  .tag-pend { background: var(--cinza-bg); color: var(--cinza); }
+  .card p { margin: 10px 0 0; font-size: 14px; color: var(--texto-suave); }
+  .card .achado {
+    margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13.5px;
+    background: var(--laranja-bg); border-left: 3px solid var(--laranja); color: #7c2d12;
+  }
+  .card .achado.obs { background: var(--azul-bg); border-left-color: var(--azul); color: #1e3a5f; }
+  .card .achado.pend { background: var(--cinza-bg); border-left-color: var(--cinza); color: #374151; }
+  ul.itens { margin: 10px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--texto-suave); }
+  ul.itens li { margin-bottom: 4px; }
+  .resumo-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+    gap: 12px; margin: 20px 0 8px;
+  }
+  .resumo-item {
+    border: 1px solid var(--borda); border-radius: 10px; padding: 16px; text-align: center;
+  }
+  .resumo-item .num { font-size: 28px; font-weight: 800; color: #111827; }
+  .resumo-item .label { font-size: 12.5px; color: var(--texto-suave); margin-top: 2px; }
+  .glossario { background: var(--cinza-bg); border-radius: 10px; padding: 18px 20px; font-size: 13.5px; color: var(--texto-suave); }
+  .glossario b { color: #111827; }
+  .passo {
+    display: flex; gap: 12px; margin-bottom: 14px; align-items: flex-start;
+  }
+  .passo .bola {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--azul);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
+  }
+  .passo p { margin: 0; font-size: 14px; color: var(--texto-suave); }
+  footer { text-align: center; color: var(--cinza); font-size: 12px; padding: 24px; border-top: 1px solid var(--borda); }
+</style>
+</head>
+<body>
+
+<div class="capa">
+  <h1>Validação do Gestão_Pro — o que foi testado</h1>
+  <p>Este relatório resume, em linguagem simples, tudo o que foi verificado no sistema entre 04/09 e 08/09/2026:
+  o quadro Kanban, a lista de tarefas (Backlog) e o Cronograma. Serve para você conferir o que já está
+  validado, o que foi corrigido, e o que ainda espera uma decisão sua.</p>
+  <div class="meta">
+    <div><b>3</b> áreas testadas</div>
+    <div><b>16</b> correções aplicadas</div>
+    <div><b>31</b> verificações automáticas, todas passando</div>
+    <div><b>2</b> pendências aguardando decisão</div>
+  </div>
+</div>
+
+<main>
+
+<h2 class="secao">Como ler este documento</h2>
+<div class="glossario">
+  <p style="margin:0 0 10px">Cada bloco testado aparece como um cartão com uma etiqueta colorida:</p>
+  <p style="margin:0 0 6px"><span class="tag tag-ok">Validado</span> — testamos e está funcionando como deveria. Nada a fazer.</p>
+  <p style="margin:0 0 6px"><span class="tag tag-fix">Corrigido</span> — encontramos um problema real e já foi consertado e testado de novo.</p>
+  <p style="margin:0 0 6px"><span class="tag tag-obs">Observação</span> — não é um defeito, mas vale o registro (um comportamento diferente do esperado, porém correto).</p>
+  <p style="margin:0"><span class="tag tag-pend">Pendente</span> — encontramos algo que precisa da sua decisão antes de agir.</p>
+</div>
+
+<h2 class="secao">1. Quadro Kanban</h2>
+<p class="intro-secao">O quadro de cartões (colunas tipo "A Fazer", "Em andamento", "Concluído") onde as tarefas são arrastadas entre etapas.</p>
+
+<div class="card">
+  <div class="card-header"><h3>Filtros do quadro</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>Os filtros (buscar, filtrar por responsável, prioridade, etc.) não ficavam salvos: ao atualizar a página (F5), eles desapareciam. Agora ficam guardados no navegador e continuam aplicados mesmo depois de atualizar a página.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Ações do cartão (concluir, mover, arquivar)</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>Um botão de "duplicar" no menu do cartão não fazia nada quando clicado (estava desconectado da função). Foi religado.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Arrastar e soltar cartões</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>Dois problemas: (1) reordenar cartões dentro da mesma coluna, entre irmãos, não funcionava direito; (2) ao selecionar vários cartões segurando Shift e clicando, um cartão "agrupador" invisível (uma fase, não uma tarefa) estava sendo contado junto, inflando o número de itens selecionados. Os dois foram corrigidos.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Configuração das colunas do quadro</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>O limite de itens por coluna (WIP — quantidade máxima de tarefas permitida numa etapa) existia no banco de dados mas não tinha nenhuma tela para configurá-lo. Também trocamos o alerta nativo do navegador (feio, genérico) por uma confirmação com a cara do sistema ao ocultar uma coluna.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Selecionar e mover vários cartões de uma vez</h3><span class="tag tag-ok">Validado</span></div>
+  <p>Selecionar múltiplos cartões e movê-los juntos entre colunas funciona corretamente (a contagem de itens selecionados foi corrigida junto com o item de arrastar/soltar acima).</p>
+</div>
+
+<h2 class="secao">2. Lista de Tarefas (Backlog)</h2>
+<p class="intro-secao">A visão em lista/árvore das atividades do projeto, com hierarquia (fases, subatividades), usada para planejar e organizar o trabalho.</p>
+
+<div class="card">
+  <div class="card-header"><h3>Filtros e busca na lista</h3><span class="tag tag-ok">Validado</span></div>
+  <p>Busca por texto, agrupamento e filtros funcionam corretamente, inclusive dentro da estrutura em árvore (fases dentro de fases).</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Criar e editar tarefas</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>Duas falhas: ao criar uma tarefa rapidamente (atalho de "criação rápida"), o código dela (ex: "1.2.3") ficava em branco. E o título de uma tarefa, em certos casos, não conseguia ser editado clicando nele. Os dois foram corrigidos.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 style="color:#7c2d12">Ações em lote (mudar status, responsável, prazo, prioridade de vários itens de uma vez)</h3><span class="tag tag-fix">Corrigido — achado importante</span></div>
+  <p>Este foi o achado mais sério de toda a validação. Ao selecionar várias tarefas e aplicar uma mudança em massa (por exemplo, "prioridade alta" em 2 tarefas), o sistema <b>avisava que a alteração tinha dado certo</b> mesmo quando o usuário não tinha permissão sobre aquelas tarefas — e o banco de dados recusava a gravação por trás dos panos, silenciosamente. Ou seja: a tela dizia "sucesso", mas nada era salvo.</p>
+  <div class="achado">
+    <b>Por que isso importava:</b> um responsável por uma parte do projeto conseguia, sem querer ou não, tentar alterar tarefas de outras áreas — e o sistema fingia sucesso em vez de avisar que a ação não tinha permissão. Corrigimos para que a tela só confirme o que realmente foi salvo, e avise claramente quando algo foi bloqueado por falta de permissão.
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Concluir e reabrir tarefas individualmente</h3><span class="tag tag-ok">Validado</span></div>
+  <p>Concluir uma tarefa funciona e, se ela for a última pendência de uma tarefa "mãe", a mãe é concluída automaticamente junto — comportamento esperado. Reabrir uma tarefa concluída sempre volta para "Não iniciado" (não volta ao status exato de antes, o que é intencional). Marcos (datas importantes do projeto) usam linguagem própria: "Marcar como atingido" em vez de "Concluir".</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Lixeira (itens excluídos)</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>Restaurar um item, restaurar todos e esvaziar a lixeira funcionam bem. Só que faltava o botão de "excluir permanentemente" um único item — ele existia no código mas estava praticamente invisível (só aparecia passando o mouse bem em cima, sem nenhuma indicação). Agora é visível o tempo todo.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Modo "árvore visual" (EAP — mapa do projeto)</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>A visão em árvore/organograma do projeto vinha com um problema de escala: com poucas tarefas, os quadradinhos apareciam gigantes na tela e o botão "Ajustar" (que deveria centralizar a visualização) não fazia nada. Corrigido — agora a árvore aparece no tamanho certo e o botão de ajustar funciona.</p>
+  <p>Depois da correção, testamos exportar a árvore como imagem, imprimir, marcar itens "órfãos" (sem tarefa-mãe) e mostrar marcos na árvore — tudo funcionando.</p>
+</div>
+
+<h2 class="secao">3. Cronograma (Gantt)</h2>
+<p class="intro-secao">A visão de linha do tempo, com barras mostrando datas de início/fim de cada tarefa e as dependências entre elas.</p>
+
+<div class="card">
+  <div class="card-header"><h3>Tela de Cronograma em uso</h3><span class="tag tag-ok">Validado</span></div>
+  <p>Cores por status, aviso de "hoje", linhas sem data marcadas claramente, clique para abrir detalhes, arrastar para mudar datas — tudo funcionando na tela que realmente é usada pelo sistema.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Um componente antigo e "fantasma"</h3><span class="tag tag-obs">Observação</span></div>
+  <p>Encontramos um arquivo de código de uma versão antiga do Cronograma que tinha um defeito — mas esse arquivo não é usado por nenhuma tela do sistema há tempos. Como não tinha utilidade e só confundia quem lesse o código depois, removemos o arquivo.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Contagem de tarefas "atrasadas"</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>O número de tarefas atrasadas mostrado no topo da tela, às vezes, não batia com as tarefas marcadas em vermelho na própria lista — porque duas partes do sistema calculavam "atrasada" de formas ligeiramente diferentes. Unificamos a lógica para as duas contarem exatamente a mesma coisa.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 style="color:#7c2d12">Coluna "Predecessoras" (dependências entre tarefas)</h3><span class="tag tag-fix">Corrigido — achado importante</span></div>
+  <p>Ao criar uma dependência entre tarefas (ex: "a tarefa B só começa depois que a A terminar"), a coluna que deveria mostrar essa relação ficava sempre vazia — mesmo com a informação correta salva no banco de dados. A causa: uma parte do sistema não esperava os dados de outra parte carregarem, e a busca das dependências acabava nunca acontecendo.</p>
+  <div class="achado">
+    Corrigido — a coluna agora mostra corretamente qual tarefa depende de qual.
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 style="color:#7c2d12">Lentidão ao abrir o Cronograma</h3><span class="tag tag-fix">Corrigido — achado importante</span></div>
+  <p>Investigando o problema acima, descobrimos a causa real de uma demora de cerca de <b>21 segundos</b> para o Cronograma aparecer completo na tela — sem nenhum erro visível, só demora. Uma das consultas ao banco de dados não estava filtrando por projeto e, por isso, o banco precisava conferir permissão de acesso, uma por uma, em milhares de linhas de todos os projetos, para no fim devolver só 2 linhas úteis.</p>
+  <div class="achado">
+    Corrigido — a consulta agora já filtra pelo projeto certo desde o início. O carregamento deixou de depender dessa varredura desnecessária.
+  </div>
+</div>
+
+<h2 class="secao">Achado a partir do seu próprio relato</h2>
+
+<div class="card">
+  <div class="card-header"><h3 style="color:#7c2d12">Texto do perfil "Editar apenas as minhas" estava desatualizado</h3><span class="tag tag-fix">Corrigido</span></div>
+  <p>Você notou que a descrição do perfil "Editar apenas as minhas" parecia incompleta: dizia que a pessoa só "edita" o que é seu, mas a regra esperada era mais ampla — quem é responsável por uma atividade (pai ou filha) deveria poder <b>criar, editar, mover e excluir</b> dentro do seu próprio escopo, e o card não deveria ficar bloqueado para ela no quadro Kanban.</p>
+  <p><b>O que a investigação encontrou:</b> essa regra mais ampla <b>já estava testada e validada</b> no sistema — foi corrigida em 04/09/2026, durante o Bloco H (ver mais acima), e o comportamento real já é exatamente o que você descreveu: responsável de um ramo cria, edita, move e exclui dentro da própria subárvore, sem bloqueio no Kanban. O que estava desatualizado era só o <b>texto exibido na tela</b>, que ainda descrevia a versão antiga do perfil (só "edita"), sem mencionar que ele também cria, move e exclui — foi esse texto que deu a impressão de inconsistência.</p>
+  <div class="achado">
+    Corrigido — o texto do perfil "Editar apenas as minhas" foi atualizado para descrever o comportamento real: "vê o projeto inteiro. Cria, edita, move e exclui o que está sob sua responsabilidade".
+  </div>
+</div>
+
+<h2 class="secao">Pendências aguardando sua decisão</h2>
+
+<div class="card">
+  <div class="card-header"><h3>Uma segunda lentidão parecida, em outra tela</h3><span class="tag tag-pend">Pendente</span></div>
+  <p>Encontramos um problema parecido com o do Cronograma, mas em uma verificação usada por <b>várias telas do sistema</b> (não só o Cronograma) — leva cerca de 12,6 segundos. A diferença é que, neste caso, a correção é mais delicada: essa consulta existe justamente para descobrir a quais projetos a pessoa tem acesso, então não dá para simplesmente "filtrar por projeto" (ainda não se sabe qual é o projeto certo nesse momento). A correção correta exige criar uma função nova no banco de dados.</p>
+  <div class="achado pend">
+    <b>Por que está esperando você:</b> mexer nessa parte do sistema toca diretamente em "quem pode ver o quê" — o ponto mais sensível de segurança do sistema. Preparei a ideia da correção, mas só vou escrever e aplicar com sua aprovação explícita.
+  </div>
+</div>
+
+<h2 class="secao">O que ainda não foi testado</h2>
+<div class="card">
+  <div class="card-header"><h3>Telas restantes do projeto</h3><span class="tag tag-pend">Pendente</span></div>
+  <p>As áreas mais usadas no dia a dia (Kanban, Backlog, Cronograma) já foram totalmente cobertas. Ainda ficam de fora, por enquanto: Documentos (upload de arquivos e assinaturas), Registros, Reuniões, Riscos, Mudanças, Dependências entre tarefas em tela dedicada, Financeiro e Lições Aprendidas. Um roteiro de testes para "Documentos" já está pronto para quando você quiser seguir.</p>
+  <p>Duas telas do sistema — <b>Calendário</b> e <b>Histórias de usuário</b> — estão desligadas de propósito (decisão de produto já registrada no código, sem relação com bugs): o Calendário foi substituído pelo Cronograma, e "Histórias" é um conceito de outra metodologia que não se aplica ao formato atual do projeto.</p>
+</div>
+
+<h2 class="secao">Resumo em números</h2>
+<div class="resumo-grid">
+  <div class="resumo-item"><div class="num">16</div><div class="label">correções aplicadas e testadas de novo</div></div>
+  <div class="resumo-item"><div class="num">2</div><div class="label">achados de segurança/confiabilidade tratados como prioridade</div></div>
+  <div class="resumo-item"><div class="num">31</div><div class="label">verificações automáticas, todas passando</div></div>
+  <div class="resumo-item"><div class="num">2</div><div class="label">pendências aguardando decisão sua</div></div>
+</div>
+
+<h2 class="secao">Como você mesmo pode conferir</h2>
+<div class="passo">
+  <div class="bola">1</div>
+  <p>Abra o sistema normalmente e entre com sua conta de sempre.</p>
+</div>
+<div class="passo">
+  <div class="bola">2</div>
+  <p>No Kanban: atualize a página depois de aplicar um filtro — ele deve continuar lá. Arraste um cartão entre colunas — deve reordenar corretamente.</p>
+</div>
+<div class="passo">
+  <div class="bola">3</div>
+  <p>No Backlog: abra a Lixeira e veja se o botão de excluir permanentemente aparece visível ao lado de "Restaurar", sem precisar passar o mouse em cima para descobrir.</p>
+</div>
+<div class="passo">
+  <div class="bola">4</div>
+  <p>No Cronograma: repare que agora ele carrega rápido (não deve demorar mais que poucos segundos), e que a coluna de dependências, se você tiver alguma tarefa ligada a outra, mostra a informação certa.</p>
+</div>
+<div class="passo">
+  <div class="bola">5</div>
+  <p>Qualquer coisa que parecer estranha, me avise — cada correção deste relatório tem um registro específico (commit) que pode ser consultado se for preciso investigar mais fundo.</p>
+</div>
+
+</main>
+
+<footer>
+  Relatório gerado a partir da validação técnica realizada em 04–08/09/2026 · Gestão_Pro · branch fix/correcoes_4
+</footer>
+
+</body>
+</html>
