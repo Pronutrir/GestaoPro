@@ -1851,9 +1851,23 @@ export function ProjectCronogramaPanel({
 
   // Delega à fonte única (lib/activityState) para que Cronograma, healthScore e
   // demais telas nunca divirjam sobre o que é "atrasada".
-  const isOverdueByRule = useCallback((activity: any, isCompletedByStage: boolean) => {
+  //
+  // ERA (activity, isCompletedByStage: boolean) — recebia só um booleano
+  // reduzido de is_final, sem a `categoria` do stage. Se o stage tivesse
+  // categoria "concluida"/"cancelada" mas is_final=false (dado plausível),
+  // esta função classificava como atrasada enquanto `resolveActivityState`
+  // (que usa o stage inteiro) classificava como concluída/cancelada — a
+  // mesma atividade aparecia com a barra vermelha no Gantt e "0 atrasada(s)"
+  // no contador do topo ao mesmo tempo. Achado no Bloco L (04/09/2026).
+  //
+  // Agora recebe o stage completo, igual resolveActivityState — as duas
+  // fontes leem exatamente o mesmo dado.
+  const isOverdueByRule = useCallback((
+    activity: any,
+    stage?: { is_final?: boolean | null; categoria?: string | null } | null,
+  ) => {
     if (!activity) return false;
-    return isActivityOverdue(activity, { is_final: isCompletedByStage });
+    return isActivityOverdue(activity, stage);
   }, []);
 
   // ===== Gantt data =====
@@ -2556,7 +2570,7 @@ export function ProjectCronogramaPanel({
               const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
               const stageColor = stageInfo?.color;
               const isStageFinal = stageInfo?.is_final;
-              const isOverdue = isOverdueByRule(a, !!isStageFinal);
+              const isOverdue = isOverdueByRule(a, stageInfo);
               const ctx = { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue };
               return (
                 <tr
@@ -2897,7 +2911,7 @@ export function ProjectCronogramaPanel({
                 const isMilestone = !!a.is_milestone;
                 const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                 const isCompleted = stageInfo?.is_final || a.status === "completed";
-                const isOverdue = isOverdueByRule(a, !!isCompleted);
+                const isOverdue = isOverdueByRule(a, stageInfo);
                 // Estado pela fonte única — inclui "bloqueada", que antes se
                 // escondia entre as "a iniciar".
                 const rowState = resolveActivityState(
@@ -3197,7 +3211,7 @@ export function ProjectCronogramaPanel({
                   })();
                   const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                   const isCompleted = stageInfo?.is_final || a.status === "completed";
-                  const isOverdue = isOverdueByRule(a, !!isCompleted);
+                  const isOverdue = isOverdueByRule(a, stageInfo);
                   const progress = progressFor(a);
                   const responsible = resolveResponsible(a.assigned_to, a.id);
                   // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado, filhos).
