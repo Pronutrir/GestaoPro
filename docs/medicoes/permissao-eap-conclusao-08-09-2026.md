@@ -91,6 +91,15 @@ Gate trocado de `canEditPlanejamento` para `canCreate` — duplicar é criação
 não edição. Antes, um usuário sem `can_create` via o botão, clicava, a RLS
 recusava com 403/`42501`, e a tela não mostrava nenhum feedback.
 
+> **Correção 2 (10/09/2026):** existe uma segunda tela de edição de
+> atividade, a antiga (`EditActivityDialog.tsx`, aberta via `?activity=`),
+> com o mesmo botão "Duplicar" gateado só por `!readOnly` (permissão de
+> editar) — não recebeu a correção acima. Um usuário "Editar tudo" via o
+> botão nessa tela e caía no mesmo 403 silencioso. Corrigido no commit
+> `e2eb36a`: nova prop `canCreateProject` propagada de `page.tsx` e também
+> repassada ao editor aninhado de subatividade (que não recebia nem
+> `canEditProject` nem a nova prop, herdando sempre `true`).
+
 ### 6. "Arquivar" do diálogo gravava campo errado (órfão)
 
 **Arquivo:** `src/components/EditActivityDialog.tsx`
