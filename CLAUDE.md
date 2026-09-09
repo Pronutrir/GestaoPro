@@ -5,7 +5,7 @@ Ele descreve o alvo. **O repositório é a verdade**: quando o que está escrito
 do código, o código ganha — e me avise da divergência em vez de "corrigir" o código para
 bater com o documento.
 
-> **Divergências já levantadas:** ver `docs/atividade-v2/DIVERGENCIAS.md`. Seis pontos deste
+> **Divergências já levantadas:** ver `docs/arquivo/atividade-v2/DIVERGENCIAS.md`. Seis pontos deste
 > documento divergem do repositório — as duas principais: **`lider_id` não existe** (o que
 > existe é `assigned_to` + `participants`) e **marco não tem `wbs_code`**. Leia antes de
 > executar qualquer fase.
@@ -53,7 +53,7 @@ Espelhada entre `lib/activityAccess.ts` e a RLS. Se as duas divergirem, **a RLS 
    equipe ou ser dono/gestor do projeto (passos 1–4).)*
 6. Nada disso → a atividade não existe para essa pessoa
 
-`matriz-acesso.json` tem os 108 casos com o resultado esperado e qual passo decidiu cada um.
+`matriz-acesso.json` (`docs/fixtures/`) tem os 108 casos com o resultado esperado e qual passo decidiu cada um.
 É o fixture do teste da Fase 03 e o gabarito para conferir a RLS.
 
 > **Achados e correções de 08–09/09/2026** (validação E2E em produção do perfil "Editar
@@ -226,7 +226,7 @@ a regra — senão vira porta lateral.
 
 > **ESTADO EM 26/08/2026: a regra acima NÃO vale hoje, e a causa é a policy, não a consulta.**
 > `can_view_project_work_v2` concede o projeto inteiro a quem tem qualquer atividade nele —
-> então quem entra por atribuição enxerga as irmãs. Ver `docs/projeto-v2/DIVERGENCIAS.md`
+> então quem entra por atribuição enxerga as irmãs. Ver `docs/arquivo/projeto-v2/DIVERGENCIAS.md`
 > item 1 e a fase P00. A correção é migration, e sai junto com as outras pendentes.
 
 ### Saem do menu

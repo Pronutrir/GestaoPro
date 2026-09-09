@@ -3,13 +3,13 @@
 Segunda onda. **Rode depois do Atividade v2**, ou pelo menos depois da fase 03 dele
 (camada de acesso) — várias fases daqui consultam as capacidades de lá.
 
-> **ANTES DE TUDO, LEIA:** `docs/projeto-v2/DIVERGENCIAS.md`. O furo de visibilidade que este
+> **ANTES DE TUDO, LEIA:** `docs/arquivo/projeto-v2/DIVERGENCIAS.md`. O furo de visibilidade que este
 > kit levanta na fase 03 do kit anterior **foi confirmado no código** — e é maior do que o
 > texto do kit sugere. Não é só a consulta de Pendências: a própria policy do banco concede
 > o projeto inteiro a quem entra por atribuição.
 
 ```
-docs/projeto-v2/
+docs/arquivo/projeto-v2/
 ├── CONTEXTO.md      → anexado ao CLAUDE.md da raiz
 ├── DIVERGENCIAS.md  → o que foi conferido no código
 ├── LEIAME.md        → este arquivo
@@ -32,7 +32,7 @@ Cada onda entrega sozinha. Se parar depois da primeira, o que foi feito continua
    passa por migration, não só por ajuste de consulta.
 2. **Não pule a P01.** Ela só lê. Tudo aqui descreve o alvo; o repositório é a verdade.
 3. **As migrations do Atividade v2 ainda não foram aplicadas.** Quatro scripts pendentes na
-   VM (ver `docs/atividade-v2/LEIAME.md`). Várias fases daqui dependem delas — sobretudo a
+   VM (ver `docs/arquivo/atividade-v2/LEIAME.md`). Várias fases daqui dependem delas — sobretudo a
    P05 e a P06, que copiam a derivação no servidor da fase 09.
 
 ## O que ainda é decisão sua

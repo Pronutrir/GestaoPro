@@ -5,7 +5,7 @@ Ele descreve o alvo. **O repositório é a verdade**: quando o que está escrito
 do código, o código ganha — e me avise da divergência em vez de "corrigir" o código para
 bater com o documento.
 
-> **Divergências já levantadas:** ver `docs/atividade-v2/DIVERGENCIAS.md`. Seis pontos deste
+> **Divergências já levantadas:** ver `docs/arquivo/atividade-v2/DIVERGENCIAS.md`. Seis pontos deste
 > documento divergem do repositório — as duas principais: **`lider_id` não existe** (o que
 > existe é `assigned_to` + `participants`) e **marco não tem `wbs_code`**. Leia antes de
 > executar qualquer fase.

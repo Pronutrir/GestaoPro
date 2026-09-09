@@ -648,7 +648,7 @@ export const EditActivityDialog = ({
    * A regra em si (pai com filhas = soma das filhas) continua valendo e
    * continua exibida abaixo, como LEITURA. O que sai é a gravação: agregado
    * derivado tem de ser calculado sobre a árvore INTEIRA, o que só o servidor
-   * pode fazer — é a fase 09 do plano (`docs/atividade-v2/fases/09-*`).
+   * pode fazer — é a fase 09 do plano (`docs/arquivo/atividade-v2/fases/09-*`).
    *
    * Até a fase 09 existir, o valor exibido segue correto para quem enxerga
    * tudo, e para quem enxerga uma fatia continua sendo uma leitura parcial —
@@ -2481,7 +2481,7 @@ export const EditActivityDialog = ({
                       produto chama isso de Responsável: quem responde pela
                       entrega, no máximo um por atividade. "Líder" era um terceiro
                       nome para a mesma coisa — e `lider_id` nunca existiu no
-                      banco (docs/atividade-v2/DIVERGENCIAS.md item 1).
+                      banco (docs/arquivo/atividade-v2/DIVERGENCIAS.md item 1).
                       Quem executa junto são os Participantes, na aba própria. */}
                   {/* Marco não tem responsável — ninguém "executa" um ponto no
                       tempo. Mesma regra de horas, custo, GUT e código EAP. */}

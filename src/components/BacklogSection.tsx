@@ -2721,7 +2721,7 @@ export const BacklogSection = ({
                 // subatividades arrastava a subárvore inteira: mudar o status
                 // de uma tarefa mudava o das filhas, sem pedir. Promover move
                 // só a atividade escolhida — nunca ancestrais, nunca a
-                // subárvore (docs/atividade-v2/DIVERGENCIAS.md item 7).
+                // subárvore (docs/arquivo/atividade-v2/DIVERGENCIAS.md item 7).
                 //
                 // Quem quiser a subárvore continua conseguindo: marca as
                 // filhas, ou usa a caixa do agrupador que as contém.

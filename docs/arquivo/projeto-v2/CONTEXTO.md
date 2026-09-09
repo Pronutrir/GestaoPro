@@ -51,7 +51,7 @@ a regra — senão vira porta lateral.
 
 > **ESTADO EM 26/08/2026: a regra acima NÃO vale hoje, e a causa é a policy, não a consulta.**
 > `can_view_project_work_v2` concede o projeto inteiro a quem tem qualquer atividade nele —
-> então quem entra por atribuição enxerga as irmãs. Ver `docs/projeto-v2/DIVERGENCIAS.md`
+> então quem entra por atribuição enxerga as irmãs. Ver `docs/arquivo/projeto-v2/DIVERGENCIAS.md`
 > item 1 e a fase P00. A correção é migration, e sai junto com as outras pendentes.
 
 ### Saem do menu

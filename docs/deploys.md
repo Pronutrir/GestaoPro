@@ -136,7 +136,7 @@ Ou seja:
 A distinção muda o conserto: não é "esqueceram de rodar", nem "rodou pela
 metade" — é **"rodou o primeiro passo, e outra migration escreveu por cima antes
 de o segundo acontecer"**. Uma migration **retomável** é o que resolve; ver
-[FILA-DE-TRABALHO.md](FILA-DE-TRABALHO.md) §3.0.
+[FILA-DE-TRABALHO.md](arquivo/FILA-DE-TRABALHO.md) §3.0.
 
 > **E é por isso que aplicar a congelar como conserto rápido seria pior que o
 > incidente.** Ela pularia o passo da sombra e gravaria o "antes" de hoje por

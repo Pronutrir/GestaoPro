@@ -6,7 +6,7 @@
  * caso. O `.py` fica no repositório como referência; esta versão existe porque
  * não há Python nesta máquina, e o Node o projeto já usa.
  *
- *   node docs/atividade-v2/gerar-matriz.cjs
+ *   node docs/fixtures/gerar-matriz.cjs
  */
 const fs = require("fs");
 const path = require("path");

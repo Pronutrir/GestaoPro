@@ -410,7 +410,7 @@ export function podeExcluirAtividade(
  *
  * `capacidadesNaAtividade` responde o conjunto inteiro, mais o PASSO que
  * decidiu — o passo é o que torna o resultado auditável e é conferido pelos
- * 108 casos de `docs/atividade-v2/matriz-acesso.json`.
+ * 108 casos de `docs/fixtures/matriz-acesso.json`.
  *
  * A ordem espelha `can_update_activity_v2`:
  *   1 admin → 2 Visualizador (encerra) → 3 líder/gestor → 4 equipe → 5 ator → 6 nada

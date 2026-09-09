@@ -3,7 +3,7 @@
  * FASE 03 — a camada de acesso contra os 108 casos da matriz.
  *
  * Roda `capacidadesNaAtividade` (código real, compilado na hora) contra
- * `docs/atividade-v2/matriz-acesso.json`, conferindo as 9 capacidades, o
+ * `docs/fixtures/matriz-acesso.json`, conferindo as 9 capacidades, o
  * `escopoDeLeitura` E o `passoQueDecidiu` de cada caso.
  *
  *   node scripts/verificar-matriz-acesso.cjs
@@ -49,7 +49,7 @@ function compilar() {
 
 const { capacidadesNaAtividade } = compilar();
 const matriz = JSON.parse(fs.readFileSync(
-  path.join(RAIZ, "docs", "atividade-v2", "matriz-acesso.json"), "utf8"));
+  path.join(RAIZ, "docs", "fixtures", "matriz-acesso.json"), "utf8"));
 
 const EU = { id: "id-eu", fullName: "Fulano de Teste", email: "fulano@ex.com" };
 const PROJETO_ALHEIO = { owner: "Outra Pessoa", manager: "Terceiro Alguem" };
@@ -116,7 +116,7 @@ for (const caso of matriz.casos) {
 }
 
 console.log(`\n  Matriz de acesso — ${matriz.casos.length} casos`);
-console.log("  (capacidadesNaAtividade × docs/atividade-v2/matriz-acesso.json)\n");
+console.log("  (capacidadesNaAtividade × docs/fixtures/matriz-acesso.json)\n");
 
 if (falhas.length === 0) {
   console.log(`  \x1b[32m✓\x1b[0m todos os ${ok} casos batem — capacidades, passo e escopo\n`);

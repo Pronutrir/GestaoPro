@@ -113,7 +113,7 @@ decisão de quem cuida do projeto, não de quem lê o dado.
 
 ## O que isto conversa com o Projeto v2
 
-É literalmente o primeiro item da Onda 1 de `docs/projeto-v2/`:
+É literalmente o primeiro item da Onda 1 de `docs/arquivo/projeto-v2/`:
 
 > **Onda 1 — parar de mentir:** fase duplicada no cronograma · uma definição só
 > de fase/entrega/atividade/marco

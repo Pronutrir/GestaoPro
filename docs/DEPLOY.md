@@ -269,7 +269,7 @@ por atribuição ficou com a própria atividade e sem a trilha do pai.
 > Rollback pronto em `20260826150001_p00_rollback.sql`, se a resposta for que a
 > lista fazia falta e a trilha na tela ainda vai demorar.
 
-Medição completa em `docs/projeto-v2/sonda-p00-26-08-2026.md`.
+Medição completa em `docs/arquivo/projeto-v2/sonda-p00-26-08-2026.md`.
 
 ---
 

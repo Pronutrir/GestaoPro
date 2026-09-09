@@ -14,7 +14,7 @@
 > + `participants`). As fases 02, 03 e 05 foram anotadas com a correcao.
 
 ```
-docs/atividade-v2/
+docs/arquivo/atividade-v2/
 |- CLAUDE.md            -> copiado para a raiz do repositorio
 |- DIVERGENCIAS.md      -> o que o kit assume e o repositorio contradiz
 |- tokens.css           -> ainda NAO consumido; ver fase 10

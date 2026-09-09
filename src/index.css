@@ -81,7 +81,7 @@
     --card-shadow-hover: 0 4px 8px -2px rgb(16 24 40 / 0.10), 0 2px 4px -2px rgb(16 24 40 / 0.07);
 
     /* ---- FASE 10 — tokens de tipografia, densidade, status e GUT ----------
-     * Vieram de docs/atividade-v2/tokens.css. O diff contra este arquivo deu
+     * Vieram de docs/arquivo/atividade-v2/tokens.css. O diff contra este arquivo deu
      * ZERO conflito: 29 nomes iguais com o MESMO valor, 29 novos, e nenhum
      * com valor divergente. Por isso foi adição, não substituição — nenhum
      * token existente mudou.
