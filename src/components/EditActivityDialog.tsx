@@ -42,6 +42,7 @@ import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { ehBacklog } from "@/components/kanban/shared";
+import { souResponsavelDeAncestralNaArvore } from "@/lib/activityAccess";
 
 /** Date -> "YYYY-MM-DD" pelo fuso LOCAL (toISOString à noite em UTC-3 já é o dia seguinte). */
 const localYmd = (d: Date) =>
@@ -480,8 +481,33 @@ export const EditActivityDialog = ({
     return ((effectiveActivity as { participants?: string[] }).participants ?? []).some(bate);
   })();
 
+  /**
+   * "Sou responsável de um ANCESTRAL desta atividade?" — mesmo padrão do
+   * Kanban (`souResponsavelDeAncestralLocal` em ActivityKanban.tsx), agora
+   * aplicado aqui: `souResponsavel` acima só olha a atividade em si
+   * (assigned_to/participants/created_by), nunca a subárvore.
+   *
+   * Reportado em 08/09/2026: o responsável de um ramo abria P1.1 (filha de
+   * P1, da qual ele é responsável) e o diálogo mostrava "Somente leitura",
+   * com "Salvar Alterações" desabilitado — mesmo a RLS aceitando a escrita
+   * (PATCH direto confirmou). `allActivities` já chega como prop; faltava
+   * só consultar o sinal que `activityAccess.ts` já expõe e que a página do
+   * projeto e o card do Kanban já usam.
+   */
+  const activityByIdParaAcesso = useMemo(() => {
+    const m = new Map<string, { id: string; parent_id?: string | null; assigned_to?: string | null; participants?: string[] | null }>();
+    allActivities.forEach((a) => m.set(a.id, a as never));
+    return m;
+  }, [allActivities]);
+  const souResponsavelDeAncestral = useMemo(() => {
+    if (!effectiveActivity || !authUser?.id) return false;
+    return souResponsavelDeAncestralNaArvore(effectiveActivity as never, activityByIdParaAcesso, {
+      id: authUser.id, email: authUser.email, fullName: authProfile?.full_name, profileId: authProfile?.id,
+    });
+  }, [effectiveActivity, activityByIdParaAcesso, authUser?.id, authUser?.email, authProfile?.full_name, authProfile?.id]);
+
   // createMode: quem está criando obviamente pode preencher o que criou.
-  const canEditThis = createMode || canEditProject || souResponsavel;
+  const canEditThis = createMode || canEditProject || souResponsavel || souResponsavelDeAncestral;
   const readOnly = !canEditThis;
   const { blockers, isBlocked: isBlockedByOthers } = useTaskBlockers(effectiveActivity?.id);
   const [formData, setFormData] = useState({
@@ -1290,6 +1316,34 @@ export const EditActivityDialog = ({
             const others = (siblings || []).filter((s: any) => s.id !== act.id).map((s: any) => s.wbs_code);
             wbsToSave = getNextSubWbs(parentWbs, others);
           }
+        } catch { /* ignora */ }
+      }
+      /**
+       * SEM PAI (item na raiz, ex.: "Nova Atividade" no topo do Backlog) —
+       * mesma derivação do botão "Gerar" (`handleAutoWbs`), agora automática.
+       *
+       * Achado em 08/09/2026: P1, P2, P1.1 e P2.1 (criadas via "Nova
+       * Atividade") nasceram com wbs_code nulo porque só o ramo `parentId`
+       * acima tinha cálculo automático — o de topo (sem pai, com ou sem
+       * fase) exigia clique manual em "Gerar". A coluna EAP ficava vazia e
+       * a trilha da atividade mostrava "P1 › nova" em vez de um código.
+       */
+      if (!wbsToSave && !parentId && projectId) {
+        try {
+          const { getNextTopWbs } = await import("@/lib/wbsAuto");
+          const phaseId = formData.phase_id || (act as any).phase_id || null;
+          let phaseWbs: string | null = null;
+          if (phaseId) {
+            const { data: ph } = await supabase
+              .from("phases").select("wbs_code").eq("id", phaseId).maybeSingle();
+            phaseWbs = (ph as any)?.wbs_code || null;
+          }
+          const { data: tops } = await supabase
+            .from("activities").select("id, wbs_code, phase_id, parent_id")
+            .eq("project_id", projectId).is("parent_id", null);
+          const sameLevel = (tops || []).filter((t: any) =>
+            t.id !== act.id && (phaseId ? t.phase_id === phaseId : !t.phase_id));
+          wbsToSave = getNextTopWbs(phaseWbs, sameLevel.map((t: any) => t.wbs_code));
         } catch { /* ignora */ }
       }
 
@@ -3673,7 +3727,7 @@ export const EditActivityDialog = ({
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
               </Button>
             )}
-            {act && !createMode && !act.closed_at && (
+            {act && !createMode && !act.closed_at && !readOnly && (
               <Button
                 type="button"
                 variant="outline"
@@ -3695,7 +3749,7 @@ export const EditActivityDialog = ({
                 <Lock className="w-4 h-4" /> Arquivar
               </Button>
             )}
-            {act && !createMode && (
+            {act && !createMode && !readOnly && (
               <Button
                 type="button"
                 variant="outline"
