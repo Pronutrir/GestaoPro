@@ -1545,7 +1545,7 @@ export const ActivityKanban = ({
     // mostrava aberta e os relatórios continuavam contando como entregue.
     await supabase
       .from("activities")
-      .update({ workflow_stage_id: backlogStage.id, status: "pending", completed_at: null } as never)
+      .update({ workflow_stage_id: backlogStage.id, status: "pending", completed_at: null, actual_end_date: null } as never)
       .eq("id", activityId);
     await supabase
       .from("user_stories")
@@ -1713,6 +1713,7 @@ export const ActivityKanban = ({
         workflow_stage_id: stageId,
         status: destinoFinal ? "completed" : "pending",
         completed_at: destinoFinal ? new Date().toISOString() : null,
+        actual_end_date: destinoFinal ? new Date().toISOString().slice(0, 10) : null,
       } as never)
       .eq("id", activityId);
     if (error) {
@@ -1757,6 +1758,7 @@ export const ActivityKanban = ({
                 workflow_stage_id: previousStageId,
                 status: anteriorFinal ? "completed" : "pending",
                 completed_at: anteriorFinal ? new Date().toISOString() : null,
+                actual_end_date: anteriorFinal ? new Date().toISOString().slice(0, 10) : null,
               } as never)
               .eq("id", activityId);
             await supabase.from("user_stories").update({ stage_id: previousStageId } as never).eq("activity_id", activityId);
