@@ -39,8 +39,18 @@ Espelhada entre `lib/activityAccess.ts` e a RLS. Se as duas divergirem, **a RLS 
    sempre **entre a equipe do projeto**. É só participante? → **execução apenas**.
    *(01/09/2026: o responsável do ramo alcança a subárvore inteira —
    `eh_descendente_de_atividade_do_responsavel`, `can_update_activity_v2`, espelhado em
-   `lib/activityAccess.ts`. Excluir continua fora desta via. A tela v2 tem só "Responsáveis"
-   — o campo "Participantes" saiu — e os responsáveis vêm só da equipe.)*
+   `lib/activityAccess.ts`. A tela v2 tem só "Responsáveis" — o campo "Participantes" saiu
+   — e os responsáveis vêm só da equipe.
+
+   Texto corrigido em 08/09/2026: esta linha dizia "Excluir continua fora desta via", mas
+   isso nunca foi verdade para ARQUIVAR — a exclusão reversível (`is_trashed=true`, o que
+   o sistema chama de "excluir" na UI da atividade/Kanban/Backlog). O responsável do ramo
+   SEMPRE pôde arquivar dentro da própria subárvore: a RLS aceita
+   (`podeExcluirAtividade`/`can_delete` em `lib/activityAccess.ts` inclui
+   `ehResponsavelDoRamo`) e é comportamento deliberado, comentado no próprio helper desde
+   a migration 20260901120000. Só a exclusão PERMANENTE (DELETE físico da linha, usada
+   só na Lixeira) fica de fato fora desta via — essa sim exige `can_delete` de papel na
+   equipe ou ser dono/gestor do projeto (passos 1–4).)*
 6. Nada disso → a atividade não existe para essa pessoa
 
 `matriz-acesso.json` tem os 108 casos com o resultado esperado e qual passo decidiu cada um.
