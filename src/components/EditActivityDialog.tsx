@@ -140,6 +140,7 @@ interface Activity {
   created_at: string;
   updated_at?: string;
   closed_at?: string | null;
+  is_trashed?: boolean | null;
   created_by_email?: string | null;
   assigned_to: string | null;
   start_date: string | null;
@@ -1166,6 +1167,7 @@ export const EditActivityDialog = ({
           const parentUpdate: any = {
             status: "completed",
             completed_at: new Date().toISOString(),
+            actual_end_date: new Date().toISOString().slice(0, 10),
           };
           if (finalStage?.id) parentUpdate.workflow_stage_id = finalStage.id;
           if (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id) {
@@ -3710,6 +3712,11 @@ export const EditActivityDialog = ({
                     const updateData: any = {
                       status: "completed",
                       completed_at: new Date().toISOString(),
+                      // acompanha (09/09/2026): ver aoConcluir em
+                      // atividade/[activityId]/page.tsx — os dois campos
+                      // devem nascer juntos, senão um dos dois caminhos de
+                      // "concluir" fica invisível para o outro.
+                      actual_end_date: new Date().toISOString().slice(0, 10),
                     };
                     if (finalStage) {
                       updateData.workflow_stage_id = finalStage.id;
@@ -3727,7 +3734,7 @@ export const EditActivityDialog = ({
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
               </Button>
             )}
-            {act && !createMode && !act.closed_at && !readOnly && (
+            {act && !createMode && !act.closed_at && !act.is_trashed && !readOnly && (
               <Button
                 type="button"
                 variant="outline"
@@ -3737,8 +3744,25 @@ export const EditActivityDialog = ({
                   if (!ensureProjectUnlocked()) return;
                   if (!confirm("Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.")) return;
                   try {
-                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
+                    /**
+                     * PADRONIZADO em 09/09/2026 — este era o único dos sete
+                     * caminhos de arquivamento do sistema que gravava
+                     * `closed_at` em vez de `is_trashed`/`trashed_at`. O
+                     * botão prometia "marcada como arquivada, consultável no
+                     * histórico" mas na prática a atividade não ia para a
+                     * Lixeira: `closed_at` não é lido em nenhum outro lugar
+                     * do código além deste próprio diálogo. Achado no plano
+                     * de teste E2E de 09/09/2026 (por leitura de código —
+                     * confirm() nativo impediu medir o efeito em automação).
+                     */
+                    const { error, count } = await supabase.from("activities")
+                      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as never, { count: "exact" })
+                      .eq("id", act.id);
                     if (error) throw error;
+                    if (!count) {
+                      toast({ title: "O banco recusou", description: "Você tem permissão para excluir esta atividade?", variant: "destructive" });
+                      return;
+                    }
                     onActivityUpdated();
                     onOpenChange(false);
                   } catch {
