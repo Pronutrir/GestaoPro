@@ -56,6 +56,13 @@ Espelhada entre `lib/activityAccess.ts` e a RLS. Se as duas divergirem, **a RLS 
 `matriz-acesso.json` tem os 108 casos com o resultado esperado e qual passo decidiu cada um.
 É o fixture do teste da Fase 03 e o gabarito para conferir a RLS.
 
+> **Achados e correções de 08–09/09/2026** (validação E2E em produção do perfil "Editar
+> apenas as minhas" e dos gates de permissão): 6 bugs reais corrigidos — arquivar fora do
+> escopo por "Editar tudo", diálogo travado para responsável de ancestral, wbs_code duplicado,
+> duplicar sem permissão em silêncio, arquivar gravando campo órfão, filtros do Backlog sem
+> persistir, conclusão gravando campos desalinhados. Detalhe completo, causa raiz e commits em
+> `docs/medicoes/permissao-eap-conclusao-08-09-2026.md`.
+
 **Estado hoje:** os passos 1, 3, 4 e 5 estão em `podeMutarAtividade`. O passo 2 é aplicado
 **por fora**, na página (`canEdit = canWrite && ...`), e não dentro da função — unificar na
 fase 03.
