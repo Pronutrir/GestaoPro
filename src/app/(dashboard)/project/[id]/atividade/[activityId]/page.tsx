@@ -464,9 +464,9 @@ export default function PaginaDaAtividade() {
   // do quadro/backlog para arquivar; a policy de DELETE não aceita o ator.
   const aoArquivar = useCallback(async () => {
     const { error, count } = await supabase.from("activities")
-      .update({ is_trashed: true } as never, { count: "exact" }).eq("id", activityId);
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as never, { count: "exact" }).eq("id", activityId);
     if (error) { toast({ title: "Não deu para arquivar", description: error.message, variant: "destructive" }); return; }
-    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
+    if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão para excluir esta atividade?", variant: "destructive" }); return; }
     router.push(`/project/${projectId}`);
   }, [activityId, projectId, router, toast]);
 
@@ -627,7 +627,7 @@ export default function PaginaDaAtividade() {
         secaoDependencias={<ActivityDependencies activityId={activityId} projectId={projectId} podeEditar={!soLeitura} />}
         secaoAnexos={<ActivityAttachments activityId={activityId} projectId={projectId} />}
         aoDuplicar={caps.canEditPlanejamento ? aoDuplicar : undefined}
-        aoArquivar={caps.canEditPlanejamento ? aoArquivar : undefined}
+        aoArquivar={caps.canDelete ? aoArquivar : undefined}
         aoCriarLicao={(caps.canEditExecucao || caps.canComment) ? aoCriarLicao : undefined}
         aoMarcarLido={user?.id ? async () => {
           await marcarFeedVisto(activityId, user.id).catch(() => {});
