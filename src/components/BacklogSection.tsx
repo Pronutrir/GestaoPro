@@ -276,8 +276,31 @@ export const BacklogSection = ({
   // é um recorte de trabalho ("o que preciso completar agora"), não uma
   // preferência de visualização como as colunas ou o agrupamento.
   const [prontidaoFilter, setProntidaoFilter] = useState<"all" | "ready" | "incomplete">("all");
-  /** Os chips de recorte rapido. Combinam por E, e cada um liga/desliga. */
-  const [recortesAtivos, setRecortesAtivos] = useState<Set<RecorteRapido>>(new Set());
+  /**
+   * Os chips de recorte rapido. Combinam por E, e cada um liga/desliga.
+   *
+   * PERSISTIDO por projeto (localStorage) — mesmo padrão do Kanban
+   * (`kanban-filters:<projectId>`). Antes nascia sempre em `new Set()` e
+   * não gravava nada: o chip ativava (contagem mudava, bg-primary aparecia)
+   * mas um F5 devolvia tudo zerado, sem erro nem aviso. Achado no plano de
+   * teste E2E de 09/09/2026 — o Kanban persiste, o Backlog não.
+   */
+  const recortesKey = `backlog-recortes:${projectId}`;
+  const [recortesAtivos, setRecortesAtivos] = useState<Set<RecorteRapido>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem(recortesKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.filter((v): v is RecorteRapido =>
+        v === "minhas" || v === "sem-resp" || v === "sem-data" || v === "no-quadro") : []);
+    } catch { return new Set(); }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(recortesKey, JSON.stringify(Array.from(recortesAtivos)));
+    } catch { /* ignore */ }
+  }, [recortesAtivos, recortesKey]);
   const alternarRecorte = (id: RecorteRapido) =>
     setRecortesAtivos((prev) => {
       const n = new Set(prev);
@@ -1545,6 +1568,13 @@ export const BacklogSection = ({
       // completed_at só na conclusão; ao reabrir, limpa — manter a data numa
       // tarefa que voltou ao fluxo faz o relatório contar entrega que não houve.
       updateData.completed_at = ehFinal ? new Date().toISOString() : null;
+      // actual_end_date acompanha (09/09/2026): a tela de detalhe da atividade
+      // grava só este campo ao concluir, e o dashboard conta por completed_at
+      // — os dois caminhos gravavam metade do par cada, então uma conclusão
+      // por um lugar não aparecia no outro. Achado no plano de teste E2E de
+      // 09/09/2026 (item 30).
+      (updateData as Record<string, unknown>).actual_end_date =
+        ehFinal ? new Date().toISOString().slice(0, 10) : null;
     }
 
     /**
