@@ -333,11 +333,19 @@ export default function PaginaDaAtividade() {
 
   // CONCLUIR — status vira 'completed' e o realizado FECHA (a data nasce do
   // trabalho, não da digitação: aqui é o ato de concluir que a define).
+  //
+  // GRAVA OS DOIS CAMPOS (09/09/2026) — antes só gravava `actual_end_date`.
+  // O menu de linha do Backlog e o EditActivityDialog só gravam
+  // `completed_at`; ProjectDashboard.tsx:209 conta concluídas por
+  // `completed_at`. Uma atividade concluída por ESTA tela nunca entrava na
+  // conta — e o inverso também: os outros caminhos não gravam
+  // `actual_end_date`. Nenhum dos três preenchia o par completo. Achado no
+  // plano de teste E2E de 09/09/2026 (item 30).
   const aoConcluir = useCallback(async () => {
     const jaConcluida = String((atividade as Record<string, unknown>)?.status) === "completed";
     const patch = jaConcluida
-      ? { status: "in_progress", actual_end_date: null }
-      : { status: "completed", actual_end_date: new Date().toISOString().slice(0, 10) };
+      ? { status: "in_progress", actual_end_date: null, completed_at: null }
+      : { status: "completed", actual_end_date: new Date().toISOString().slice(0, 10), completed_at: new Date().toISOString() };
     const { error, count } = await supabase
       .from("activities").update(patch as never, { count: "exact" }).eq("id", activityId);
     if (error) { toast({ title: "Não deu para concluir", description: error.message, variant: "destructive" }); return; }
@@ -626,7 +634,7 @@ export default function PaginaDaAtividade() {
         aoAbrirEditorAntigo={soLeitura ? undefined : () => router.push(`/project/${projectId}?activity=${activityId}`)}
         secaoDependencias={<ActivityDependencies activityId={activityId} projectId={projectId} podeEditar={!soLeitura} />}
         secaoAnexos={<ActivityAttachments activityId={activityId} projectId={projectId} />}
-        aoDuplicar={caps.canEditPlanejamento ? aoDuplicar : undefined}
+        aoDuplicar={caps.canCreate ? aoDuplicar : undefined}
         aoArquivar={caps.canDelete ? aoArquivar : undefined}
         aoCriarLicao={(caps.canEditExecucao || caps.canComment) ? aoCriarLicao : undefined}
         aoMarcarLido={user?.id ? async () => {
