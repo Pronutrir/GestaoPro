@@ -244,6 +244,17 @@ interface EditActivityDialogProps {
    * Quem é responsável pela atividade edita mesmo sem isto (ver `canEditThis`).
    */
   canEditProject?: boolean;
+  /**
+   * Permissão de CRIAR no projeto — usada só para gatear "Duplicar" (é uma
+   * criação, não uma edição). Sem isto, "Duplicar" ficava sob o mesmo
+   * `!readOnly` de editar, e um perfil com `can_edit=true, can_create=false`
+   * ("Editar tudo") via o botão, clicava, e a RLS recusava com 403 em
+   * silêncio — mesma família do achado corrigido em `atividade/[activityId]/
+   * page.tsx` (09/09/2026), que esta tela antiga (`?activity=`) não recebeu.
+   * Default `true` para não quebrar quem já chama este componente sem passar
+   * a prop.
+   */
+  canCreateProject?: boolean;
 }
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
@@ -438,6 +449,7 @@ export const EditActivityDialog = ({
   parentActivityTitle, onBackToParent,
   consumedMinutesByActivity = {},
   canEditProject = true,
+  canCreateProject = true,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const { user: authUser, profile: authProfile, canManage: podeGerenciarProjetos } = useAuth();
@@ -3773,7 +3785,7 @@ export const EditActivityDialog = ({
                 <Lock className="w-4 h-4" /> Arquivar
               </Button>
             )}
-            {act && !createMode && !readOnly && (
+            {act && !createMode && !readOnly && canCreateProject && (
               <Button
                 type="button"
                 variant="outline"
@@ -3814,6 +3826,8 @@ export const EditActivityDialog = ({
           projectId={projectId}
           isQualityProject={isQualityProject}
           consumedMinutesByActivity={consumedMinutesByActivity}
+          canEditProject={canEditProject}
+          canCreateProject={canCreateProject}
           parentActivityTitle={effectiveActivity?.title}
           onBackToParent={() => {
             setEditingSubOpen(false);

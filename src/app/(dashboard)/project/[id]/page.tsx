@@ -2326,6 +2326,7 @@ export default function ProjectDetailsPage() {
           // Sem isto o diálogo deixava preencher tudo e só falhava ao salvar.
           // Quem é responsável pela atividade edita mesmo com isto falso.
           canEditProject={canEdit}
+          canCreateProject={canCreate}
         />
         {project && (
           <EditActivityDialog
