@@ -11,7 +11,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-const BASE_URL = 'http://localhost:3123';
+const BASE_URL = 'http://localhost:3000';
 const ACCOUNTS = {
   'e2e-del': { email: 'e2e-del@e2e.local', password: 'E2eTeste!2026#Acesso', role: 'admin' },
   'e2e-resp': { email: 'e2e-resp@e2e.local', password: 'E2eTeste!2026#Acesso', role: 'editar_minhas' },
