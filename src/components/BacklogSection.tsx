@@ -1412,10 +1412,10 @@ export const BacklogSection = ({
      * MOVE O QUE PODE e nomeia o resto: recusar as cinco por causa de duas
      * obrigaria a refazer a seleção para conseguir mover as próprias.
      */
-    const semPermissao = ehMinha
+    const semPermissao = podeMexer
       ? idsBrutos.filter((id) => {
           const a = activities.find((x) => x.id === id);
-          return a ? !ehMinha(a) : false;
+          return a ? !podeMexer(a) : false;
         })
       : [];
 
@@ -3010,14 +3010,14 @@ export const BacklogSection = ({
                 >
                   <Maximize2 className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
                 </DropdownMenuItem>
-                {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban
-                    (canDelete). Desabilitado COM o motivo em vez de oculto —
-                    sumir vira "não consigo mover" sem pista do porquê. */}
+                {/* Reorganizar a EAP (Mover para dentro) usa a mesma régua do Kanban:
+                    podeMexer() por atividade. Não é permissão global (canMove),
+                    porque um responsável de subárvore pode mover seus itens. */}
                 <DropdownMenuItem
-                  disabled={!canMove}
-                  title={canMove ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  disabled={!podeMexer?.(activity)}
+                  title={podeMexer?.(activity) ? undefined : "Você não tem permissão para mover esta atividade"}
                   onSelect={() => {
-                    if (!canMove) return;
+                    if (!podeMexer?.(activity)) return;
                     setMoveIntoIds([activity.id]);
                     setMoveIntoCurrentParent(activity.parent_id ?? null);
                   }}
@@ -3026,14 +3026,17 @@ export const BacklogSection = ({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
-                    "não consigo excluir" sem pista nenhuma do porquê. */}
+                    "não consigo arquivar" sem pista nenhuma do porquê.
+                    Usa podeMexer() (por atividade) como Concluir/Editar, não
+                    canDelete global. Responsável de subárvore pode arquivar
+                    sua árvore mesmo se can_delete=false globalmente. */}
                 <DropdownMenuItem
-                  disabled={!canDelete}
-                  className={canDelete ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
-                  title={canDelete ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
+                  disabled={!podeMexer?.(activity)}
+                  className={podeMexer?.(activity) ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={podeMexer?.(activity) ? undefined : "Você não tem permissão para arquivar esta atividade"}
                   // preventDefault: sem ele o menu fecha e leva o foco junto,
                   // brigando com o diálogo de confirmação que abre em seguida.
-                  onSelect={(e) => { e.preventDefault(); if (canDelete) onDeleteActivity(activity.id); }}
+                  onSelect={(e) => { e.preventDefault(); if (podeMexer?.(activity)) onDeleteActivity(activity.id); }}
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar
                 </DropdownMenuItem>
