@@ -330,6 +330,37 @@ export default function PaginaDaAtividade() {
     await carregar();
   }, [activityId, carregar, user?.id, nomeDeQuemFez]);
 
+  /**
+   * A JANELA PREVISTA GRAVA COMO UM PAR, NUMA REQUISIÇÃO SÓ.
+   *
+   * Início e término são uma edição só — "o prazo" — e a validação de que um
+   * não passa do outro só existe olhando os dois juntos. Gravar campo a campo
+   * obriga a encadear duas chamadas quando as duas pontas mudaram, e
+   * `gravarCampo` termina com `await carregar()`: o refetch remonta a tela, a
+   * promessa do primeiro `await` não resolve e a segunda gravação nunca sai.
+   *
+   * Medido em 11/09/2026: corrigir `25/09 → 20/09` para `25/09 → 30/09`
+   * gravava só o início e deixava o banco com a janela invertida — exatamente
+   * o estado que a validação existe para impedir. Sem erro no console e sem
+   * promessa rejeitada, porque a chamada simplesmente ficava pendurada.
+   *
+   * Um PATCH com as duas colunas resolve na raiz: não há o que encadear, e o
+   * par nunca fica meio gravado.
+   */
+  const gravarJanela = useCallback(async (ini: string, fim: string) => {
+    const patch = {
+      start_date: ini.trim() === "" ? null : ini,
+      end_date: fim.trim() === "" ? null : fim,
+    };
+    const { error, count } = await supabase
+      .from("activities")
+      .update(patch as never, { count: "exact" })
+      .eq("id", activityId);
+    if (error) throw new Error(error.message);
+    if (!count) throw new Error("o banco recusou a alteração — você tem permissão sobre esta atividade?");
+    await carregar();
+  }, [activityId, carregar]);
+
   /* ── AS AÇÕES — cada uma grava e recarrega; a confirmação é a linha no feed ── */
 
   // CONCLUIR — status vira 'completed' e o realizado FECHA (a data nasce do
@@ -625,6 +656,7 @@ export default function PaginaDaAtividade() {
             : null
         }
         aoGravarCampo={gravarCampo}
+        aoGravarJanela={gravarJanela}
         aoConcluir={aoConcluir}
         aoMudarTipo={aoMudarTipo}
         aoMoverParaQuadro={aoMoverParaQuadro}

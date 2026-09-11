@@ -125,6 +125,7 @@ export function TelaDaAtividade({
   capacidades,
   avisoDePapel,
   aoGravarCampo,
+  aoGravarJanela,
   aoCriarSubatividade,
   aoComentar,
   aoMarcarLido,
@@ -156,6 +157,8 @@ export function TelaDaAtividade({
   /** A faixa do estado "visualizar", explicando o papel. */
   avisoDePapel?: string | null;
   aoGravarCampo?: (campo: string, valor: string) => Promise<void>;
+  /** Grava o par de datas previstas numa requisição só. Ver `gravarJanela`. */
+  aoGravarJanela?: (inicio: string, fim: string) => Promise<void>;
   aoCriarSubatividade?: (nome: string) => Promise<void>;
   aoComentar?: (t: string) => Promise<void>;
   aoMarcarLido?: () => void;
@@ -326,8 +329,7 @@ export function TelaDaAtividade({
               inicio={dados.previstoInicio}
               fim={dados.previstoFim}
               vazioVerbo="+ definir prazo"
-              aoGravarInicio={gravador("start_date", capacidades.editarDatas)}
-              aoGravarFim={gravador("end_date", capacidades.editarDatas)}
+              aoGravar={capacidades.editarDatas ? aoGravarJanela : undefined}
             />
             <CampoNoLugar
               rotulo="Realizado"
@@ -688,14 +690,14 @@ function DropdownTipo({ atual, aoMudar }: { atual: EapKind; aoMudar: (k: EapKind
  * O vazio que trava (sem prazo) é âmbar com verbo; o preenchido, texto. Cada
  * data grava ao sair. Não há "salvar". */
 function EditorDeJanela({
-  rotulo, inicio, fim, vazioVerbo, aoGravarInicio, aoGravarFim,
+  rotulo, inicio, fim, vazioVerbo, aoGravar,
 }: {
   rotulo: string;
   inicio: string | null;
   fim: string | null;
   vazioVerbo: string;
-  aoGravarInicio?: (novo: string) => Promise<void>;
-  aoGravarFim?: (novo: string) => Promise<void>;
+  /** Recebe O PAR. Ver `gravarJanela` na página: uma requisição, duas colunas. */
+  aoGravar?: (inicio: string, fim: string) => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
   /* RASCUNHO LOCAL, e não `defaultValue`.
@@ -706,13 +708,14 @@ function EditorDeJanela({
    * `lib/dateValidation.ts` e ninguém importava.
    *
    * Validar o PAR exige as duas pontas ao mesmo tempo, então os dois campos
-   * passam a ser controlados. E quando o par está inconsistente a gravação fica
-   * represada: sem isso, corrigir o término gravaria só o término e o início
-   * digitado antes se perderia em silêncio — por isso `gravarPar` grava tudo
-   * que diverge do banco assim que o par volta a fechar. */
+   * passam a ser controlados, e a gravação manda SEMPRE as duas — uma
+   * requisição, duas colunas (`gravarJanela` na página). A primeira versão
+   * disto gravava campo a campo e encadeava dois `await` quando as duas pontas
+   * mudavam; como cada gravação termina recarregando a tela, o segundo `await`
+   * nunca chegava a sair e o banco ficava com a janela invertida. */
   const [rascunho, setRascunho] = useState({ ini: inicio ?? "", fim: fim ?? "" });
   const [erro, setErro] = useState<string | null>(null);
-  const pode = typeof aoGravarInicio === "function";
+  const pode = typeof aoGravar === "function";
 
   const gravarPar = async (campo: "ini" | "fim", valor: string) => {
     const par = campo === "ini"
@@ -721,8 +724,8 @@ function EditorDeJanela({
     setRascunho(par);
     if (isDateRangeInvalid(par.ini, par.fim)) { setErro(DATE_RANGE_ERROR); return; }
     setErro(null);
-    if (par.ini !== (inicio ?? "")) await aoGravarInicio?.(par.ini);
-    if (par.fim !== (fim ?? "")) await aoGravarFim?.(par.fim);
+    if (par.ini === (inicio ?? "") && par.fim === (fim ?? "")) return;
+    await aoGravar?.(par.ini, par.fim);
   };
   const temValor = !!(inicio || fim);
   const texto = temValor
