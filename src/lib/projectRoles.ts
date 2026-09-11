@@ -115,8 +115,24 @@ export const PAPEIS_PROJETO: PapelProjeto[] = [
        Texto do hint atualizado em 08/09/2026 para refletir o que a regra já
        fazia desde a migration 20260904150000 (responsável de subárvore cria,
        move e exclui, não só edita). Relato completo do achado que motivou o
-       ajuste: docs/validacao-testes-09-09-2026.pdf. */
-    hint: "vê o projeto inteiro. Cria, edita, move e exclui o que está sob sua responsabilidade",
+       ajuste: docs/validacao-testes-09-09-2026.pdf.
+
+       Revisado em 11/09/2026, por DUAS imprecisões medidas na validação E2E:
+
+       1. O escopo real é "sou responsável OU eu criei" — `is_activity_actor_v2`
+          e `podeMutarAtividade` concedem por `created_by` também. O texto
+          antigo falava só de responsabilidade e prometia MENOS do que o
+          sistema faz. Tirar a via da autoria do código seria pior: como a
+          criação não atribui responsável automaticamente (ver "Nunca" no
+          CLAUDE.md), quem criasse uma atividade perderia o acesso a ela no
+          instante seguinte.
+
+       2. "Exclui" lia-se como exclusão definitiva. Neste papel a exclusão é
+          sempre REVERSÍVEL (`is_trashed`, vai para a Lixeira). Apagar de vez
+          exige `can_delete` de papel na equipe — só "Editar e excluir" tem.
+          A policy de UPDATE passou a exigir isso no banco em 11/09/2026
+          (20260911140000), então a distinção agora é real, não só de tela. */
+    hint: "vê o projeto inteiro. Cria, edita, move e arquiva o que é seu — por responsabilidade ou por ter criado. Não exclui em definitivo",
     rank: 2,
     perms: { can_create: false, can_edit: false, can_delete: false, can_move: false, can_edit_own: true },
   },

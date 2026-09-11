@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Diamond, Plus, X, ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { EAP_LABELS, type EapKind } from "@/lib/eapModel";
+import { EAP_LABELS, eapCanGroup, type EapKind } from "@/lib/eapModel";
 import { CampoNoLugar } from "./CampoNoLugar";
 import { DescricaoRica } from "./DescricaoRica";
 import { TrilhaDaAtividade } from "./TrilhaDaAtividade";
@@ -262,10 +262,17 @@ export function TelaDaAtividade({
                   {dados.concluida ? "Reabrir" : "Concluir"}
                 </button>
               )}
-              {/* MOVER PARA O QUADRO — só quando está no backlog e pode promover.
-                  Promover é decisão de escopo; a trava do banco recusa agrupador
-                  sem subitem em português. */}
-              {!criando && dados.noBacklog && capacidades.promover && aoMoverParaQuadro && (
+              {/* MOVER PARA O QUADRO — só quando está no backlog, pode promover
+                  E o item chega a virar cartão.
+
+                  `eapCanGroup` exclui Fase e Entrega: agrupador não é trabalho e
+                  NUNCA vira card (regra do CLAUDE.md, aplicada em
+                  `ehAgrupadorDoQuadro`). Sem esta condição o botão prometia uma
+                  promoção que não acontece — a Entrega saía do backlog, ficava
+                  em "Não iniciado" e não aparecia em coluna nenhuma, sumindo das
+                  duas telas. Achado da auditoria de 10/09/2026, item 11a. */}
+              {!criando && dados.noBacklog && capacidades.promover
+                && !eapCanGroup(dados.tipoKind) && aoMoverParaQuadro && (
                 <button
                   type="button"
                   onClick={aoMoverParaQuadro}

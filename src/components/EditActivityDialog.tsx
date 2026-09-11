@@ -255,6 +255,24 @@ interface EditActivityDialogProps {
    * a prop.
    */
   canCreateProject?: boolean;
+  /**
+   * Permissão de EXCLUIR **esta** atividade — usada para gatear "Arquivar".
+   *
+   * É callback, e não booleano, porque a regra não é global: `can_delete` de
+   * papel na equipe OU ser responsável do ramo. Quem chama já tem
+   * `podeExcluirAtividade` montado com o sinal de subárvore; repetir a conta
+   * aqui criaria a quinta implementação da mesma pergunta.
+   *
+   * Sem isto o botão ficava sob o mesmo `!readOnly` de editar, e "Editar tudo"
+   * (`can_edit=true, can_delete=false`) via o botão azul e clicável numa ação
+   * que não pode fazer. Até 11/09/2026 o banco também aceitava; depois da
+   * migration 20260911140000 ele recusa com 403, e o botão passou a prometer
+   * um erro. Tarefa 4 da auditoria de 10/09/2026.
+   *
+   * Default `true` para não quebrar quem já chama este componente sem a prop —
+   * mesmo critério de `canCreateProject`.
+   */
+  podeExcluirEsta?: (activity: unknown) => boolean;
 }
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
@@ -450,6 +468,7 @@ export const EditActivityDialog = ({
   consumedMinutesByActivity = {},
   canEditProject = true,
   canCreateProject = true,
+  podeExcluirEsta,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const { user: authUser, profile: authProfile, canManage: podeGerenciarProjetos } = useAuth();
@@ -3746,7 +3765,8 @@ export const EditActivityDialog = ({
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
               </Button>
             )}
-            {act && !createMode && !act.closed_at && !act.is_trashed && !readOnly && (
+            {act && !createMode && !act.closed_at && !act.is_trashed && !readOnly
+              && (podeExcluirEsta ? podeExcluirEsta(act) : true) && (
               <Button
                 type="button"
                 variant="outline"
@@ -3828,6 +3848,7 @@ export const EditActivityDialog = ({
           consumedMinutesByActivity={consumedMinutesByActivity}
           canEditProject={canEditProject}
           canCreateProject={canCreateProject}
+          podeExcluirEsta={podeExcluirEsta}
           parentActivityTitle={effectiveActivity?.title}
           onBackToParent={() => {
             setEditingSubOpen(false);

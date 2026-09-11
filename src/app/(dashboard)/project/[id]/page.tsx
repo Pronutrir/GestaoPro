@@ -2347,6 +2347,9 @@ export default function ProjectDetailsPage() {
           // Quem é responsável pela atividade edita mesmo com isto falso.
           canEditProject={canEdit}
           canCreateProject={canCreate}
+          // Arquivar é EXCLUIR, não editar: passa a mesma conta que o menu
+          // do Backlog e o card do Kanban usam, com o sinal de subárvore.
+          podeExcluirEsta={(a) => canDeleteActivity(a as Activity | null)}
         />
         {project && (
           <EditActivityDialog
