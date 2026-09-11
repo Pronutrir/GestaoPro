@@ -1790,6 +1790,11 @@ export const BacklogSection = ({
      * tem valor próprio para eles (é rollup dos filhos), então só as folhas.
      */
     estrutural = false,
+    /**
+     * Verificador opcional de permissão. Se não passado, usa `podeMexer` do scope.
+     * Permite repassar a mesma função de permissão para todas as operações em lote.
+     */
+    permissionCheckFn?: (a: Activity) => boolean,
   ) => {
     let ids = estrutural ? Array.from(selectedIds) : idsFolhaSelecionados();
 
@@ -1800,11 +1805,12 @@ export const BacklogSection = ({
     // sem match não é erro no PostgREST) e a interface dizia sucesso mesmo
     // assim. Achado no reteste do Bloco H (04/09/2026).
     let semPermissaoCount = 0;
-    if (podeMexer) {
+    const checker = permissionCheckFn || podeMexer;
+    if (checker) {
       const antes = ids.length;
       ids = ids.filter((id) => {
         const a = activities.find((x) => x.id === id);
-        return a ? podeMexer(a) : false;
+        return a ? checker(a) : false;
       });
       semPermissaoCount = antes - ids.length;
     }
@@ -3945,7 +3951,7 @@ export const BacklogSection = ({
                     <div className="max-h-[280px] overflow-y-auto">
                       <button
                         type="button"
-                        onClick={() => aplicarEmLote({ assigned_to: null }, "Responsável removido")}
+                        onClick={() => aplicarEmLote({ assigned_to: null }, "Responsável removido", false, podeMexer)}
                         className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b text-muted-foreground"
                       >
                         Sem responsável
@@ -3954,7 +3960,7 @@ export const BacklogSection = ({
                         <button
                           key={p.id}
                           type="button"
-                          onClick={() => aplicarEmLote({ assigned_to: p.full_name }, `Responsável: ${p.full_name}`)}
+                          onClick={() => aplicarEmLote({ assigned_to: p.full_name }, `Responsável: ${p.full_name}`, false, podeMexer)}
                           className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
                         >
                           <Avatar className="h-5 w-5 shrink-0">
@@ -3983,12 +3989,12 @@ export const BacklogSection = ({
                         // Fuso LOCAL: toISOString à noite em UTC-3 já é o dia
                         // seguinte, e o prazo sairia um dia à frente.
                         const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                        aplicarEmLote({ end_date: ymd }, `Prazo: ${d.toLocaleDateString("pt-BR")}`);
+                        aplicarEmLote({ end_date: ymd }, `Prazo: ${d.toLocaleDateString("pt-BR")}`, false, podeMexer);
                       }}
                     />
                     <button
                       type="button"
-                      onClick={() => aplicarEmLote({ end_date: null }, "Prazo removido")}
+                      onClick={() => aplicarEmLote({ end_date: null }, "Prazo removido", false, podeMexer)}
                       className="w-full px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t text-left"
                     >
                       Remover prazo
@@ -4034,6 +4040,8 @@ export const BacklogSection = ({
                         onClick={() => aplicarEmLote(
                           { gravity: g.g, urgency: g.u, tendency: g.t, priority: g.priority },
                           `Prioridade: ${g.label}`,
+                          false,
+                          podeMexer,
                         )}
                         className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted"
                       >
@@ -4093,6 +4101,7 @@ export const BacklogSection = ({
                       { is_trashed: true, trashed_at: new Date().toISOString() },
                       `${n} ${n === 1 ? "item arquivado" : "itens arquivados"}`,
                       true, // estrutural: a fase vai junto com o conteúdo
+                      podeMexer,
                     );
                     setSelectedIds(new Set());
                     setSelectMode(false);
