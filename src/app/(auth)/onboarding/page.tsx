@@ -46,9 +46,6 @@ export default function OnboardingPage() {
           projects (
             id,
             title
-          ),
-          inviter:profiles!project_members_invited_by_fkey (
-            full_name
           )
         `)
         .eq('user_id', user.id)
@@ -56,12 +53,29 @@ export default function OnboardingPage() {
 
       if (error) throw error;
 
+      // Busca nomes dos convidantes (FK não existe, então consulta separada)
+      const invitedByIds = (invites || [])
+        .map((inv: any) => inv.invited_by)
+        .filter((id: string | null): id is string => id !== null);
+
+      let inviterNames: Record<string, string> = {};
+      if (invitedByIds.length > 0) {
+        const { data: inviters } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', invitedByIds);
+        
+        inviters?.forEach((p: any) => {
+          inviterNames[p.id] = p.full_name;
+        });
+      }
+
       const formatted = (invites || []).map((inv: any) => ({
         id: inv.id,
         project_id: inv.project_id,
         project_title: inv.projects?.title || 'Projeto desconhecido',
         invited_at: inv.invited_at,
-        invited_by_name: inv.inviter?.full_name || 'Sistema',
+        invited_by_name: inv.invited_by ? inviterNames[inv.invited_by] || 'Sistema' : 'Sistema',
       }));
 
       setInvitations(formatted);

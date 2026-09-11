@@ -2260,6 +2260,7 @@ export default function ProjectDetailsPage() {
                 onDataChanged={fetchProjectData}
                 canDelete={canDelete}
                 podeMexer={canMutateActivity}
+                canMove={canMove}
                 /**
                  * QUAL ATIVIDADE É DELA — para o filtro "minhas" e a marca na
                  * linha.

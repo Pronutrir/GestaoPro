@@ -159,6 +159,13 @@ interface BacklogSectionProps {
    */
   canDelete?: boolean;
   /**
+   * Pode MOVER (reorganizar EAP)?
+   *
+   * Separado de `canDelete` porque `can_delete` governa arquivamento,
+   * enquanto `can_move` governa reorganização.
+   */
+  canMove?: boolean;
+  /**
    * Pode MEXER nesta atividade (mover/editar/mudar prioridade etc.)?
    *
    * FALTAVA nas 5 ações de lote (mudar status, responsável, prazo, ligar em
@@ -206,7 +213,7 @@ interface BacklogSectionProps {
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onEditarNoDialogo, onDeleteActivity, onToggleActivity,
-  onDataChanged, canDelete = false, podeMexer, deleteBlockedReason, hasActiveFilters, ehMinha,
+  onDataChanged, canDelete = false, canMove = false, podeMexer, deleteBlockedReason, hasActiveFilters, ehMinha,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
   search = "", onSearchChange, acoes,
@@ -3007,10 +3014,10 @@ export const BacklogSection = ({
                     (canDelete). Desabilitado COM o motivo em vez de oculto —
                     sumir vira "não consigo mover" sem pista do porquê. */}
                 <DropdownMenuItem
-                  disabled={!canDelete}
-                  title={canDelete ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  disabled={!canMove}
+                  title={canMove ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
                   onSelect={() => {
-                    if (!canDelete) return;
+                    if (!canMove) return;
                     setMoveIntoIds([activity.id]);
                     setMoveIntoCurrentParent(activity.parent_id ?? null);
                   }}
