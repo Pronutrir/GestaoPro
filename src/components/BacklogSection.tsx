@@ -2242,6 +2242,7 @@ export const BacklogSection = ({
           caixa mudava de coluna ao ligar a seleção. */}
       <span className="flex items-center justify-center">
         <Checkbox
+          disabled={!podeMexer}
           checked={
             !selectMode ? false
               : selectedIds.size === backlogActs.length ? true
@@ -2260,7 +2261,7 @@ export const BacklogSection = ({
              Estava em h-3.5 de quando ela era a caixinha discreta do hover:
              empilhada na coluna, ninguém comparava. Lado a lado numa coluna
              própria, a diferença de 2px aparece como desalinho. */
-          title={selectMode ? `Limpar seleção (${selectedIds.size})` : `Selecionar todas as ${backlogActs.length}`}
+          title={!podeMexer ? "Você não tem permissão para selecionar" : (selectMode ? `Limpar seleção (${selectedIds.size})` : `Selecionar todas as ${backlogActs.length}`)}
         />
       </span>
       <span />
@@ -2727,6 +2728,7 @@ export const BacklogSection = ({
               marcados. Sem ele o pai pareceria desmarcado e o contador do
               rodapé diria um número que a tela não confirma. */}
           <Checkbox
+            disabled={!podeMexer?.(activity)}
             checked={selectMode ? estadoDaCaixa(activity.id) : false}
             onCheckedChange={() => {
               if (!selectMode) {
@@ -3169,6 +3171,7 @@ export const BacklogSection = ({
             <>
               {acts.length > 0 ? (
                 <Checkbox
+                  disabled={!podeMexer}
                   checked={selectMode ? estadoDaFaseReal(acts) : false}
                   onCheckedChange={() => {
                     if (!selectMode) { setSelectMode(true); toggleSelecaoDaFaseReal(acts, true); return; }
@@ -3364,6 +3367,7 @@ export const BacklogSection = ({
               funcionariam sobre ela, só não havia como marcá-la.
               Caixa e seta LADO A LADO, sempre — ver o comentário do grid. */}
           <Checkbox
+            disabled={!podeMexer?.(phaseAct)}
             checked={selectMode ? estadoDaCaixa(phaseAct.id) : false}
             onCheckedChange={() => {
               if (!selectMode) {
