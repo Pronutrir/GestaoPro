@@ -149,10 +149,37 @@ Nenhuma tela recalcula agregado do pai — todas consomem o resultado.
 - Tokens em `tokens.css`. Nenhum componente destas telas declara hex ou tamanho de fonte
   fora deles. Os valores marcados `[atual]` vieram da aplicação em produção e não mudam.
 
+## Datas: um DIA não é um INSTANTE
+
+Duas ideias diferentes, que o sistema já confundiu uma vez em toda parte:
+
+| | O que é | Coluna | Como se grava |
+|---|---|---|---|
+| **Dia** | `start_date`, `end_date`, `actual_*_date` | `date` | `hojeLocalISO()` / `diaLocalISO(d)` |
+| **Instante** | `completed_at`, `created_at`, `trashed_at` | `timestamptz` | `new Date().toISOString()` |
+
+**`new Date().toISOString().slice(0, 10)` não é "hoje".** É o dia em **UTC**, e em São Paulo
+das 21:00 à meia-noite ele já é amanhã. Medido em produção em 11/09/2026: concluir uma
+atividade às 22:30 gravava `actual_end_date = 2026-09-12` e a tela mostrava o dia seguinte;
+às 12:19 a mesma ação acertava. O defeito só existe numa janela de três horas por dia, que é
+por que sobreviveu tanto tempo — e o contraste que o denuncia é que `completed_at`, gravado
+no mesmo clique com `toISOString()` inteiro, saía certo.
+
+Os helpers vivem em `lib/dataLocal.ts`. **Nenhuma tela reimplementa conversão de data.**
+
+Intervalo início→término se valida com `lib/dateValidation.ts`, não com `a > b` inline. Esse
+módulo já existiu correto e com zero imports enquanto quatro telas mantinham cópias próprias —
+e a tela v2 da atividade, que não recebeu cópia nenhuma, aceitava `14/09 → 10/09` calada.
+
+O **início real** é carimbado pelo banco (`trg_marcar_inicio_real`), não pelas seis telas que
+concluem. Ele só marca na transição para `in_progress`/`completed`, e nunca depois do término
+real — senão a própria correção criaria a janela invertida.
+
 ## Nunca
 
 - Escrever UUID ou enum em inglês em qualquer texto que um usuário lê. Resolver o rótulo
   na origem, não com um de-para no componente.
+- Gravar dia com `toISOString().slice(0, 10)` ou `.split("T")[0]`. Ver a seção de datas acima.
 - Deixar a promoção atribuir automaticamente.
 - Reescrever regra de pai/filha dentro de uma tela. Todas consomem o mesmo módulo.
 - Recalcular agregado do pai no cliente, nem "só para o preview".

@@ -98,17 +98,73 @@ mesmo significado (um dia), tipos diferentes. O código trata os dois como texto
 que devolve o dia em UTC. Escrita e leitura erram na mesma direção, então a tela
 parece coerente consigo mesma — e discorda do banco.
 
-## Correção sugerida, em ordem
+## O QUE FOI CORRIGIDO (11/09/2026, commit 217b169)
 
-1. Um helper `hojeLocalISO()` (`YYYY-MM-DD` do dia **local**) e trocar as ~10
-   gravações e ~19 comparações que usam `toISOString().slice(0,10)`.
-2. Decidir o tipo de `actual_start_date`/`actual_end_date`: ou migram para
-   `date` (acompanham os irmãos), ou passam a receber instante de verdade. Hoje
-   são `timestamptz` recebendo dia — o pior dos dois.
-3. Ligar `dateValidation.ts` nas três superfícies e apagar as 4 cópias inline.
-4. Decidir sobre as datas reais do projeto: criar as colunas ou tirar os campos
-   e o BaselineBlock da tela. Hoje prometem e não entregam.
-5. Conclusão preencher `actual_start_date` quando estiver vazio.
+### Já no código — basta publicar
+
+1. **Dia local em vez de dia UTC.** Três helpers novos em `lib/dataLocal.ts`
+   (`diaLocalISO`, `hojeLocalISO`, `diaLocalDe`) e as **32 ocorrências**
+   trocadas em **18 arquivos**. Nenhum `toISOString().slice(0, 10)` restou no
+   `src/`.
+   Conferido nas bordas da janela: 20:59 → 11/09, 21:00 → 11/09, 23:59 → 11/09.
+   Antes, os dois últimos davam 12/09.
+2. **Feed da atividade.** `agruparPorDia` passou a usar o dia local. O efeito
+   era pior do que perder o rótulo "Hoje": às 22:30 tudo que acontecera mais
+   cedo no mesmo dia virava "Ontem".
+3. **Validação de intervalo centralizada.** `dateValidation.ts` deixou de ser
+   código morto; as 4 cópias inline (3 no `EditActivityDialog`, 1 no
+   Cronograma) foram apagadas; o `EditorDeJanela` da tela v2 passou a validar
+   o par. Os dois campos viraram controlados, com a gravação **represada**
+   enquanto o par está inconsistente — sem isso, corrigir o término gravaria
+   só o término e o início digitado antes se perderia em silêncio.
+   O módulo agora recorta o dia antes de comparar, porque
+   `"2026-09-14T00:00:00+00:00" > "2026-09-14"` acusaria inversão no mesmo dia.
+4. **`BaselineBlock`.** O comentário dizia que o bloco permite congelar a linha
+   de base. Não permite e nunca permitiu — não há botão, e `canManage` chega
+   sem ser lido.
+
+`tsc` limpo, `next build` passa, zero problemas novos de lint.
+
+### Escrito, mas AINDA NÃO APLICADO no banco
+
+As duas migrations estão no repositório e prontas. Aplicá-las mexe no schema de
+produção, e isso precisa de aprovação explícita.
+
+- **`20260911160000_datas_reais_viram_date.sql`**
+  `actual_start_date`, `actual_end_date`, `baseline_start_date`,
+  `baseline_end_date` passam de `timestamptz` para `date`.
+  Conversão por `AT TIME ZONE 'UTC'` **de propósito**: preserva o dia que a tela
+  já mostra hoje, em vez de "consertar" o passado e deslocar as linhas um dia.
+  Verificado antes de escrever: **0 linhas** com hora diferente de 00:00, e
+  **nenhuma** view, função, índice ou default depende dessas colunas — a
+  conversão é exata. Há uma guarda que recusa a migration se outro ambiente
+  tiver hora de verdade guardada ali.
+  Traz também `trg_marcar_inicio_real`, que carimba o início real **no banco** —
+  são seis telas que concluem, e repetir a regra nas seis é o que o CLAUDE.md
+  proíbe. Só marca na transição para `in_progress`/`completed`, e o `LEAST`
+  impede que a correção crie a janela invertida que a outra metade arrumou.
+
+- **`20260911160100_projeto_ganha_datas_reais.sql`**
+  `projects` ganha `actual_start_date` e `actual_end_date` como `date`.
+  As três colunas de baseline **não** entram: congelar linha de base é decisão
+  de produto da segunda onda e hoje não há botão — criá-las agora só produziria
+  colunas permanentemente nulas. Sem elas, `endVariance()` usa o previsto como
+  referência, que é o ramo já escrito para este caso.
+
+Como aplicar (os arquivos já estão em `/tmp/m1.sql` e `/tmp/m2.sql` no
+container do banco):
+
+```
+docker exec -e PGPASSWORD="$SENHA" supabase-db-1 \
+  psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f /tmp/m1.sql
+docker exec -e PGPASSWORD="$SENHA" supabase-db-1 \
+  psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f /tmp/m2.sql
+```
+
+Ordem importa: publicar o código **antes** das migrations é seguro (o código
+novo manda `"2026-09-11"`, que o `timestamptz` aceita e passa a guardar o dia
+certo). Aplicar as migrations antes de publicar também é seguro (todo leitor
+faz `.slice(0, 10)`, que funciona nos dois formatos). Não há janela ruim.
 
 ## Estado da fixture
 
