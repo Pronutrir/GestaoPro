@@ -89,22 +89,45 @@ Tela exibe:
 ## 📊 CORREÇÃO 3: Lote com Feedback
 
 ### Status
-**Já implementado**. Validado que funciona.
+**✅ IMPLEMENTADO E COMMITADO** (commit a222e0b).
 
-**Arquivo**: `src/components/BacklogSection.tsx` (linhas 1907–1919)
+**Arquivo**: `src/components/BacklogSection.tsx`
+
+**O que foi feito**:
+
+#### 3A: Assinatura de função (linha 1790)
+```typescript
+const aplicarEmLote = async (
+  patch: Record<string, unknown>,
+  descricao: string,
+  estrutural = false,
+  permissionCheckFn?: (a: Activity) => boolean,  // ← ADD
+) => {
+```
+
+#### 3B: Verificação com checker (linha 1807–1809)
+```typescript
+const checker = permissionCheckFn || podeMexer;
+if (checker) {
+  // Filtra atividades por permissão antes de aplicar patch
+}
+```
+
+#### 3C: Todas as 6 chamadas passam `podeMexer`
+| Linha | Operação | Mudança |
+|-------|----------|--------|
+| 3954 | Responsável removido | `aplicarEmLote(..., false, podeMexer)` |
+| 3963 | Responsável atribuído | `aplicarEmLote(..., false, podeMexer)` |
+| 3992 | Prazo alterado | `aplicarEmLote(..., false, podeMexer)` |
+| 3997 | Prazo removido | `aplicarEmLote(..., false, podeMexer)` |
+| 4040 | Prioridade | `aplicarEmLote(..., false, podeMexer)` |
+| 4104 | Arquivar | `aplicarEmLote(..., true, podeMexer)` |
 
 **Funcionamento**:
-```typescript
-const avisoPermissao = semPermissaoCount > 0
-  ? ` (${semPermissaoCount} ${semPermissaoCount === 1 ? "ficou de fora — sem permissão" : "ficaram de fora — sem permissão"})`
-  : "";
-```
-
-**Exemplo de toast**:
-```
-Título: 2 itens arquivados
-Descrição: 2 tarefa(s) atualizada(s). (1 ficou de fora — sem permissão)
-```
+- User seleciona P1.1 (dentro) + P2 (fora)
+- Clica "Arquivar"
+- Lote filtra: apenas P1.1 passa em `podeMexer`
+- Toast exibe: "1 item arquivado (1 ficou de fora — sem permissão)"
 
 **Testes**: L.2.1, L.2.4 (devem passar)
 
@@ -175,11 +198,11 @@ src/app/(auth)/onboarding/page.tsx
 
 ## ✅ Checklist de Entrega
 
-- [x] Código implementado
+- [x] Código implementado (3 correções)
 - [x] Build passou (`npm run build`)
-- [x] 4 patches aplicados com sucesso
-- [x] Arquivos novos criados
-- [x] Git commit feito (`bff497c`)
+- [x] Patches aplicados (8 total: 4 Menu + 2 Middleware + 2 Lote)
+- [x] Arquivos novos criados (onboarding/page.tsx)
+- [x] Git commits feitos (bff497c, ad659ec, a222e0b)
 - [x] Documentação atualizada
 - [] Testes re-rodados (próximo passo)
 - [ ] Score 28/31 confirmado (próximo passo)
