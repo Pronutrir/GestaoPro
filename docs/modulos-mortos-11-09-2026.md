@@ -83,6 +83,36 @@ helpers soltos — `parseHoras`, `countChildren`, `chunkIdsFor`, `prefsKey` e
 afins. Código morto é sujeira, não defeito: não decidem nada que alguma tela
 precise decidir de outro jeito. Não justificam mexer.
 
+## Fechamento em produção (11/09/2026)
+
+Código publicado e as três migrations aplicadas. Medido contra produção:
+
+| O que | Resultado |
+|---|---|
+| Concluir às 22:30 → API | `actual_end_date: "2026-09-11"` *(antes: `"2026-09-12"`)* |
+| `completed_at` no mesmo clique | `2026-09-12T01:30:00Z` — o instante, correto |
+| `actual_start_date` | `2026-09-11`, carimbado pelo gatilho (era nulo) |
+| Janela invertida (31/12 contra 20/09) | erro inline, "ok" desabilitado, **zero PATCH** |
+| Correção depois da recusa | **um** PATCH com as duas colunas |
+| "Abrindo a atividade" ao salvar | **0 vezes** |
+| Lista de projetos | **Em Execução = 1**, com o card |
+
+A prova mais limpa do status veio antes da migration: a lista já exibia o
+projeto **enquanto o banco ainda guardava `execucao`**. O código antigo não
+conseguiria — então aquilo confirmou o deploy e a normalização na leitura
+funcionando sobre o dado sujo real, de uma vez só.
+
+Depois, `20260911180000`: `UPDATE 1` (a única linha torta), `em-execucao` foi de
+18 para 19, e o CHECK entrou. Testado que ele recusa, numa transação desfeita:
+
+```
+update public.projects set status='execucao' where id=...;
+ERROR:  new row for relation "projects" violates check constraint
+        "projects_status_check"
+```
+
+O valor exato que causou o bug agora falha visível, em vez de entrar calado.
+
 ## O que fica valendo
 
 O CLAUDE.md ganhou as duas regras que os bugs produziram (datas e status de
