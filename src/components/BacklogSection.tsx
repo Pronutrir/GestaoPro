@@ -2242,7 +2242,7 @@ export const BacklogSection = ({
           caixa mudava de coluna ao ligar a seleção. */}
       <span className="flex items-center justify-center">
         <Checkbox
-          disabled={!podeMexer}
+          disabled={podeMexer ? !backlogActs.some(a => podeMexer(a)) : true}
           checked={
             !selectMode ? false
               : selectedIds.size === backlogActs.length ? true
