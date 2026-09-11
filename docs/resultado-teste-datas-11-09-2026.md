@@ -171,3 +171,54 @@ faz `.slice(0, 10)`, que funciona nos dois formatos). Não há janela ruim.
 Subatividade A restaurada: `Previsto 01/09 → 10/09`, datas reais nulas,
 `completed_at` nulo. Só o `status` ficou `in_progress` em vez de `pending` —
 efeito do próprio botão Reabrir, que não devolve para `pending`.
+
+---
+
+# Validação das correções (11/09/2026)
+
+Ambiente: **build de produção rodando local** (`next start`, porta 3123) contra
+o **banco real**, projeto-fixture `[TESTE E2E] Acesso v2`, Subatividade A,
+usuário `e2e-del`. Relógio do navegador em **11/09 22:30** local — a página
+confirmou `dia-UTC = 2026-09-12` antes de cada ação.
+
+Nota de método: o relógio fixo tem que ser aplicado **depois** de a tela
+carregar. Aplicado antes, o carregamento não conclui no build local (5 botões
+na tela em vez de 22) — `Date.now()` congelado trava algo no caminho de
+carga. Em produção isso não aparecia porque os chunks chegam antes.
+
+| O que | Antes | Depois |
+|---|---|---|
+| Concluir às 22:30 → API | `actual_end_date: "2026-09-12"` | `"2026-09-11"` ✅ |
+| Concluir às 22:30 → tela | `Realizado — → 12/09/2026` | `— → 11/09/2026` ✅ |
+| `completed_at` no mesmo clique | `2026-09-12T01:30:00Z` | inalterado, correto |
+| Janela invertida `14/09 → 10/09` | grava, sobrevive ao F5, sem aviso | **recusada**: erro inline, "ok" desabilitado, **zero PATCH** ✅ |
+| Corrigir o término depois da recusa | — | **um** PATCH `{"start_date":"2026-09-14","end_date":"2026-09-20"}` ✅ |
+
+## Um defeito novo, encontrado pela validação
+
+A primeira versão da correção gravava campo a campo e encadeava dois `await`
+quando as duas pontas mudavam. Como cada gravação termina com `await
+carregar()` — um refetch que remonta a tela —, a promessa do primeiro `await`
+não resolvia e a segunda gravação nunca saía. Partindo de `14/09 → 20/09`,
+corrigir para `25/09 → 30/09` gravava só o início e deixava o banco em
+`25/09 → 20/09`: a janela invertida que a validação existe para impedir.
+
+Não havia erro no console nem promessa rejeitada — a chamada ficava pendurada,
+que é por que nada disso aparecia. Corrigido em `474c36f`: a janela grava as
+duas colunas num PATCH só (`gravarJanela`), e não há o que encadear.
+
+## O que a validação NÃO cobriu
+
+As migrations continuam **não aplicadas**, então seguem sem verificação:
+
+- O tipo das colunas. O valor gravado agora é o dia certo (`"2026-09-11"`), mas
+  a coluna ainda é `timestamptz` e guarda `2026-09-11 00:00:00+00` — que lido
+  no fuso de São Paulo é **10/09**. A tela e o SQL ainda discordam; o que mudou
+  é que agora a tela está certa. Só a migration fecha isso.
+- O carimbo do início real: `actual_start_date` continua nulo depois de
+  concluir, e o "Realizado" segue sendo `— → 11/09/2026`.
+- As datas reais do projeto.
+
+Também não medi o **overlap** do editor aberto com a coluna "Realizado" ao
+lado — a linha de edição é mais larga que a coluna fechada. É anterior a este
+trabalho (os dois campos e o "ok" já eram assim) e ficou de fora de propósito.
