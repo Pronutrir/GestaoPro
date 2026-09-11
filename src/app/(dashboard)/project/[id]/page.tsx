@@ -58,7 +58,7 @@ import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity, definirNomesAmbiguos, nomesRepetidosEm } from "@/lib/identityMatch";
-import { ehAtividadeDaPessoa, podeMutarAtividade, souResponsavelDeAncestralNaArvore } from "@/lib/activityAccess";
+import { ehAtividadeDaPessoa, podeMutarAtividade, souResponsavelDeAncestralNaArvore, podeExcluirAtividade, } from "@/lib/activityAccess";
 import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
@@ -339,6 +339,24 @@ export default function ProjectDetailsPage() {
       ehVisualizador: !canWrite,
     });
   }, [canEdit, canMove, canWrite, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own, souResponsavelDeAncestralLocal]);
+
+  const canDeleteActivity = useCallback((activity?: Activity | null) => {
+    const comSinalDeSubarvore = activity
+      ? { ...activity, souResponsavelDeAncestral: souResponsavelDeAncestralLocal(activity) }
+      : activity;
+    return podeExcluirAtividade(comSinalDeSubarvore, project, {
+      isAdmin: isRealAdmin,
+      id: currentUser?.id,
+      email: currentUser?.email || profile?.email,
+      fullName: profile?.full_name,
+      profileId: profile?.id,
+      canDelete,  // ← Verifica can_delete de verdade (não can_edit)
+      canEdit,
+      canMove,
+      canEditOwn: userPerms?.can_edit_own ?? true,
+      ehVisualizador: !canWrite,
+    });
+  }, [canDelete, canEdit, canMove, canWrite, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project, userPerms?.can_edit_own, souResponsavelDeAncestralLocal]);
 
   /**
    * "É MINHA?" — a mesma fonte de `canMutateActivity`, não uma cópia.
@@ -2261,6 +2279,7 @@ export default function ProjectDetailsPage() {
                 canDelete={canDelete}
                 podeMexer={canMutateActivity}
                 canMove={canMove}
+                podeExcluir={canDeleteActivity}
                 /**
                  * QUAL ATIVIDADE É DELA — para o filtro "minhas" e a marca na
                  * linha.
