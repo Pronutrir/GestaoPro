@@ -131,8 +131,21 @@ export const PAPEIS_PROJETO: PapelProjeto[] = [
           sempre REVERSÍVEL (`is_trashed`, vai para a Lixeira). Apagar de vez
           exige `can_delete` de papel na equipe — só "Editar e excluir" tem.
           A policy de UPDATE passou a exigir isso no banco em 11/09/2026
-          (20260911140000), então a distinção agora é real, não só de tela. */
-    hint: "vê o projeto inteiro. Cria, edita, move e arquiva o que é seu — por responsabilidade ou por ter criado. Não exclui em definitivo",
+          (20260911140000), então a distinção agora é real, não só de tela.
+
+       3. AS DUAS VIAS NÃO DÃO O MESMO. Medido em 11/09/2026 com um par
+          controlado — duas atividades irmãs, as duas sem responsável, uma
+          criada pelo próprio usuário e outra por terceiro:
+
+            por RESPONSABILIDADE → cria, edita, move E arquiva
+            por AUTORIA          → cria, edita e move; arquivar dá 403
+
+          É deliberado: `podeExcluirAtividade` exclui de propósito o criador
+          que não é responsável ("excluir é mais estreito que editar", comentado
+          no próprio helper), e a policy de UPDATE concorda. A primeira versão
+          deste texto, escrita em 11/09, dizia "arquiva … por responsabilidade
+          ou por ter criado" e prometia o que o sistema recusa. */
+    hint: "vê o projeto inteiro. Cria, edita e move o que é seu — por responsabilidade ou por ter criado. Arquiva só o que está sob sua responsabilidade",
     rank: 2,
     perms: { can_create: false, can_edit: false, can_delete: false, can_move: false, can_edit_own: true },
   },

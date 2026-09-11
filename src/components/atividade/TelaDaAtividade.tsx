@@ -313,6 +313,7 @@ export function TelaDaAtividade({
               pessoas={responsaveis}
               vazioTexto="sem responsável"
               vazioVerbo="+ atribuir alguém"
+              vazioBloqueadoTexto="sem responsável — você não pode definir"
               bloqueiaSeVazio
               podeEditar={!!capacidades.editarPessoas}
               aoAtribuir={aoAtribuir}
@@ -504,6 +505,7 @@ function PessoasNoResumo({
   pessoas,
   vazioTexto,
   vazioVerbo,
+  vazioBloqueadoTexto,
   bloqueiaSeVazio = false,
   podeEditar,
   aoAtribuir,
@@ -515,6 +517,20 @@ function PessoasNoResumo({
   pessoas: PessoaDaAtividade[];
   vazioTexto: string;
   vazioVerbo: string;
+  /**
+   * O que dizer quando o campo está vazio E a pessoa não pode preencher.
+   *
+   * Sem isto os dois estados ficam a mesma frase: "sem responsável" tanto para
+   * "ninguém definiu ainda" quanto para "você não pode definir". A auditoria de
+   * 10/09/2026 mediu o efeito — duas atividades idênticas na tela e opostas na
+   * permissão — e chamou de a pior das quatro formas de negar, porque colapsa
+   * "sem permissão" em "sem conteúdo".
+   *
+   * Continua sendo TEXTO, não controle desabilitado: é a regra do CLAUDE.md
+   * ("campo sem permissão vira texto"). O que muda é a frase dizer o motivo.
+   * Opcional — sem ela o componente se comporta como antes.
+   */
+  vazioBloqueadoTexto?: string;
   bloqueiaSeVazio?: boolean;
   podeEditar: boolean;
   aoAtribuir?: (userId: string, papel: "responsavel" | "participante") => Promise<void>;
@@ -571,9 +587,12 @@ function PessoasNoResumo({
         ))}
 
         {/* VAZIO É CONVITE COM VERBO — âmbar quando o vazio trava (responsável).
-            Sem permissão vira texto puro, sem verbo. */}
+            Sem permissão vira texto puro, sem verbo — mas DIZENDO o motivo, para
+            não confundir "ninguém definiu" com "você não pode definir". */}
         {pessoas.length === 0 && !podeAtribuir && (
-          <span className="text-[13px] text-muted-foreground/60">{vazioTexto}</span>
+          <span className="text-[13px] text-muted-foreground/60">
+            {vazioBloqueadoTexto ?? vazioTexto}
+          </span>
         )}
         {podeAtribuir && (
           pessoas.length === 0 ? (
