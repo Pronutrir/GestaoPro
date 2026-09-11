@@ -177,6 +177,13 @@ interface BacklogSectionProps {
    * sinal de subárvore) — `undefined` = sem gate (quem edita tudo).
    */
   podeMexer?: (a: Activity) => boolean;
+  /**
+   * Pode EXCLUIR/ARQUIVAR esta atividade? (por atividade, como podeMexer)
+   *
+   * Função separada que checa can_delete especificamente (não can_edit).
+   * Diferente de podeMexer que valida edição geral.
+   */
+  podeExcluir?: (a: Activity) => boolean;
   /** Por que arquivar está indisponível (projeto concluído, sem permissão…).
    *  Quando vem preenchido, o botão fica DESABILITADO com este texto no
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
@@ -213,7 +220,7 @@ interface BacklogSectionProps {
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onEditarNoDialogo, onDeleteActivity, onToggleActivity,
-  onDataChanged, canDelete = false, canMove = false, podeMexer, deleteBlockedReason, hasActiveFilters, ehMinha,
+  onDataChanged, canDelete = false, canMove = false, podeMexer, podeExcluir, deleteBlockedReason, hasActiveFilters, ehMinha,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
   search = "", onSearchChange, acoes,
@@ -1698,18 +1705,19 @@ export const BacklogSection = ({
       });
       return;
     }
+    // Feedback consolidado: "1 atualizada(s) · 1 ficou de fora — sem permissão"
+    const successMsg = `${ids.length} atualizada${ids.length === 1 ? "" : "(s)"}`;
+    const permissaoMsg = semPermissao.length > 0
+      ? `${semPermissao.length} ficou${semPermissao.length === 1 ? "" : "ram"} de fora — sem permissão`
+      : null;
+    
     toast({
-      title: `${ids.length} ${ids.length === 1 ? "item movido" : "itens movidos"}`,
+      title: [successMsg, permissaoMsg].filter(Boolean).join(" · "),
       description: [
         // Dizer que a caixa foi mas não concluiu: sem isto, mover uma fase para
         // "Concluída" e ver o agrupador sem o status parece falha da operação.
         caixas.length > 0 && ehFinal
           ? `${caixas.length} fase(s)/entrega(s) mudaram de coluna; a conclusão é das tarefas de dentro.`
-          : null,
-        // O que ficou de fora por permissão: silenciar seria o defeito de
-        // antes — a tela anunciando um movimento que não aconteceu.
-        semPermissao.length > 0
-          ? `${semPermissao.length} não ${semPermissao.length === 1 ? "foi" : "foram"}: você não é responsável nem participante.`
           : null,
         // E o que ficou de fora por ser caixa. Mesmo motivo do anterior:
         // silenciar faria a tela anunciar um movimento que não aconteceu — foi
@@ -3027,16 +3035,15 @@ export const BacklogSection = ({
                 <DropdownMenuSeparator />
                 {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
                     "não consigo arquivar" sem pista nenhuma do porquê.
-                    Usa podeMexer() (por atividade) como Concluir/Editar, não
-                    canDelete global. Responsável de subárvore pode arquivar
-                    sua árvore mesmo se can_delete=false globalmente. */}
+                    Usa podeExcluir() (por atividade, checa can_delete),
+                    não podeMexer que valida edição geral. */}
                 <DropdownMenuItem
-                  disabled={!podeMexer?.(activity)}
-                  className={podeMexer?.(activity) ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
-                  title={podeMexer?.(activity) ? undefined : "Você não tem permissão para arquivar esta atividade"}
+                  disabled={!podeExcluir?.(activity)}
+                  className={podeExcluir?.(activity) ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={podeExcluir?.(activity) ? undefined : "Você não tem permissão para arquivar esta atividade"}
                   // preventDefault: sem ele o menu fecha e leva o foco junto,
                   // brigando com o diálogo de confirmação que abre em seguida.
-                  onSelect={(e) => { e.preventDefault(); if (podeMexer?.(activity)) onDeleteActivity(activity.id); }}
+                  onSelect={(e) => { e.preventDefault(); if (podeExcluir?.(activity)) onDeleteActivity(activity.id); }}
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar
                 </DropdownMenuItem>
