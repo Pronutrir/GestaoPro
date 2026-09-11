@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useRef } from "react";
 import { DateField } from "@/components/ui/date-field";
+import { isDateRangeInvalid, DATE_RANGE_ERROR } from "@/lib/dateValidation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,7 @@ import { AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 // Campo denso da aba Detalhes: rótulo (uppercase, discreto) EM CIMA do controle.
@@ -1198,7 +1200,7 @@ export const EditActivityDialog = ({
           const parentUpdate: any = {
             status: "completed",
             completed_at: new Date().toISOString(),
-            actual_end_date: new Date().toISOString().slice(0, 10),
+            actual_end_date: hojeLocalISO(),
           };
           if (finalStage?.id) parentUpdate.workflow_stage_id = finalStage.id;
           if (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id) {
@@ -1242,10 +1244,8 @@ export const EditActivityDialog = ({
   };
 
   const dateRangeInvalid =
-    !!formData.start_date &&
-    !!formData.end_date &&
     !formData.is_milestone &&
-    formData.start_date > formData.end_date;
+    isDateRangeInvalid(formData.start_date, formData.end_date);
 
   // Gera o próximo código EAP com base no contexto (pai → fase → topo) e nos
   // irmãos existentes. Preenche o campo; o usuário ainda pode editar.
@@ -1326,7 +1326,7 @@ export const EditActivityDialog = ({
     if (dateRangeInvalid) {
       toast({
         title: "Datas inconsistentes",
-        description: "A data de início é posterior à data de término.",
+        description: DATE_RANGE_ERROR,
         variant: "destructive",
       });
       return;
@@ -1987,7 +1987,7 @@ export const EditActivityDialog = ({
   
                                 try {
                                   if (!ensureProjectUnlocked()) return;
-                                  const today = new Date().toISOString().slice(0, 10);
+                                  const today = hojeLocalISO();
                                   const updateData: any = { workflow_stage_id: stage.id };
                                   // Datas reais sao manuais — nao mexe em actual_*.
                                   if (stage.is_final) {
@@ -2650,7 +2650,7 @@ export const EditActivityDialog = ({
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent side="right" className="max-w-[260px] text-xs">
-                                Datas inconsistentes: a data de início é posterior à data de término.
+                                Datas inconsistentes: {DATE_RANGE_ERROR}
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -3388,7 +3388,7 @@ export const EditActivityDialog = ({
                             );
                           }
                           if (colId === "end_date") {
-                            const subInvalid = !!sub.start_date && !!sub.end_date && sub.start_date > sub.end_date;
+                            const subInvalid = isDateRangeInvalid(sub.start_date, sub.end_date);
                             return (
                               <Popover key={colId} open={openSubPopover === `${sub.id}:${colId}`} onOpenChange={(o) => setOpenSubPopover(o ? `${sub.id}:${colId}` : null)}>
                                 <PopoverTrigger asChild>
@@ -3414,7 +3414,7 @@ export const EditActivityDialog = ({
                             );
                           }
                           if (colId === "start_date") {
-                            const subInvalid = !!sub.start_date && !!sub.end_date && sub.start_date > sub.end_date;
+                            const subInvalid = isDateRangeInvalid(sub.start_date, sub.end_date);
                             const ds = sub.start_date
                               ? (() => {
                                   const [y, m, d] = sub.start_date!.split("-").map(Number);
@@ -3747,7 +3747,7 @@ export const EditActivityDialog = ({
                       // atividade/[activityId]/page.tsx — os dois campos
                       // devem nascer juntos, senão um dos dois caminhos de
                       // "concluir" fica invisível para o outro.
-                      actual_end_date: new Date().toISOString().slice(0, 10),
+                      actual_end_date: hojeLocalISO(),
                     };
                     if (finalStage) {
                       updateData.workflow_stage_id = finalStage.id;

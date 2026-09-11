@@ -159,6 +159,7 @@ import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 import { selectInChunks } from "@/lib/chunkedIn";
 import { fetchTaskDependencias, fetchTaskRelations } from "@/lib/taskDependencias";
 import { rotaDaAtividade } from "@/lib/telaDaAtividade";
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
 // Valores (DEFAULT_CARD_FIELDS etc.) agora só em kanban/shared — re-exportar
@@ -1713,7 +1714,7 @@ export const ActivityKanban = ({
         workflow_stage_id: stageId,
         status: destinoFinal ? "completed" : "pending",
         completed_at: destinoFinal ? new Date().toISOString() : null,
-        actual_end_date: destinoFinal ? new Date().toISOString().slice(0, 10) : null,
+        actual_end_date: destinoFinal ? hojeLocalISO() : null,
       } as never)
       .eq("id", activityId);
     if (error) {
@@ -1758,7 +1759,7 @@ export const ActivityKanban = ({
                 workflow_stage_id: previousStageId,
                 status: anteriorFinal ? "completed" : "pending",
                 completed_at: anteriorFinal ? new Date().toISOString() : null,
-                actual_end_date: anteriorFinal ? new Date().toISOString().slice(0, 10) : null,
+                actual_end_date: anteriorFinal ? hojeLocalISO() : null,
               } as never)
               .eq("id", activityId);
             await supabase.from("user_stories").update({ stage_id: previousStageId } as never).eq("activity_id", activityId);
@@ -2984,7 +2985,7 @@ export const ActivityKanban = ({
   // "Tarefas do Dia" - quality only: activities where end_date or last_update_date <= today
   const dailyTasks = useMemo(() => {
     if (!isQualityProject) return [];
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = hojeLocalISO();
     const source = onlyMine ? activities.filter(isMineActivity) : activities;
     return source.filter((a) => {
       if (a.status === "completed") return false;

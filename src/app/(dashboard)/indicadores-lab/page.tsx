@@ -25,6 +25,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useProjectAccess } from '@/hooks/useProjectAccess';
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 type PeriodKey = '30d' | '90d' | '180d' | '365d';
 
@@ -1134,7 +1135,7 @@ export default function IndicadoresLabPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `indicadores_executivos_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `indicadores_executivos_${hojeLocalISO()}.csv`;
     link.click();
     URL.revokeObjectURL(url); // evita leak de mem\u00F3ria
   };

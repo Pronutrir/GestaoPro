@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
-import { estaAtrasado } from "@/lib/dataLocal";
+import { estaAtrasado, hojeLocalISO } from "@/lib/dataLocal";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line,
@@ -140,7 +140,7 @@ const Reports = () => {
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${filename}_${new Date().toISOString().split("T")[0]}.csv`;
+    link.download = `${filename}_${hojeLocalISO()}.csv`;
     link.click();
   };
 

@@ -34,6 +34,7 @@ import { buildAvatarLookupMap } from '@/lib/avatarLookup';
 import { selectInChunks } from '@/lib/chunkedIn';
 import { ProjectsTable } from '@/components/ProjectsTable';
 import { podeGerenciarProjeto } from '@/lib/projectManage';
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 interface Project {
   id: string; title: string; description: string | null; status: string; priority: string;
@@ -159,7 +160,7 @@ function ProjectsContent() {
         .eq('is_trashed', false)
         .in('project_id', chunk),
     );
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeLocalISO();
     const acc: Record<string, ProjectMetrics> = {};
     for (const r of rows) {
       if (!r.project_id) continue;

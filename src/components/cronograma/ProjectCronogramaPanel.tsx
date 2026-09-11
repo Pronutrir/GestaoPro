@@ -47,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import { DateField } from "@/components/ui/date-field";
+import { isDateRangeInvalid } from "@/lib/dateValidation";
 import { CelulaEditavel } from "@/components/cronograma/CelulaEditavel";
 import { mensagemDeErro } from "@/lib/erroDoBanco";
 import { cn } from "@/lib/utils";
@@ -1733,7 +1734,7 @@ export function ProjectCronogramaPanel({
                 const outro = (a[par.outro] || "").slice(0, 10) || null;
                 if (novo && outro) {
                   const [ini, fim] = par.ehFim ? [outro, novo] : [novo, outro];
-                  if (fim < ini) {
+                  if (isDateRangeInvalid(ini, fim)) {
                     toast({
                       title: "Data recusada",
                       description: `O término (${formatDateBR(fim)}) não pode ser antes do início (${formatDateBR(ini)}).`,

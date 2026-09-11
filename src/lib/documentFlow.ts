@@ -1,3 +1,4 @@
+import { hojeLocalISO } from "@/lib/dataLocal";
 /**
  * FLUXO DE DOCUMENTO — ciência, aprovação e assinatura.
  *
@@ -173,7 +174,7 @@ export function flowProgress(participants: FlowParticipant[]): FlowProgress {
 /** Prazo vencido? Só AVISA — não fecha o fluxo sozinho (decisão do usuário). */
 export const isOverdue = (flow: DocumentFlow): boolean => {
   if (!flow.due_date || isTerminal(flow.status)) return false;
-  return flow.due_date < new Date().toISOString().slice(0, 10);
+  return flow.due_date < hojeLocalISO();
 };
 
 /**

@@ -22,7 +22,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { BaselineBlock } from "@/components/BaselineBlock";
 import { cn } from "@/lib/utils";
 import { resolveEapKind } from "@/lib/eapModel";
-import { formatarDataBR } from "@/lib/dataLocal";
+import { formatarDataBR, hojeLocalISO } from "@/lib/dataLocal";
 import {
   sugerirCampos, sugerirAprovadores, orcamentoAutorizado,
   completude as completudeEssencial,
@@ -466,7 +466,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       project_id: projectId,
       title: `Kickoff — ${project.title}`,
       meeting_type: "kickoff",
-      meeting_date: new Date().toISOString().slice(0, 10),
+      meeting_date: hojeLocalISO(),
       agenda: pauta,
       participants: participantes,
     });

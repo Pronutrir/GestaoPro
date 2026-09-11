@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 // Rótulos das opções vivem em um módulo compartilhado com a visualização do
 // Roadmap, para que valores gravados e exibidos usem a mesma fonte.
@@ -509,7 +510,7 @@ function SolicitacaoForm() {
     setErrors((prev) => (prev[key] ? { ...prev, [key]: "" } : prev));
   };
 
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = hojeLocalISO();
   const isLast = step === STEPS.length - 1;
 
   /** Foca o primeiro campo com erro, quando ele tem um id. */

@@ -111,3 +111,50 @@ export function compararData(a?: string | null, b?: string | null): number {
   // sem Date no meio não há fuso para errar.
   return a.slice(0, 10).localeCompare(b.slice(0, 10));
 }
+
+/**
+ * O DIA LOCAL como "YYYY-MM-DD" — o que se grava numa coluna `date`.
+ *
+ * O PROBLEMA QUE ISTO RESOLVE
+ *
+ * `hojeLocalISO()` devolve o dia em **UTC**, não o dia
+ * de quem está usando o sistema. Em São Paulo (UTC−3) as duas coisas só
+ * coincidem até as 21:00; das 21:00 à meia-noite o `toISOString()` já está em
+ * amanhã. Medido em produção em 11/09/2026: concluir uma atividade às 22:30
+ * gravava `actual_end_date = "2026-09-12"` e a tela mostrava 12/09 — o dia
+ * seguinte. Às 12:19 a mesma ação gravava 11/09, correto. O defeito só aparece
+ * numa janela de três horas por dia, que é exatamente por que sobreviveu tanto
+ * tempo.
+ *
+ * O contraste que fecha o diagnóstico: no MESMO clique, `completed_at` era
+ * gravado com `toISOString()` inteiro (instante, correto) e `actual_end_date`
+ * com o recorte (dia UTC, errado). Dois campos nascidos juntos discordavam em
+ * um dia.
+ *
+ * Aqui o dia é montado com os getters LOCais (`getFullYear`/`getMonth`/
+ * `getDate`), que é a mesma técnica de `DateField` e de `parseDataLocal`.
+ *
+ * NÃO use para `timestamptz` que representa um INSTANTE (`completed_at`,
+ * `created_at`): lá o certo continua sendo `toISOString()` inteiro.
+ */
+export function diaLocalISO(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Hoje como "YYYY-MM-DD" no fuso de quem está usando. */
+export function hojeLocalISO(): string {
+  return diaLocalISO(new Date());
+}
+
+/**
+ * O dia local de um valor que pode ser data pura OU instante.
+ *
+ * Para agrupar/rotular um `timestamptz` por dia — um evento de feed carimbado
+ * às 22:30 em São Paulo pertence a HOJE, e `slice(0, 10)` o jogava em amanhã.
+ */
+export function diaLocalDe(valor: string): string {
+  const s = (valor || "").trim();
+  if (s.length <= 10) return s;
+  return diaLocalISO(new Date(s));
+}

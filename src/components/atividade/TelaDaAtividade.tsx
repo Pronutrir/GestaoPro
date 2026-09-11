@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Diamond, Plus, X, ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EAP_LABELS, eapCanGroup, type EapKind } from "@/lib/eapModel";
+import { isDateRangeInvalid, DATE_RANGE_ERROR } from "@/lib/dateValidation";
 import { CampoNoLugar } from "./CampoNoLugar";
 import { DescricaoRica } from "./DescricaoRica";
 import { TrilhaDaAtividade } from "./TrilhaDaAtividade";
@@ -697,7 +698,32 @@ function EditorDeJanela({
   aoGravarFim?: (novo: string) => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
+  /* RASCUNHO LOCAL, e não `defaultValue`.
+   *
+   * Cada data gravava sozinha ao sair do campo, sem olhar para a outra — e a
+   * tela aceitava `14/09 → 10/09` calada. Medido em produção em 11/09/2026:
+   * gravou, sobreviveu ao F5, nenhum aviso. A regra existia em
+   * `lib/dateValidation.ts` e ninguém importava.
+   *
+   * Validar o PAR exige as duas pontas ao mesmo tempo, então os dois campos
+   * passam a ser controlados. E quando o par está inconsistente a gravação fica
+   * represada: sem isso, corrigir o término gravaria só o término e o início
+   * digitado antes se perderia em silêncio — por isso `gravarPar` grava tudo
+   * que diverge do banco assim que o par volta a fechar. */
+  const [rascunho, setRascunho] = useState({ ini: inicio ?? "", fim: fim ?? "" });
+  const [erro, setErro] = useState<string | null>(null);
   const pode = typeof aoGravarInicio === "function";
+
+  const gravarPar = async (campo: "ini" | "fim", valor: string) => {
+    const par = campo === "ini"
+      ? { ini: valor, fim: rascunho.fim }
+      : { ini: rascunho.ini, fim: valor };
+    setRascunho(par);
+    if (isDateRangeInvalid(par.ini, par.fim)) { setErro(DATE_RANGE_ERROR); return; }
+    setErro(null);
+    if (par.ini !== (inicio ?? "")) await aoGravarInicio?.(par.ini);
+    if (par.fim !== (fim ?? "")) await aoGravarFim?.(par.fim);
+  };
   const temValor = !!(inicio || fim);
   const texto = temValor
     ? `${inicio ? formatarDataBR(inicio) : "—"} → ${fim ? formatarDataBR(fim) : "—"}`
@@ -721,19 +747,33 @@ function EditorDeJanela({
         <div className="flex items-center gap-1.5">
           <input
             type="date"
-            defaultValue={inicio ?? ""}
-            onBlur={(e) => { if (e.target.value !== (inicio ?? "")) void aoGravarInicio?.(e.target.value); }}
-            className={inputCls}
+            value={rascunho.ini}
+            onChange={(e) => setRascunho((p) => ({ ...p, ini: e.target.value }))}
+            onBlur={(e) => void gravarPar("ini", e.target.value)}
+            aria-invalid={!!erro}
+            className={cn(inputCls, erro && "border-destructive ring-destructive/20")}
           />
           <span className="text-[12px] text-muted-foreground">→</span>
           <input
             type="date"
-            defaultValue={fim ?? ""}
-            onBlur={(e) => { if (e.target.value !== (fim ?? "")) void aoGravarFim?.(e.target.value); }}
-            className={inputCls}
+            value={rascunho.fim}
+            onChange={(e) => setRascunho((p) => ({ ...p, fim: e.target.value }))}
+            onBlur={(e) => void gravarPar("fim", e.target.value)}
+            aria-invalid={!!erro}
+            className={cn(inputCls, erro && "border-destructive ring-destructive/20")}
           />
-          <button type="button" onClick={() => setAberto(false)} className="text-[12px] text-muted-foreground hover:text-foreground">ok</button>
+          <button
+            type="button"
+            onClick={() => { if (!erro) setAberto(false); }}
+            disabled={!!erro}
+            className="text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ok
+          </button>
         </div>
+        {erro && (
+          <span role="alert" className="text-[11.5px] text-destructive">{erro}</span>
+        )}
       </div>
     );
   }
@@ -741,7 +781,7 @@ function EditorDeJanela({
   return (
     <button
       type="button"
-      onClick={() => setAberto(true)}
+      onClick={() => { setRascunho({ ini: inicio ?? "", fim: fim ?? "" }); setErro(null); setAberto(true); }}
       className="flex flex-col gap-0.5 min-w-0 text-left rounded-[4px] -mx-1 px-1 py-0.5 hover:bg-muted/60 transition-colors"
       title={`Clique para ajustar · ${rotulo}`}
     >

@@ -1,3 +1,4 @@
+import { hojeLocalISO } from "@/lib/dataLocal";
 /**
  * CUSTO DO PROJETO — fonte única de cálculo (Fase 1 do plano financeiro).
  *
@@ -103,7 +104,7 @@ export function resolveRate(
   rates: CostRate[],
   opts: { userId?: string | null; jobTitleId?: string | null; on?: string },
 ): CostRate | null {
-  const day = opts.on ?? new Date().toISOString().slice(0, 10);
+  const day = opts.on ?? hojeLocalISO();
   const valid = (r: CostRate) =>
     r.effective_from <= day && (!r.effective_to || r.effective_to >= day);
   const newest = (list: CostRate[]) =>

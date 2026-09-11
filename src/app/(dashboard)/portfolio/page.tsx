@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Briefcase, DollarSign, AlertTriangle, CheckCircle2, FolderKanban, Layers3 } from "lucide-react";
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 interface PortfolioProject {
   id: string;
@@ -87,7 +88,7 @@ export default function PortfolioPage() {
     const avgProgress = total > 0
       ? projects.reduce((s, p) => s + (Number(p.completion_percentage) || 0), 0) / total
       : 0;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hojeLocalISO();
     const overdue = projects.filter(p => p.due_date && p.due_date < today && p.status !== "em-execucao").length;
     return { total, blocked, executing, planned, used, avgProgress, overdue };
   }, [projects]);

@@ -13,7 +13,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   Tooltip, CartesianGrid, AreaChart, Area,
 } from "recharts";
-import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
+import { formatarDataBR, estaAtrasado, diasAte, diaLocalISO } from "@/lib/dataLocal";
 
 interface Activity {
   id: string;
@@ -211,7 +211,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       const d = new Date(a.completed_at!);
       const weekStart = new Date(d);
       weekStart.setDate(d.getDate() - d.getDay());
-      const key = weekStart.toISOString().split("T")[0];
+      const key = diaLocalISO(weekStart);
       weeks[key] = (weeks[key] || 0) + 1;
     });
     return Object.entries(weeks)

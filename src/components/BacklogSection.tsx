@@ -54,7 +54,7 @@ import {
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { mutateInChunks, chunkIds } from "@/lib/chunkedIn";
 import { fetchTaskDependencias } from "@/lib/taskDependencias";
-import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
+import { formatarDataBR, estaAtrasado, diasAte, hojeLocalISO } from "@/lib/dataLocal";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 // As sete decisões visuais da mesa de planejamento, como regras testáveis —
 // 42 verificações em scripts/verificar-mesa-de-planejamento.cjs. A tela
@@ -1588,7 +1588,7 @@ export const BacklogSection = ({
       // por um lugar não aparecia no outro. Achado no plano de teste E2E de
       // 09/09/2026 (item 30).
       (updateData as Record<string, unknown>).actual_end_date =
-        ehFinal ? new Date().toISOString().slice(0, 10) : null;
+        ehFinal ? hojeLocalISO() : null;
     }
 
     /**

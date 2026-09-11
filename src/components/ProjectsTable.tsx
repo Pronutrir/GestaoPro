@@ -18,6 +18,7 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { formatProjectDueDate } from "@/lib/projectDeadline";
 import { diasSemMovimento } from "@/components/SortableProjectCard";
 import { cn } from "@/lib/utils";
+import { hojeLocalISO, diaLocalISO } from "@/lib/dataLocal";
 
 export interface TableProject {
   id: string;
@@ -140,9 +141,9 @@ export function ProjectsTable({
   const faixaPrazo = (p: TableProject): string => {
     if (!p.due_date) return "sem";
     const d = p.due_date.slice(0, 10);
-    const hj = new Date().toISOString().slice(0, 10);
+    const hj = hojeLocalISO();
     if (d < hj && p.status !== "concluido") return "vencido";
-    const em30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const em30 = diaLocalISO(new Date(Date.now() + 30 * 86400000));
     return d <= em30 ? "vence30" : "ok";
   };
 
@@ -181,7 +182,7 @@ export function ProjectsTable({
   const gravidadeDe = (p: TableProject): "alta" | "media" | "baixa" => {
     if (p.status === "concluido") return "baixa";
     const m = metrics[p.id];
-    const vencido = !!p.due_date && p.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10);
+    const vencido = !!p.due_date && p.due_date.slice(0, 10) < hojeLocalISO();
 
     // ALTA = já falhou: tarefa atrasada OU prazo do projeto vencido.
     //
@@ -265,7 +266,7 @@ export function ProjectsTable({
     );
   }
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeLocalISO();
   /** Quantos projetos em cada gravidade — vira a contagem nas opções do
    *  seletor de Situação, para ninguém escolher às cegas. */
   const contagem = projects.reduce(

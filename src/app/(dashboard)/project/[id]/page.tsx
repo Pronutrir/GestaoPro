@@ -62,6 +62,7 @@ import { ehAtividadeDaPessoa, podeMutarAtividade, souResponsavelDeAncestralNaArv
 import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
+import { hojeLocalISO, diaLocalISO } from "@/lib/dataLocal";
 
 interface Project {
   id: string;
@@ -1157,8 +1158,8 @@ export default function ProjectDetailsPage() {
     } else {
       const { data } = await supabase.from("sprints").insert({
         project_id: id!, title: "Sprint 1", goal,
-        start_date: new Date().toISOString().split("T")[0],
-        end_date: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+        start_date: hojeLocalISO(),
+        end_date: diaLocalISO(new Date(Date.now() + 14 * 86400000)),
         status: "active",
       }).select().single();
       if (data) setActiveSprintId(data.id);
@@ -1357,7 +1358,7 @@ export default function ProjectDetailsPage() {
 
     const idsToUpdate = [activityId, ...descendantIds];
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hojeLocalISO();
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
     let finalStageId: string | null = null;
     let reopenStageId: string | null = null;

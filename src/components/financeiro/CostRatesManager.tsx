@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { formatMoney, type CostRate } from "@/lib/projectCosts";
 import { cn } from "@/lib/utils";
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any;
@@ -44,7 +45,7 @@ export const CostRatesManager = () => {
     user_id: "",
     cost_rate: "",
     bill_rate: "",
-    effective_from: new Date().toISOString().slice(0, 10),
+    effective_from: hojeLocalISO(),
   });
 
   const load = async () => {
@@ -83,7 +84,7 @@ export const CostRatesManager = () => {
       user_id: isJob ? null : form.user_id,
       cost_rate: Number(form.cost_rate.replace(",", ".")) || 0,
       bill_rate: form.bill_rate ? Number(form.bill_rate.replace(",", ".")) : null,
-      effective_from: form.effective_from || new Date().toISOString().slice(0, 10),
+      effective_from: form.effective_from || hojeLocalISO(),
     });
     setSaving(false);
     if (error) {

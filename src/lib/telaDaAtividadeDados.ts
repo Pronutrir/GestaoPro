@@ -29,6 +29,7 @@
  * ============================================================================
  */
 import { supabase } from "@/integrations/supabase/client";
+import { diaLocalDe, diaLocalISO, parseDataLocal } from "@/lib/dataLocal";
 
 /**
  * OS TIPOS GERADOS NÃO CONHECEM AS VIEWS DESTE MÓDULO.
@@ -344,12 +345,18 @@ export function agruparPorDia(
   eventos: EventoDoBanco[],
   hojeISO: string,
 ): { rotulo: string; eventos: EventoDoBanco[] }[] {
-  const dia = (iso: string) => iso.slice(0, 10);
+  // DIA LOCAL, não dia UTC. `ocorrido_em` é `timestamptz`: recortar os 10
+  // primeiros caracteres devolve o dia em UTC, e das 21:00 à meia-noite em São
+  // Paulo isso já é amanhã. O efeito não era o rótulo "Hoje" sumir — era pior:
+  // `hoje` e o evento recém-criado caíam JUNTOS no dia UTC seguinte e o rótulo
+  // saía certo, enquanto tudo que acontecera mais cedo no MESMO dia (às 15h,
+  // digamos) virava "Ontem". Medido em 11/09/2026.
+  const dia = (iso: string) => diaLocalDe(iso);
   const hoje = dia(hojeISO);
   const ontem = (() => {
-    const d = new Date(`${hoje}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
+    const d = parseDataLocal(hoje);
+    d.setDate(d.getDate() - 1);
+    return diaLocalISO(d);
   })();
 
   const porDia = new Map<string, EventoDoBanco[]>();

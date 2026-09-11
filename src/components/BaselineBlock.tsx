@@ -21,8 +21,22 @@ const fmt = (iso?: string | null) => {
 };
 
 /**
- * Bloco compacto que mostra Previsto x Real x Desvio do projeto e
- * permite a gestores Admin/Gestor congelar/recongelar a linha de base.
+ * Bloco compacto que mostra Previsto × Real × Desvio do projeto.
+ *
+ * O comentário daqui dizia que ele "permite a gestores Admin/Gestor
+ * congelar/recongelar a linha de base". Não permite, e nunca permitiu: não há
+ * botão de congelar neste componente, e `canManage` chega e não é lido.
+ * Congelar linha de base é a segunda onda do CLAUDE.md, ainda não construída.
+ *
+ * Até 11/09/2026 este bloco só conseguia renderizar "Previsto": as cinco
+ * colunas que ele lê além do previsto — `actual_start_date`, `actual_end_date`,
+ * `baseline_start_date`, `baseline_end_date`, `baseline_frozen_at` — não
+ * existiam em `public.projects`, então "Real" e "Desvio" eram impossíveis.
+ *
+ * A migration 20260911160100 criou as duas colunas de data REAL. As três de
+ * baseline continuam não existindo de propósito (ver a própria migration):
+ * enquanto não houver o ato de congelar, `endVariance` usa o PREVISTO como
+ * referência, que é o ramo já escrito para este caso.
  */
 export function BaselineBlock({
   project,

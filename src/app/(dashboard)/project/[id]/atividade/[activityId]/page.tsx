@@ -29,6 +29,7 @@ import {
 import { capacidadesNaAtividade } from "@/lib/activityAccess";
 import { resolveEapKind, eapToPersisted, eapProximoCodigoFilho, EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { gutScore } from "@/lib/gutPriority";
+import { hojeLocalISO } from "@/lib/dataLocal";
 
 // activity_assignees é da fase 02 e não está nos tipos gerados do Supabase —
 // mesmo contorno de lib/telaDaAtividadeDados: casta o nome para escapar do tipo.
@@ -345,7 +346,7 @@ export default function PaginaDaAtividade() {
     const jaConcluida = String((atividade as Record<string, unknown>)?.status) === "completed";
     const patch = jaConcluida
       ? { status: "in_progress", actual_end_date: null, completed_at: null }
-      : { status: "completed", actual_end_date: new Date().toISOString().slice(0, 10), completed_at: new Date().toISOString() };
+      : { status: "completed", actual_end_date: hojeLocalISO(), completed_at: new Date().toISOString() };
     const { error, count } = await supabase
       .from("activities").update(patch as never, { count: "exact" }).eq("id", activityId);
     if (error) { toast({ title: "Não deu para concluir", description: error.message, variant: "destructive" }); return; }

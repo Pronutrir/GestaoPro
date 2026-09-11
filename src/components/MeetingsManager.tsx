@@ -42,7 +42,7 @@ import { selectInChunks } from "@/lib/chunkedIn";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import { VinculoSelect } from "@/components/VinculoSelect";
 import { cn } from "@/lib/utils";
-import { formatarDataBR, estaAtrasado } from "@/lib/dataLocal";
+import { formatarDataBR, estaAtrasado, hojeLocalISO } from "@/lib/dataLocal";
 
 // meeting_types ainda fora dos tipos gerados (migration 20260802130000
 // pendente na VM). Mesmo padrão usado em PageComments.
@@ -240,7 +240,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   /** Painel: as duas perguntas de quem gerencia são "o que está aberto" e
    *  "o que já venceu". O resto é contexto. */
   const painel = useMemo(() => {
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeLocalISO();
     const abertas = allActions.filter((a) => !a.is_completed);
     const atrasadas = abertas.filter((a) => a.due_date && a.due_date.slice(0, 10) < hoje);
 
@@ -698,7 +698,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
    *  numa pessoa mostra as atrasadas daquela pessoa. */
   const acoesFiltradas = useMemo(() => {
     if (!filtroAcoes && !filtroPessoa) return [];
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeLocalISO();
     return allActions
       .filter((a) => {
         if (filtroPessoa && (a.assigned_to || "").trim() !== filtroPessoa) return false;
@@ -889,7 +889,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                 )}
                 {acoesFiltradas.map((a) => {
                   const reuniao = meetings.find((m) => m.id === a.meeting_id);
-                  const atrasada = !a.is_completed && a.due_date && a.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10);
+                  const atrasada = !a.is_completed && a.due_date && a.due_date.slice(0, 10) < hojeLocalISO();
                   return (
                     <button
                       key={a.id}
@@ -1236,7 +1236,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             Cobrar ata de uma reunião que ainda não aconteceu
                             seria ruído — e cobrar pauta depois, inútil. */}
                         {(() => {
-                          const hoje = new Date().toISOString().slice(0, 10);
+                          const hoje = hojeLocalISO();
                           const dia = meeting.meeting_date?.slice(0, 10);
                           const jaOcorreu = !!dia && dia < hoje;
                           const semPauta = !meeting.agenda?.trim();
