@@ -1247,6 +1247,20 @@ export const EditActivityDialog = ({
     !formData.is_milestone &&
     isDateRangeInvalid(formData.start_date, formData.end_date);
 
+  /* O PAR REAL TAMBÉM SE VALIDA — e não se validava.
+   *
+   * `dateRangeInvalid` sempre olhou só o previsto. Os dois chips do bloco
+   * "Real" aceitavam qualquer coisa: medido em 11/09/2026, gravei início real
+   * 11/09 com término real 03/09 e o banco ficou com a janela invertida.
+   *
+   * O gatilho `trg_marcar_inicio_real` não alcança este caso de propósito — ele
+   * só age quando o início está VAZIO. Aqui o início existe e quem o inverteu
+   * foi a digitação; a recusa é da tela. */
+  const realRangeInvalid = isDateRangeInvalid(
+    formData.actual_start_date,
+    formData.actual_end_date,
+  );
+
   // Gera o próximo código EAP com base no contexto (pai → fase → topo) e nos
   // irmãos existentes. Preenche o campo; o usuário ainda pode editar.
   const handleAutoWbs = async () => {
@@ -1323,9 +1337,9 @@ export const EditActivityDialog = ({
       });
       return;
     }
-    if (dateRangeInvalid) {
+    if (dateRangeInvalid || realRangeInvalid) {
       toast({
-        title: "Datas inconsistentes",
+        title: realRangeInvalid ? "Datas reais inconsistentes" : "Datas inconsistentes",
         description: DATE_RANGE_ERROR,
         variant: "destructive",
       });
@@ -2707,6 +2721,7 @@ export const EditActivityDialog = ({
                               onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
                               placeholder="Início"
                               tooltip="Definir início real"
+                              invalid={realRangeInvalid}
                             />
                             <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             <DateChip
@@ -2714,7 +2729,13 @@ export const EditActivityDialog = ({
                               onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
                               placeholder="Término"
                               tooltip="Definir término real"
+                              invalid={realRangeInvalid}
                             />
+                            {realRangeInvalid && (
+                              <span role="alert" className="text-[10px] text-destructive w-full">
+                                {DATE_RANGE_ERROR}
+                              </span>
+                            )}
                             {v !== null && tone && (
                               <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono shrink-0", varianceClasses(tone))}
                                     title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>

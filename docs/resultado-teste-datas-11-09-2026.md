@@ -222,3 +222,73 @@ As migrations continuam **não aplicadas**, então seguem sem verificação:
 Também não medi o **overlap** do editor aberto com a coluna "Realizado" ao
 lado — a linha de edição é mais larga que a coluna fechada. É anterior a este
 trabalho (os dois campos e o "ok" já eram assim) e ficou de fora de propósito.
+
+---
+
+# Migrations aplicadas (11/09/2026)
+
+Aplicadas em produção, nesta ordem, com `ON_ERROR_STOP=1`.
+
+## Conferência da conversão
+
+Antes de aplicar, gravei uma **assinatura dos dias** — o md5 de todos os pares
+`(id, dia de actual_start_date, dia de actual_end_date)` lidos como a tela os lê
+hoje. Depois da conversão, recalculei a mesma assinatura sobre as colunas já
+convertidas:
+
+```
+antes:  e62332e84228935b58f31f54afacb744
+depois: e62332e84228935b58f31f54afacb744
+```
+
+Idênticas — **nenhuma linha mudou de dia**. Contagens preservadas: 487 com
+início real, 590 com fim real. A guarda da migration confirmou 0 linhas com
+hora antes de converter.
+
+| Coluna | Antes | Depois |
+|---|---|---|
+| `activities.actual_start_date` | `timestamptz` | `date` |
+| `activities.actual_end_date` | `timestamptz` | `date` |
+| `activities.baseline_start_date` | `timestamptz` | `date` |
+| `activities.baseline_end_date` | `timestamptz` | `date` |
+| `projects.actual_start_date` | *não existia* | `date` |
+| `projects.actual_end_date` | *não existia* | `date` |
+
+## O gatilho, medido
+
+Concluir às 22:30 com as migrations aplicadas:
+
+```
+API      {"status":"completed","actual_end_date":"2026-09-11",
+          "completed_at":"2026-09-12T01:30:00.000Z"}
+banco    status=completed
+         actual_start_date = 2026-09-11   <- carimbado pelo gatilho (era nulo)
+         actual_end_date   = 2026-09-11   <- data pura, sem fuso
+```
+
+O que fecha o caso do relatório original: `actual_end_date` não é mais
+`2026-09-11 00:00:00+00` — que lido no fuso de São Paulo dava **10/09**. Agora
+é uma data, e SQL e tela dizem a mesma coisa.
+
+## Um defeito a mais, achado ao testar o `LEAST` do gatilho
+
+Para exercitar a trava que impede o gatilho de criar janela invertida, tentei
+gravar um término real retroativo pelo diálogo da atividade. O diálogo aceitou
+**início real 11/09 com término real 03/09** e gravou.
+
+`dateRangeInvalid` sempre olhou só o par PREVISTO. Os dois chips do bloco
+"Real" não tinham validação nenhuma — e o gatilho não alcança este caso de
+propósito, porque ele só age quando o início está vazio; aqui o início existe e
+quem o inverteu foi a digitação.
+
+Corrigido: `realRangeInvalid` usando o mesmo `isDateRangeInvalid`, com os chips
+marcados e o salvar bloqueado. Medido depois da correção: erro inline visível e
+**nenhum PATCH** ao tentar salvar.
+
+## Produção continua funcionando
+
+Produção ainda roda o código ANTIGO sobre o schema novo. Conferido depois de
+aplicar: a atividade abre, as datas aparecem certas, zero erro de página e zero
+resposta HTTP ≥ 400. O código antigo manda `"2026-09-12"` numa coluna `date`
+(aceito) e lê com `.slice(0, 10)` (funciona nos dois formatos). O que continua
+faltando lá é só a correção do dia local, que entra na próxima publicação.
