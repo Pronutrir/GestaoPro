@@ -2943,7 +2943,9 @@ export const BacklogSection = ({
                     numa lista de tarefas. Veio do botão redondo que ficava no
                     começo da linha e disputava leitura com o ícone de tipo. */}
                 <DropdownMenuItem
-                  onSelect={() => onToggleActivity(activity.id, activity.status)}
+                  disabled={!podeMexer?.(activity)}
+                  title={podeMexer?.(activity) ? undefined : "Você não tem permissão para alterar o status desta atividade"}
+                  onSelect={() => { if (podeMexer?.(activity)) onToggleActivity(activity.id, activity.status); }}
                   className={activity.status === "completed" ? "" : "text-success focus:text-success focus:bg-success/10"}
                 >
                   {/* MARCO tem vocabulário próprio: ele não se "conclui", é
@@ -2965,7 +2967,10 @@ export const BacklogSection = ({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  disabled={!podeMexer?.(activity)}
+                  title={podeMexer?.(activity) ? undefined : "Você não tem permissão para adicionar subitens"}
                   onSelect={() => {
+                    if (!podeMexer?.(activity)) return;
                     setQuickAddKey(`parent:${activity.id}`);
                     setQuickAddTitle("");
                     setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
@@ -2977,11 +2982,19 @@ export const BacklogSection = ({
                     lado de "Abrir detalhes" (a tela nova, ainda em construção)
                     até a tela editar tudo. */}
                 {onEditarNoDialogo && (
-                  <DropdownMenuItem onSelect={() => onEditarNoDialogo(activity)}>
+                  <DropdownMenuItem
+                    disabled={!podeMexer?.(activity)}
+                    title={podeMexer?.(activity) ? undefined : "Você não tem permissão para editar esta atividade"}
+                    onSelect={() => { if (podeMexer?.(activity)) onEditarNoDialogo(activity); }}
+                  >
                     <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
+                <DropdownMenuItem
+                  disabled={!podeMexer?.(activity)}
+                  title={podeMexer?.(activity) ? undefined : "Você não tem permissão para editar esta atividade"}
+                  onSelect={() => { if (podeMexer?.(activity)) onEditActivity(activity); }}
+                >
                   <Maximize2 className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
                 </DropdownMenuItem>
                 {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban

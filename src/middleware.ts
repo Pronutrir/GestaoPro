@@ -80,6 +80,38 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user) {
+    // Bloqueia usuários com convite pendente (convidados que não aceitaram/recusaram)
+    if (pathname !== '/onboarding' && pathname !== '/pending-approval') {
+      const cachedInvitationStatus = request.cookies.get('invitation_status')?.value;
+
+      if (cachedInvitationStatus === 'pending') {
+        return NextResponse.redirect(new URL('/onboarding', request.url));
+      }
+
+      if (cachedInvitationStatus !== 'accepted') {
+        try {
+          const { data: member } = await supabase
+            .from('project_members')
+            .select('invitation_status')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (member && member.invitation_status === 'pending') {
+            const redirect = NextResponse.redirect(new URL('/onboarding', request.url));
+            redirect.cookies.set('invitation_status', 'pending', { maxAge: 300, path: '/' });
+            return redirect;
+          }
+
+          // Cache para reduzir latência de navegação
+          supabaseResponse.cookies.set('invitation_status', 'accepted', { maxAge: 300, path: '/' });
+        } catch {
+          // Falha ao buscar status de convite — permite continuar, a página tratará
+        }
+      }
+    }
+
     // Bloqueia usuários inativos (ex.: novo cadastro Azure aguardando aprovação)
     if (pathname !== '/pending-approval') {
       const cachedActive = request.cookies.get('profile_active')?.value;

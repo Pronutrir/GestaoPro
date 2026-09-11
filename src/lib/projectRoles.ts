@@ -115,7 +115,7 @@ export const PAPEIS_PROJETO: PapelProjeto[] = [
        Texto do hint atualizado em 08/09/2026 para refletir o que a regra já
        fazia desde a migration 20260904150000 (responsável de subárvore cria,
        move e exclui, não só edita). Relato completo do achado que motivou o
-       ajuste: docs/validacao-testes-04-09-2026.html. */
+       ajuste: docs/validacao-testes-09-09-2026.pdf. */
     hint: "vê o projeto inteiro. Cria, edita, move e exclui o que está sob sua responsabilidade",
     rank: 2,
     perms: { can_create: false, can_edit: false, can_delete: false, can_move: false, can_edit_own: true },
