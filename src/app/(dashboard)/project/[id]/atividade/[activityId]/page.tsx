@@ -121,9 +121,28 @@ export default function PaginaDaAtividade() {
     canDelete: boolean; canEditOwn: boolean;
   } | null>(null);
 
-  const carregar = useCallback(async () => {
+  /**
+   * `silencioso` SEPARA A PRIMEIRA CARGA DA RECARGA DEPOIS DE SALVAR.
+   *
+   * Toda ação desta tela termina chamando `carregar()`, e `carregar()` começava
+   * sempre com `setCarregando(true)`. Como o render tem `if (carregando)
+   * return <div>Abrindo a atividade…</div>`, salvar QUALQUER campo trocava a
+   * tela inteira pela mensagem de carregando e a remontava do zero, depois de
+   * refazer as sete consultas. Para quem usa, digitar uma data "atualizava a
+   * página" — relatado em 11/09/2026, com a tela piscando a cada gravação.
+   *
+   * O estrago passava de estético. Remontar destrói o estado dos componentes:
+   * o editor de datas fechava sozinho a cada gravação, e uma gravação que
+   * dependesse do `await` de outra ficava pendurada, porque o componente que
+   * a aguardava não existia mais (ver `gravarJanela`).
+   *
+   * A primeira carga precisa do aviso — não há o que mostrar ainda. A recarga
+   * depois de salvar não: os dados velhos continuam na tela até os novos
+   * chegarem, que é o comportamento de quem salva sozinho no lugar.
+   */
+  const carregar = useCallback(async (silencioso = false) => {
     if (!projectId || !activityId) return;
-    setCarregando(true);
+    if (!silencioso) setCarregando(true);
     setErro(null);
     try {
       const { data: a, error: eA } = await supabase
@@ -327,7 +346,7 @@ export default function PaginaDaAtividade() {
      * já tinha entregue conversa + histórico numa linha do tempo só.
      */
 
-    await carregar();
+    await carregar(true);
   }, [activityId, carregar, user?.id, nomeDeQuemFez]);
 
   /**
@@ -358,7 +377,7 @@ export default function PaginaDaAtividade() {
       .eq("id", activityId);
     if (error) throw new Error(error.message);
     if (!count) throw new Error("o banco recusou a alteração — você tem permissão sobre esta atividade?");
-    await carregar();
+    await carregar(true);
   }, [activityId, carregar]);
 
   /* ── AS AÇÕES — cada uma grava e recarrega; a confirmação é a linha no feed ── */
@@ -382,7 +401,7 @@ export default function PaginaDaAtividade() {
       .from("activities").update(patch as never, { count: "exact" }).eq("id", activityId);
     if (error) { toast({ title: "Não deu para concluir", description: error.message, variant: "destructive" }); return; }
     if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de execução nesta atividade?", variant: "destructive" }); return; }
-    await carregar();
+    await carregar(true);
   }, [activityId, atividade, carregar, toast]);
 
   // MUDAR O TIPO — traduz o EapKind para (item_type, is_milestone) pela ponte
@@ -394,7 +413,7 @@ export default function PaginaDaAtividade() {
       .from("activities").update({ item_type, is_milestone } as never, { count: "exact" }).eq("id", activityId);
     if (error) { toast({ title: "Não deu para mudar o tipo", description: error.message, variant: "destructive" }); return; }
     if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
-    await carregar();
+    await carregar(true);
   }, [activityId, carregar, toast]);
 
   // MOVER PARA O QUADRO — promove do backlog para a coluna de ENTRADA (ou a
@@ -412,7 +431,7 @@ export default function PaginaDaAtividade() {
       .update({ workflow_stage_id: alvo.id } as never, { count: "exact" }).eq("id", activityId);
     if (error) { toast({ title: "Não deu para mover ao quadro", description: error.message, variant: "destructive" }); return; }
     if (!count) { toast({ title: "O banco recusou", description: "Você tem permissão de planejamento nesta atividade?", variant: "destructive" }); return; }
-    await carregar();
+    await carregar(true);
   }, [activityId, projectId, carregar, toast]);
 
   // SUBATIVIDADE — cria uma filha com nome só; nasce no Backlog (não vira cartão
@@ -439,7 +458,7 @@ export default function PaginaDaAtividade() {
       workflow_stage_id: (backlog as Record<string, unknown> | null)?.id ?? null,
     } as never);
     if (error) { toast({ title: "Não deu para criar a subatividade", description: error.message, variant: "destructive" }); return; }
-    await carregar();
+    await carregar(true);
   }, [activityId, projectId, atividade, filhas, carregar, toast]);
 
   // ATRIBUIR — inserção ESCOPADA, direta na tabela.
@@ -462,7 +481,7 @@ export default function PaginaDaAtividade() {
       toast({ title: "Não deu para atribuir", description: error.message, variant: "destructive" });
       return;
     }
-    await carregar();
+    await carregar(true);
   }, [activityId, user?.id, carregar, toast]);
 
   // REMOVER da atividade — tira o vínculo de responsável/participante. NÃO mexe
@@ -471,7 +490,7 @@ export default function PaginaDaAtividade() {
     const { error } = await tabelaSemTipo("activity_assignees")
       .delete().eq("activity_id", activityId).eq("user_id", userId);
     if (error) { toast({ title: "Não deu para remover", description: error.message, variant: "destructive" }); return; }
-    await carregar();
+    await carregar(true);
   }, [activityId, carregar, toast]);
 
   // DUPLICAR — clona os campos de PLANEJAMENTO (nome, descrição, tipo, esforço,
@@ -683,7 +702,7 @@ export default function PaginaDaAtividade() {
             author: nomeDeQuemFez, created_by: user?.id ?? null,
           } as never);
           if (error) throw new Error(error.message);
-          await carregar();
+          await carregar(true);
         } : undefined}
         aoCancelar={() => router.push(`/project/${projectId}`)}
       />
