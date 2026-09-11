@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { normalizeProjectStatus } from "@/lib/projectStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
@@ -220,10 +221,43 @@ export const useProjectAccess = () => {
     };
   }, [isAdmin, loading, user?.id]);
 
-  const filterProjects = useCallback(async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
-    if (isAdmin || !user) return projects;
+  /**
+   * O STATUS CHEGA CANÔNICO — esta é a fronteira por onde os projetos entram
+   * em todas as telas de lista (doze usam `filterProjects`).
+   *
+   * `projects.status` é text livre: o CHECK original caiu numa migration antiga
+   * e nunca voltou. Doze pontos do código comparam o status ao pé da letra
+   * (`p.status === 'em-execucao'`), e o quadro de projetos monta as sete
+   * colunas com esses literais. Um valor fora do vocabulário não cai em coluna
+   * nenhuma — e como o quadro só desenha as sete, o projeto SOME da tela, sem
+   * erro, sem aviso, sem entrar em contador nenhum.
+   *
+   * Foi o que aconteceu: um projeto gravado como `execucao` (sem o "em-")
+   * desapareceu por completo. Para quem só era membro dele, a lista inteira
+   * ficava vazia. Medido em 11/09/2026.
+   *
+   * `lib/projectStatus.ts` já previa isso por escrito — "o projeto simplesmente
+   * some dos filtros, sem erro nenhum" — e trazia o normalizador pronto. Ele
+   * nunca foi chamado: a única importação do módulo no repositório era a
+   * constante, no roadmap.
+   *
+   * Normalizar aqui, e não nos doze pontos, é o que garante que o próximo
+   * consumidor nasça correto. O objeto só é recriado quando o valor muda de
+   * fato, para não provocar render à toa.
+   */
+  const comStatusCanonico = <T extends { id: string }>(p: T): T => {
+    const cru = (p as { status?: unknown }).status;
+    if (typeof cru !== "string") return p;
+    const canonico = normalizeProjectStatus(cru);
+    return canonico === cru ? p : { ...p, status: canonico };
+  };
 
-    return projects.filter((p) => memberProjectIds.has(p.id));
+  const filterProjects = useCallback(async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
+    const visiveis = (isAdmin || !user)
+      ? projects
+      : projects.filter((p) => memberProjectIds.has(p.id));
+
+    return visiveis.map(comStatusCanonico);
   }, [isAdmin, memberProjectIds, user]);
 
   return {

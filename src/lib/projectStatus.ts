@@ -52,8 +52,13 @@ const LABELS: Record<string, string> = Object.fromEntries(
 export const normalizeProjectStatus = (status?: string | null): ProjectStatus => {
   const s = (status || "").trim().toLowerCase().replace(/_/g, "-");
   switch (s) {
+    // "execucao" sem o "em-" existe no banco e NÃO caía aqui: ia para o
+    // `default` e virava Ideação, que é outra coisa. Medido em 11/09/2026 —
+    // um projeto em execução sumiu da lista inteira por causa do prefixo.
     case "em-execucao":
     case "em-execução":
+    case "execucao":
+    case "execução":
       return PROJECT_STATUS.EM_EXECUCAO;
     case "concluido":
     case "concluído":

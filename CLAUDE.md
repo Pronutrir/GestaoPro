@@ -180,6 +180,12 @@ real — senão a própria correção criaria a janela invertida.
 - Escrever UUID ou enum em inglês em qualquer texto que um usuário lê. Resolver o rótulo
   na origem, não com um de-para no componente.
 - Gravar dia com `toISOString().slice(0, 10)` ou `.split("T")[0]`. Ver a seção de datas acima.
+- Comparar `project.status` com literal (`p.status === 'em-execucao'`). Ler sempre por
+  `normalizeProjectStatus`. O quadro de projetos monta as sete colunas por igualdade exata:
+  um valor fora do vocabulário não cai em coluna nenhuma e o projeto **some da tela**, sem
+  erro e sem contador. Aconteceu em 11/09/2026 com um `execucao` sem o `em-`. A normalização
+  mora em `useProjectAccess.filterProjects`, a fronteira por onde os projetos entram nas doze
+  telas de lista.
 - Deixar a promoção atribuir automaticamente.
 - Reescrever regra de pai/filha dentro de uma tela. Todas consomem o mesmo módulo.
 - Recalcular agregado do pai no cliente, nem "só para o preview".

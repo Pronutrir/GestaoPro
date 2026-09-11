@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from "react";
+import { normalizeProjectStatus } from "@/lib/projectStatus";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -259,7 +260,10 @@ export const EditProjectDialog = ({
       setFormData({
         title: project.title,
         description: project.description || "",
-        status: project.status,
+        // Normalizado na carga: com o CHECK no banco, devolver a grafia
+        // torta que veio do registro faria o salvar falhar por causa de um
+        // campo que o usuário nem tocou.
+        status: normalizeProjectStatus(project.status),
         priority: project.priority,
         gravity: (project as any).gravity ?? null,
         urgency: (project as any).urgency ?? null,
