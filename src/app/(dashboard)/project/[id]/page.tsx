@@ -702,7 +702,7 @@ export default function ProjectDetailsPage() {
         return fallback as { data: any; error: any };
       })();
 
-      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
+      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }, { data: perfisNomes, error: perfisErro }] = await Promise.all([
         supabase
           .from("project_members")
           .select("id, invitation_status, can_create, can_edit, can_delete, can_move, can_edit_own")
@@ -715,12 +715,29 @@ export default function ProjectDetailsPage() {
           .eq("user_id", currentUser.id)
           .maybeSingle(),
         projectPromise,
+        /* OS NOMES AMBÍGUOS VÊM JUNTO, NÃO DEPOIS.
+         *
+         * A lista de homônimos era preenchida por outra carga da página, sem
+         * ordem garantida em relação a esta checagem. Quando esta rodava antes,
+         * o nome "Williame Correia de Lima" — de dois perfis — ainda não contava
+         * como ambíguo, casava com o dono do projeto e o acesso era liberado;
+         * na checagem seguinte (foco na janela, troca de aba, evento em tempo
+         * real) a lista já tinha chegado e a tela virava "Acesso restrito".
+         * Medido em 14/09/2026: o projeto aparecia e sumia para uma conta que
+         * não estava na equipe. */
+        supabase.from("profiles").select("full_name").not("full_name", "is", null),
       ]);
 
       // Compute access from four sources: explicit member, project creator,
       // project Líder (owner)/Gerente (manager), or listed Participante
       // (assignees). Uses tolerant identity matching so short and long forms
       // of the same name still resolve to the right user.
+      // Sem a lista de homônimos não há como saber se um nome identifica UMA
+      // pessoa — então nome não concede nada. Id (membro, criador) segue valendo.
+      // Errar para "ninguém" é visível; errar para "os dois" é escalação.
+      const nomesConfiaveis = !perfisErro && Array.isArray(perfisNomes);
+      if (nomesConfiaveis) definirNomesAmbiguos(nomesRepetidosEm(perfisNomes));
+
       const candidates = buildUserCandidates([
         profile?.full_name,
         profile?.email,
@@ -729,15 +746,16 @@ export default function ProjectDetailsPage() {
         currentUser.id,
       ]);
 
-      const ownerMatch = matchesIdentity(projectRow?.owner, candidates);
+      const ownerMatch = nomesConfiaveis && matchesIdentity(projectRow?.owner, candidates);
 
       const creatorMatch =
         typeof projectRow?.created_by === "string" &&
         projectRow.created_by === currentUser.id;
 
-      const managerMatch = matchesIdentity(projectRow?.manager, candidates);
+      const managerMatch = nomesConfiaveis && matchesIdentity(projectRow?.manager, candidates);
 
       const assigneeMatch =
+        nomesConfiaveis &&
         Array.isArray(projectRow?.assignees) &&
         anyMatchesIdentity(projectRow!.assignees!, candidates);
 
@@ -752,7 +770,7 @@ export default function ProjectDetailsPage() {
       const projectTrashed = projectRow?.is_trashed === true;
 
       let activityAssignmentMatch = false;
-      if (!projectTrashed && !hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
+      if (nomesConfiaveis && !projectTrashed && !hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
         const { data: projectActivities } = await supabase
           .from("activities")
           .select("assigned_to, participants")

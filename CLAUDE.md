@@ -194,6 +194,10 @@ como texto — nunca a data própria, e nunca editável ou arrastável.
   erro e sem contador. Aconteceu em 11/09/2026 com um `execucao` sem o `em-`. A normalização
   mora em `useProjectAccess.filterProjects`, a fronteira por onde os projetos entram nas doze
   telas de lista.
+- Conceder acesso comparando **nome** sem `nome_e_ambiguo` (banco) ou sem a lista de
+  homônimos já carregada (tela). Existem dois perfis "Williame Correia de Lima"; em 14/09/2026
+  seis funções de acesso ainda comparavam nome sem a trava, e uma conta "user" enxergava — e
+  podia gerenciar a equipe de — projetos do homônimo admin. Id e e-mail são únicos e seguem valendo.
 - Deixar a promoção atribuir automaticamente.
 - Reescrever regra de pai/filha dentro de uma tela. Todas consomem o mesmo módulo.
 - Recalcular agregado do pai no cliente, nem "só para o preview".
