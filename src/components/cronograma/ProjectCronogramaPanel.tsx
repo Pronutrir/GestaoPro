@@ -378,6 +378,10 @@ export function ProjectCronogramaPanel({
   const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string; categoria?: string | null }>>([]);
   /** activity_id -> user_id do responsavel, de activity_assignees. */
   const [responsavelPorAtividade, setResponsavelPorAtividade] = useState<Map<string, string>>(new Map());
+  /** Todos os responsáveis (o modelo v2 aceita mais de um). A célula edita só quando há até um. */
+  const [responsaveisPorAtividade, setResponsaveisPorAtividade] = useState<Map<string, string[]>>(new Map());
+  /** Quem pode ser responsável: a equipe do projeto (`project_members`, sem recusados). */
+  const [equipePorProjeto, setEquipePorProjeto] = useState<Map<string, Set<string>>>(new Map());
   const [stageFilter, setStageFilter] = useState<Set<string> | null>(null); // null = todas
   // Filtro interno de projetos (usado principalmente no Cronograma Geral).
   // null = todos os projetos carregados
@@ -659,12 +663,14 @@ export function ProjectCronogramaPanel({
      * ficava indistinguível de projeto sem atividade — a mesma família de
      * "erro do banco chega como silêncio".
      */
-    const [rActs, rPhs, rProfs, rStgs, rResps] = await Promise.allSettled([
+    const [rActs, rPhs, rProfs, rStgs, rResps, rEquipe] = await Promise.allSettled([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url, email"),
       stagesQ,
       respQ,
+      // A mesma lista que a tela da atividade oferece (`buscarPessoas`): a equipe.
+      supabase.from("project_members").select("project_id, user_id, invitation_status").in("project_id", scopedProjectIds),
     ]);
 
     /** O que a consulta trouxe, ou null se ela falhou — de qualquer das duas
@@ -681,6 +687,7 @@ export function ProjectCronogramaPanel({
     const profs_ = colher<any>(rProfs);
     const stgs_ = colher<any>(rStgs);
     const resps_ = colher<{ activity_id: string; user_id: string }>(rResps);
+    const equipe_ = colher<{ project_id: string; user_id: string; invitation_status: string | null }>(rEquipe);
 
     // A ESSENCIAL. Sem atividades não há cronograma: diz o que houve e para.
     // Não sobrescreve o que já estava na tela com uma lista vazia — dado velho
@@ -715,6 +722,17 @@ export function ProjectCronogramaPanel({
     setResponsavelPorAtividade(
       new Map((resps || []).map((l) => [l.activity_id, l.user_id])),
     );
+    const todos = new Map<string, string[]>();
+    (resps || []).forEach((l) => todos.set(l.activity_id, [...(todos.get(l.activity_id) ?? []), l.user_id]));
+    setResponsaveisPorAtividade(todos);
+    const equipe = new Map<string, Set<string>>();
+    (equipe_.data || [])
+      .filter((m) => (m.invitation_status || "accepted").toLowerCase() !== "declined")
+      .forEach((m) => {
+        if (!equipe.has(m.project_id)) equipe.set(m.project_id, new Set());
+        equipe.get(m.project_id)!.add(m.user_id);
+      });
+    setEquipePorProjeto(equipe);
     const map: Record<string, { name: string; sector: string; avatar?: string }> = {};
     (profs || []).forEach((p: any) => {
       map[p.id] = {
@@ -1738,6 +1756,74 @@ export function ProjectCronogramaPanel({
   }, [activities, fetchData, toast, onDataChanged]);
 
   /**
+   * O RESPONSÁVEL É GRAVADO PELA CONTA, NÃO PELO NOME.
+   *
+   * A célula gravava `assigned_to: p.full_name` e descartava o id da pessoa
+   * escolhida. Um gatilho do banco tenta então converter o nome em conta para a
+   * tabela `activity_assignees` — e, com nome de mais de uma pessoa, desiste
+   * calado. Medido em 14/09/2026: escolhido "Williame Correia de Lima" (dois
+   * perfis), o texto mudou e a tabela ficou com o responsável anterior; a tela,
+   * que lê a tabela, "não mudou".
+   *
+   * Aqui se grava a tabela por `user_id`, como faz a tela da atividade. O banco
+   * mantém `assigned_to` sincronizado sozinho (`tg_tabela_para_assigned_to`) e
+   * recusa quem não é da equipe (`tg_assignee_exige_equipe`).
+   *
+   * SUBSTITUI, como a célula sempre fez — e em duas etapas na ordem segura: o
+   * novo entra PRIMEIRO. Se o banco o recusar, nada saiu e a atividade continua
+   * com quem tinha; só depois os anteriores são retirados.
+   */
+  const definirResponsavel = useCallback(async (
+    a: { id: string },
+    pessoa: { id: string; full_name: string } | null,
+  ): Promise<boolean> => {
+    if (String(a.id).startsWith("phase:")) return false;
+    const tabela = () => supabase.from("activity_assignees" as never);
+    if (pessoa) {
+      const { error } = await (tabela().upsert(
+        { activity_id: a.id, user_id: pessoa.id, papel: "responsavel", created_by: profile?.id ?? null } as never,
+        { onConflict: "activity_id,user_id" },
+      ) as unknown as Promise<{ error: { message: string } | null }>);
+      if (error) {
+        toast({ title: "Não foi possível definir o responsável", description: error.message, variant: "destructive" });
+        return false;
+      }
+    }
+    const anteriores = (responsaveisPorAtividade.get(a.id) ?? []).filter((u) => u !== pessoa?.id);
+    if (anteriores.length > 0) {
+      const { error, count } = await (tabela()
+        .delete({ count: "exact" })
+        .eq("activity_id" as never, a.id as never)
+        .eq("papel" as never, "responsavel" as never)
+        .in("user_id" as never, anteriores as never) as unknown as Promise<{ error: { message: string } | null; count: number | null }>);
+      if (error || (count ?? 0) < anteriores.length) {
+        toast({
+          title: "Responsável definido em parte",
+          description: error ? error.message : "O banco não retirou o responsável anterior — confira a atividade.",
+          variant: "destructive",
+        });
+        fetchData();
+        onDataChanged?.();
+        return false;
+      }
+    }
+    setResponsavelPorAtividade((prev) => {
+      const m = new Map(prev);
+      if (pessoa) m.set(a.id, pessoa.id); else m.delete(a.id);
+      return m;
+    });
+    setResponsaveisPorAtividade((prev) => {
+      const m = new Map(prev);
+      if (pessoa) m.set(a.id, [pessoa.id]); else m.delete(a.id);
+      return m;
+    });
+    fetchData();
+    onDataChanged?.();
+    toast({ title: pessoa ? `Responsável: ${pessoa.full_name}` : "Responsável removido" });
+    return true;
+  }, [responsaveisPorAtividade, profile?.id, fetchData, onDataChanged, toast]);
+
+  /**
    * Atingir / desfazer um marco.
    *
    * Ele não passa por colunas — não tem estágio a percorrer, só aconteceu ou
@@ -2321,7 +2407,14 @@ export function ProjectCronogramaPanel({
         </td>
       );
       case "responsible": return (() => {
-        const perm = podeEditarCelula(a, "outro");
+        // Com mais de um responsável a célula (que escolhe UM) apagaria os outros
+        // em silêncio — vira texto e a edição fica na tela da atividade.
+        const varios = (responsaveisPorAtividade.get(a.id)?.length ?? 0) > 1;
+        const perm = varios
+          ? { ok: false, motivo: "Há mais de um responsável — edite na tela da atividade." }
+          : podeEditarCelula(a, "outro");
+        const equipe = equipePorProjeto.get(a.project_id);
+        const pessoasDaEquipe = equipe ? pessoas.filter((p) => equipe.has(p.id)) : [];
         // `text-center`: sem responsável, a célula vazia é um chip curto —
         // encostado à esquerda ele fica desalinhado da própria coluna e do
         // seletor que abre no lugar.
@@ -2334,18 +2427,18 @@ export function ProjectCronogramaPanel({
               motivoBloqueio={perm.motivo}
               editor={(fechar) => (
                 <PersonCombobox
-                  people={pessoas}
-                  value={pessoas.find((p) => p.full_name === a.assigned_to)?.id ?? null}
+                  people={pessoasDaEquipe}
+                  value={responsavelPorAtividade.get(a.id) ?? null}
                   placeholder="Sem responsável"
                   // Largura fixa: sem ela o gatilho encolhe para o texto e o
                   // popover nasce estreito, cortando os nomes.
                   className="h-7 text-xs w-[152px]"
                   onSelect={async (p) => {
-                    const ok = await gravarCampo(a.id, { assigned_to: p.full_name }, `Responsável: ${p.full_name}`);
+                    const ok = await definirResponsavel(a, p);
                     fechar(ok);
                   }}
                   onClear={async () => {
-                    const ok = await gravarCampo(a.id, { assigned_to: null }, "Responsável removido");
+                    const ok = await definirResponsavel(a, null);
                     fechar(ok);
                   }}
                 />

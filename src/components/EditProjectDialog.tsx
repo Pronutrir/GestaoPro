@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { nomesRepetidosEm, normalizeIdentity } from "@/lib/identityMatch";
 import { normalizeProjectStatus } from "@/lib/projectStatus";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
@@ -150,7 +151,10 @@ export const EditProjectDialog = ({
   const { toast } = useToast();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
+  /* NOMES DE MAIS DE UMA PESSOA, na lista que esta tela carregou. Ver o filtro
+   * do "Adicionar membro" — é o que decide se Líder/Gestor pode ser escondido. */
+  const nomesAmbiguosDaLista = useMemo(() => new Set(nomesRepetidosEm(profiles)), [profiles]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<MemberRow[]>([]);
   const [createdByLabel, setCreatedByLabel] = useState<string>("—");
@@ -172,7 +176,9 @@ export const EditProjectDialog = ({
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profileData }, { data: adminRoles }, { data: sectorData }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url").not("full_name", "is", null).order("full_name"),
+        // `email`: com homônimo, o seletor mostra o e-mail para distinguir — sem ele
+        // as duas linhas "Williame Correia de Lima" saíam idênticas.
+        supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url, email").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
         supabase.from("sectors").select("id, name").order("name"),
       ]);
@@ -199,7 +205,7 @@ export const EditProjectDialog = ({
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
       const { data: profs } = ids.length
-        ? await supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url").in("id", ids)
+        ? await supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url, email").in("id", ids)
         : { data: [] as any[] };
       const profMap = new Map((profs || []).map((p: any) => [p.id, p]));
       setTeam(
@@ -1136,12 +1142,26 @@ export const EditProjectDialog = ({
               <div className={cn("pt-3 border-t border-border/60", !podeGerenciarEquipe && "hidden")}>
                 <PersonCombobox
                   variant="add"
-                  people={profiles.filter(
-                    (p) =>
-                      !team.some((t) => t.user_id === p.id) &&
-                      p.full_name !== formData.owner &&
-                      p.full_name !== formData.manager,
-                  )}
+                  people={profiles.filter((p) => {
+                    if (team.some((t) => t.user_id === p.id)) return false;
+                    /* LÍDER E GESTOR SÓ SAEM DA LISTA QUANDO O NOME É ÚNICO.
+                     *
+                     * Eles já aparecem em destaque acima, então a lista os
+                     * escondia — comparando por NOME, porque `owner`/`manager`
+                     * são texto. Com homônimo, isso escondia as DUAS contas.
+                     * Medido em 14/09/2026: o Líder do projeto é "Williame
+                     * Correia de Lima", há dois perfis com esse nome, e a conta
+                     * que precisava entrar na equipe simplesmente não aparecia
+                     * para ser escolhida — "adicionei e não mudou".
+                     *
+                     * Com nome ambíguo não dá para saber qual das contas é o
+                     * Líder; as duas ficam, e o seletor marca "2 perfis" com o
+                     * e-mail de cada uma. */
+                    const nome = normalizeIdentity(p.full_name);
+                    const ehLiderOuGestor =
+                      nome === normalizeIdentity(formData.owner) || nome === normalizeIdentity(formData.manager);
+                    return !(ehLiderOuGestor && !nomesAmbiguosDaLista.has(nome));
+                  })}
                   placeholder="Adicionar membro por nome, setor ou função..."
                   onSelect={(p) => {
                     if (team.some((t) => t.user_id === p.id)) return;
