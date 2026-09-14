@@ -58,7 +58,8 @@ import {
   startOfYear, endOfYear, addMonths,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { calculateScheduleSlack } from "@/lib/criticalPath";
+import { calculateScheduleSlack, duracaoCpm } from "@/lib/criticalPath";
+import { agregadoDoPai, type ItemComAgregado } from "@/lib/agregadoDoPai";
 import { fetchTaskDependencias } from "@/lib/taskDependencias";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
@@ -94,6 +95,14 @@ interface Props {
    * F5. Sem isto (Cronograma Geral, multi-projeto), ele carrega sozinho.
    */
   activitiesExternas?: any[];
+  /**
+   * Avisa a página depois de uma gravação feita AQUI (célula de data, arrasto
+   * de barra, linha de base), para ela recarregar as próprias atividades.
+   *
+   * Sem isto, as atividades da página ficavam velhas e o Cronograma voltava a
+   * exibi-las por cima do que acabara de gravar — ver `carregarDados`.
+   */
+  onDataChanged?: () => void;
 }
 
 const LINK_TYPES: Record<string, { short: string; label: string; desc: string }> = {
@@ -186,10 +195,37 @@ function formatDateBR(iso: string | null) {
 
 function workDays(startISO: string | null, endISO: string | null) {
   if (!startISO || !endISO) return null;
+  // Término antes do início não tem duração. Antes caía no `d > 0 ? d : 1` e a
+  // coluna mostrava "1" — o número escondia a inversão (P1: 04/09 → 01/09).
+  if (isDateRangeInvalid(startISO, endISO)) return null;
   try {
     const d = differenceInBusinessDays(parseISO(endISO), parseISO(startISO)) + 1;
     return d > 0 ? d : 1;
   } catch { return null; }
+}
+
+/**
+ * A JANELA QUE UMA LINHA COM FILHAS MOSTRA É A DO SERVIDOR.
+ *
+ * O Cronograma lia `start_date`/`end_date` de toda linha. Para quem tem filhas
+ * isso é a data PRÓPRIA, que ninguém mantém: medido em 14/09/2026, a "Fase de
+ * Teste" aparecia com "Definir" enquanto o servidor tinha derivado 02/09 → 15/10
+ * das quatro filhas, e "P1" aparecia com 04/09 → 01/09 (invertida) contra a
+ * janela real 02/09 → 08/09.
+ *
+ * O CLAUDE.md é explícito: o pai deriva das filhas no banco e nenhuma tela
+ * recalcula. `lib/agregadoDoPai` já é a leitura única disso — o Backlog aplica a
+ * mesma regra. Aplicada aqui, na chegada das atividades, ela alcança de uma vez
+ * a tabela, a duração, o selo de atraso, o Gantt e o caminho crítico.
+ *
+ * `__janelaDerivada` marca a linha para o que NÃO pode tratá-la como data
+ * própria: a célula vira texto, a barra não arrasta e a linha de base não a
+ * congela (agregado não se persiste).
+ */
+function comJanelaEfetiva<T extends object>(a: T): T {
+  const ag = agregadoDoPai(a as ItemComAgregado);
+  if (!ag.derivado) return a;
+  return { ...a, start_date: ag.inicio, end_date: ag.fim, __janelaDerivada: true };
 }
 
 function SortableHeaderCell({
@@ -276,6 +312,7 @@ export function ProjectCronogramaPanel({
   showProjectColumn = false,
   onEditActivity,
   activitiesExternas,
+  onDataChanged,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -321,6 +358,17 @@ export function ProjectCronogramaPanel({
   // ainda lista as atividades — este flag liga o aviso em vez de deixar a tela
   // em branco (o defeito antigo: o erro do fetch de deps sumia com tudo).
   const [depsErro, setDepsErro] = useState(false);
+  /* FOLGA SEM DEPENDÊNCIA NÃO É FOLGA.
+   *
+   * As atividades chegam antes das dependências: a RPC só sai depois do
+   * `useProjectAccess`, que leva vários segundos. Nesse intervalo o caminho
+   * crítico era calculado com a lista de ligações VAZIA — medido em 14/09/2026:
+   * por 12 a 17 segundos a "Atividade Solta", sucessora crítica, aparecia com
+   * 20d de folga, e as predecessoras com "—".
+   *
+   * Até elas chegarem (ou falharem, e aí o aviso de erro assume), folga,
+   * predecessoras e marcas de crítico mostram que estão aguardando. */
+  const [depsCarregadas, setDepsCarregadas] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
   /** A mesma gente, em lista — é o formato que `PersonCombobox` consome. */
   const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
@@ -495,7 +543,7 @@ export function ProjectCronogramaPanel({
     if (accessLoading) return;
 
     if (projectIds && projectIds.length === 0) {
-      setActivities([]); setDeps([]); setPhases([]); setStages([]);
+      setActivities([]); setDeps([]); setDepsCarregadas(true); setPhases([]); setStages([]);
       return;
     }
 
@@ -512,7 +560,7 @@ export function ProjectCronogramaPanel({
       : Array.from(visibleProjectIds);
 
     if (scopedProjectIds.length === 0) {
-      setActivities([]); setDeps([]); setPhases([]); setStages([]);
+      setActivities([]); setDeps([]); setDepsCarregadas(true); setPhases([]); setStages([]);
       setProjectsMap({});
       setProjectDeadlines({});
       /**
@@ -648,7 +696,20 @@ export function ProjectCronogramaPanel({
     const profs = profs_.data;
     const stgs = stgs_.data;
     const resps = resps_.data;
-    setActivities(acts || []);
+    /* COM ATIVIDADES DA PÁGINA, QUEM AS ATUALIZA É O EFEITO — NUNCA AQUI.
+     *
+     * `actsQ` reaproveitava `activitiesExternas`, e este `setActivities`
+     * gravava de volta aquele retrato por cima de qualquer atualização local.
+     * Pior: `activitiesExternas` nem está nas dependências deste callback,
+     * então o retrato era o de quando a função foi criada. Toda gravação no
+     * Cronograma chama `fetchData()` — e a tela voltava ao valor antigo.
+     *
+     * Medido em produção em 14/09/2026: digitado 11/09, a célula mostrou 11/09
+     * por 600ms e voltou para 10/09, com o banco guardando 11/09; no Gantt a
+     * barra andou três dias e voltou. A validação passou a comparar contra o
+     * valor velho e deixou gravar uma janela real invertida (05/09 → 03/09).
+     */
+    if (!activitiesExternas) setActivities((acts || []).map(comJanelaEfetiva));
     setPhases(phs || []);
     setStages(stgs || []);
     setResponsavelPorAtividade(
@@ -718,12 +779,14 @@ export function ProjectCronogramaPanel({
       const vistos = new Set<string>();
       setDeps(listas.flat().filter((dep) => (vistos.has(dep.id) ? false : (vistos.add(dep.id), true))));
       setDepsErro(false);
+      setDepsCarregadas(true);
     } catch (err) {
       // Falhar em silêncio aqui apagava a tela inteira. Agora: log com
       // contexto, deps vazio (a tela degrada) e o aviso liga.
       console.error("task_dependencies (cronograma):", err);
       setDeps([]);
       setDepsErro(true);
+      setDepsCarregadas(true);
     }
   }, [projectIds, accessLoading, filterProjects]);
 
@@ -754,7 +817,7 @@ export function ProjectCronogramaPanel({
   // aparece no Cronograma sem F5". Numa edição os ids não mudam, então as deps
   // já carregadas continuam válidas.
   useEffect(() => {
-    if (activitiesExternas) setActivities(activitiesExternas);
+    if (activitiesExternas) setActivities(activitiesExternas.map(comJanelaEfetiva));
   }, [activitiesExternas]);
 
   // ===== Mock estável (para colunas ainda não persistidas) =====
@@ -780,7 +843,7 @@ export function ProjectCronogramaPanel({
   // ligações que as datas desrespeitam. Sem isso a tela não distingue
   // "sem folga" de "não foi possível calcular".
   const schedule = useMemo(
-    () => calculateScheduleSlack(
+    () => !depsCarregadas ? calculateScheduleSlack([], []) : calculateScheduleSlack(
       activities.map(a => ({ id: a.id, start_date: a.start_date, end_date: a.end_date })),
       deps.map(d => ({
         predecessor_id: d.predecessor_id,
@@ -789,13 +852,14 @@ export function ProjectCronogramaPanel({
         dependency_type: d.dependency_type,
       }))
     ),
-    [activities, deps]
+    [activities, deps, depsCarregadas]
   );
   const criticalSet = schedule.critical;
 
   // ===== Folgas CPM (Total e Livre) =====
   const slackMetricsById = useMemo(() => {
     const map = new Map<string, { total: number; free: number }>();
+    if (!depsCarregadas) return map;
     const valid = activities.filter(a => a.start_date && a.end_date);
     if (valid.length === 0) return map;
 
@@ -812,8 +876,9 @@ export function ProjectCronogramaPanel({
     });
     const dur = new Map<string, number>();
     valid.forEach(a => {
-      const days = Math.max(differenceInDays(parseISO(a.end_date!), parseISO(a.start_date!)), 1);
-      dur.set(a.id, days);
+      // Duração INCLUSIVA — ver `duracaoCpm` em lib/criticalPath. A cópia local
+      // tinha a mesma fórmula exclusiva e dava 1d de folga a uma atividade crítica.
+      dur.set(a.id, duracaoCpm(a.start_date!, a.end_date!));
     });
     const minDate = valid.reduce((m, a) => {
       const d = parseISO(a.start_date!);
@@ -945,7 +1010,7 @@ export function ProjectCronogramaPanel({
     });
 
     return map;
-  }, [activities, deps]);
+  }, [activities, deps, depsCarregadas]);
 
   const slackMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -1610,19 +1675,26 @@ export function ProjectCronogramaPanel({
     // sozinha ao lugar sem explicação. A guarda mantém isso verdadeiro se
     // alguém tornar a barra de grupo arrastável depois.
     if (String(id).startsWith("phase:")) return;
-    const { error } = await supabase
+    // OTIMISTA, como a célula: a barra fica onde foi solta já no `mouseup`.
+    // Gravando só depois da resposta, ela voltava ao lugar antigo por uma
+    // fração de segundo — a mesma "data que volta", em versão curta.
+    const anterior = activities.find((a) => a.id === id);
+    setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, start_date: startISO, end_date: endISO } : a)));
+    // `count`: mesma razão de `gravarCampo` — recusa por RLS volta sem erro.
+    const { error, count } = await supabase
       .from("activities")
-      .update({ start_date: startISO, end_date: endISO })
+      .update({ start_date: startISO, end_date: endISO }, { count: "exact" })
       .eq("id", id);
-    if (error) {
-      toast({ title: "Erro ao reprogramar", description: error.message, variant: "destructive" });
+    if (error || !count) {
+      if (anterior) setActivities((prev) => prev.map((a) => (a.id === id ? anterior : a)));
+      toast({ title: "Erro ao reprogramar", description: error ? error.message : "O banco não alterou a linha — você tem permissão sobre esta atividade?", variant: "destructive" });
       return;
     }
-    // Atualização otimista local + refetch para recalcular fases/CPM.
-    setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, start_date: startISO, end_date: endISO } : a)));
+    // Refetch para recalcular fases/CPM; a página recarrega as atividades.
     fetchData();
+    onDataChanged?.();
     toast({ title: "Datas atualizadas", description: `${format(parseISO(startISO), "dd/MM/yy")} → ${format(parseISO(endISO), "dd/MM/yy")}` });
-  }, [toast, fetchData]);
+  }, [activities, toast, fetchData, onDataChanged]);
 
   /**
    * Grava um campo direto da célula — a base da edição na linha.
@@ -1645,16 +1717,25 @@ export function ProjectCronogramaPanel({
     const anterior = activities.find((a) => a.id === id);
     setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
 
-    const { error } = await supabase.from("activities").update(patch as never).eq("id", id);
-    if (error) {
+    /* CONTAR AS LINHAS, NÃO SÓ O ERRO.
+     *
+     * Uma recusa por RLS volta 204 SEM erro e com zero linhas. Sem `count`, a
+     * tela tratava como sucesso. Isso ficava escondido porque o `fetchData()`
+     * seguinte sobrescrevia tudo com as atividades velhas da página — a mesma
+     * falha que fazia a data voltar. Consertada aquela, a atualização otimista
+     * passou a PERMANECER; sem conferir a contagem, uma recusa ficaria na tela
+     * como gravada. As duas correções só são seguras juntas. */
+    const { error, count } = await supabase.from("activities").update(patch as never, { count: "exact" }).eq("id", id);
+    if (error || !count) {
       if (anterior) setActivities((prev) => prev.map((a) => (a.id === id ? anterior : a)));
-      toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" });
+      toast({ title: "Não foi possível salvar", description: error ? error.message : "O banco não alterou a linha — você tem permissão sobre esta atividade?", variant: "destructive" });
       return false;
     }
     fetchData();
+    onDataChanged?.();
     toast({ title: descricao });
     return true;
-  }, [activities, fetchData, toast]);
+  }, [activities, fetchData, toast, onDataChanged]);
 
   /**
    * Atingir / desfazer um marco.
@@ -1710,7 +1791,11 @@ export function ProjectCronogramaPanel({
     rotulo: string,
     conteudo: ReactNode,
   ) => {
-    const perm = podeEditarCelula(a, "data");
+    // Janela prevista de quem tem filhas é do servidor: vira texto, não controle.
+    // As datas REAIS continuam editáveis — não há derivação delas.
+    const perm = (campo === "start_date" || campo === "end_date") && (a as { __janelaDerivada?: boolean }).__janelaDerivada
+      ? { ok: false, motivo: "Calculada a partir das subatividades — ajuste as datas dentro dela." }
+      : podeEditarCelula(a, "data");
     const parDe: Record<string, { outro: string; ehFim: boolean }> = {
       start_date: { outro: "end_date", ehFim: false },
       end_date: { outro: "start_date", ehFim: true },
@@ -1779,7 +1864,8 @@ export function ProjectCronogramaPanel({
   const [confirmarBase, setConfirmarBase] = useState(false);
 
   const baselineStats = useMemo(() => {
-    const comDatas = activities.filter(a => a.start_date && a.end_date);
+    // Linha com janela derivada fica fora: agregado não se congela (ver congelarLinhaDeBase).
+    const comDatas = activities.filter(a => a.start_date && a.end_date && !a.__janelaDerivada);
     const congeladas = comDatas.filter(a => a.baseline_start_date && a.baseline_end_date);
     const desviosAbs: number[] = [];
     congeladas.forEach(a => {
@@ -1799,7 +1885,13 @@ export function ProjectCronogramaPanel({
    * medido, por isso passa por confirmação e grava em lote só o que tem data.
    */
   const congelarLinhaDeBase = useCallback(async () => {
-    const alvo = activities.filter(a => a.start_date && a.end_date);
+    /* SÓ QUEM TEM DATA PRÓPRIA.
+     *
+     * Linha com filhas exibe a janela DERIVADA do servidor (comJanelaEfetiva).
+     * Congelar essa janela gravaria um agregado em `baseline_*` — e o CLAUDE.md
+     * proíbe persistir agregado. A linha de base do pai é a das filhas. Antes
+     * desta mudança, o pai congelava a própria data, que ninguém mantém. */
+    const alvo = activities.filter(a => a.start_date && a.end_date && !a.__janelaDerivada);
     if (alvo.length === 0) {
       toast({ title: "Nada a congelar", description: "Nenhuma atividade com data definida.", variant: "destructive" });
       return;
@@ -1809,11 +1901,12 @@ export function ProjectCronogramaPanel({
       // Em lotes: o proxy corta a URL por volta de 3,7 KB e o .in() viaja na
       // query string. 50 ids é o teto seguro já usado no resto do projeto.
       const CHUNK = 50;
+      let recusadas = 0;
       for (let i = 0; i < alvo.length; i += CHUNK) {
         const lote = alvo.slice(i, i + CHUNK);
         const updates = lote.map(a =>
           supabase.from("activities")
-            .update({ baseline_start_date: a.start_date, baseline_end_date: a.end_date })
+            .update({ baseline_start_date: a.start_date, baseline_end_date: a.end_date }, { count: "exact" })
             .eq("id", a.id)
         );
         const res = await Promise.all(updates);
@@ -1830,22 +1923,48 @@ export function ProjectCronogramaPanel({
           });
           return;
         }
+        // Recusa por RLS não é erro: volta sem linha alterada. Contar, senão o
+        // aviso anunciava como congeladas atividades que o banco não tocou.
+        recusadas += res.filter(r => !r.error && !r.count).length;
       }
       setConfirmarBase(false);
       fetchData();
-      toast({
+      onDataChanged?.();
+      const gravadas = alvo.length - recusadas;
+      toast(recusadas > 0 ? {
+        title: "Linha de base congelada em parte",
+        description: `${gravadas} de ${alvo.length} atividades. ${recusadas} ${recusadas === 1 ? "foi recusada" : "foram recusadas"} pelo banco — sem permissão sobre elas.`,
+        variant: "destructive",
+      } : {
         title: "Linha de base congelada",
         description: `${alvo.length} ${alvo.length === 1 ? "atividade" : "atividades"} — o desvio passa a ser medido a partir de agora.`,
       });
     } finally {
       setCongelando(false);
     }
-  }, [activities, toast, fetchData]);
+  }, [activities, toast, fetchData, onDataChanged]);
 
   /** Inicia o arraste de uma barra (folha, não-marco). DAY_W converte px→dias. */
+  /* O CLIQUE QUE VEM DEPOIS DO ARRASTO NÃO ABRE A ATIVIDADE.
+   *
+   * A barra só abria a edição se `barDrag` estivesse vazio — mas o `mouseup`
+   * limpa `barDrag`, e o React pode renderizar ANTES de o navegador disparar o
+   * `click` do mesmo gesto. O clique então lia `barDrag` já nulo e abria a
+   * atividade: toda reprogramação por arrasto terminava na tela da atividade,
+   * sem a pessoa ver onde a barra ficou. Medido em 14/09/2026, com o código
+   * antigo em produção e com o novo — era anterior a esta leva.
+   *
+   * Uma ref sobrevive ao re-render. Fica ligada o suficiente para cobrir o
+   * clique do próprio gesto, e desliga sozinha. */
+  const acabouDeArrastar = useRef(false);
+
   const startBarDrag = useCallback((
     e: React.MouseEvent, activity: any, mode: "move" | "start" | "end", dayW: number,
   ) => {
+    // Barra de janela derivada não se arrasta: mover o pai não move as filhas, e
+    // gravar datas próprias num pai só criaria um valor que a tela não mostra.
+    // Sai antes do preventDefault para o clique continuar abrindo a edição.
+    if (activity?.__janelaDerivada) return;
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
@@ -1865,6 +1984,8 @@ export function ProjectCronogramaPanel({
       document.body.style.userSelect = "";
       setBarDrag(null);
       if (lastShift === 0) return; // clique sem arrasto → deixa o onClick abrir a edição
+      acabouDeArrastar.current = true;
+      window.setTimeout(() => { acabouDeArrastar.current = false; }, 300);
       let ns = s0, ne = e0;
       if (mode === "move") { ns = addDays(s0, lastShift); ne = addDays(e0, lastShift); }
       else if (mode === "start") { ns = addDays(s0, lastShift); if (ns > ne) ns = ne; }
@@ -1925,7 +2046,9 @@ export function ProjectCronogramaPanel({
         let s: Date | null = null;
         let e: Date | null = null;
         const isGroup = isGroupRow(r.a);
-        const derived = isGroup ? phaseDerivedDates.get(r.a.id) : null;
+        // Com derivação do servidor, a janela já chegou em start/end (comJanelaEfetiva);
+        // o cálculo local fica só de reserva para quem não tem.
+        const derived = isGroup && !r.a.__janelaDerivada ? phaseDerivedDates.get(r.a.id) : null;
         if (isGroup && (derived?.start || derived?.end)) {
           // Agrupador (fase/pacote) com filhos datados: deriva do intervalo deles.
           s = derived?.start ?? null;
@@ -2114,7 +2237,9 @@ export function ProjectCronogramaPanel({
       );
       case "preds": return (
         <td className="px-2 py-1.5 text-center">
-          {preds.length === 0 ? (
+          {!depsCarregadas ? (
+            <span className="text-muted-foreground text-[11px]" title="Aguardando as dependências — sem elas a folga sai errada">…</span>
+          ) : preds.length === 0 ? (
             <span className="text-muted-foreground">—</span>
           ) : (
             <TooltipProvider delayDuration={150}>
@@ -2355,7 +2480,13 @@ export function ProjectCronogramaPanel({
       // Calculada: o tooltip diz de onde vem. Não ganha fundo próprio — as
       // editáveis já se distinguem por acenderem no hover, e pintar cinco
       // colunas de forma permanente polui a tabela sem dizer mais nada.
-      case "duration": return (
+      case "duration": return isDateRangeInvalid(a.start_date, a.end_date) ? (
+        <td className="px-2 py-1.5 text-center" title="O término previsto está antes do início — corrija uma das duas datas">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-0.5 border-destructive bg-destructive/10 text-destructive">
+            <AlertCircle className="h-2.5 w-2.5" />invertida
+          </Badge>
+        </td>
+      ) : (
         <td className="px-2 py-1.5 text-center" title="Calculada a partir das datas de início e término">
           {dur ?? "—"}
         </td>
@@ -2371,7 +2502,13 @@ export function ProjectCronogramaPanel({
       case "actualStart": return celulaDeData(a, "actual_start_date", "Início Real",
         <span className="text-muted-foreground">{formatDateBR(a.actual_start_date || null)}</span>);
       case "actualEnd": return celulaDeData(a, "actual_end_date", "Térm. Real",
-        <span className="text-muted-foreground">{formatDateBR(a.actual_end_date || null)}</span>);
+        isDateRangeInvalid(a.actual_start_date, a.actual_end_date) ? (
+          <span className="inline-flex items-center gap-0.5 text-destructive font-medium" title="O término real está antes do início real — corrija uma das duas datas">
+            <AlertCircle className="h-2.5 w-2.5" />{formatDateBR(a.actual_end_date || null)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">{formatDateBR(a.actual_end_date || null)}</span>
+        ));
       case "variance": {
         const real = a.actual_end_date || null;
         const v = endVariance(real, a.baseline_end_date, a.end_date);
@@ -2427,6 +2564,7 @@ export function ProjectCronogramaPanel({
       case "slack": return (
         <td className="px-2 py-1.5 text-center">
           {(() => {
+            if (!depsCarregadas) return <span className="text-muted-foreground text-[11px]" title="Aguardando as dependências — sem elas a folga sai errada">…</span>;
             if (!a.start_date || !a.end_date) return <span className="text-muted-foreground text-[11px]">—</span>;
             const metrics = slackMetricsById.get(a.id);
             if (!metrics) return <span className="text-muted-foreground text-[11px]">—</span>;
@@ -2447,6 +2585,7 @@ export function ProjectCronogramaPanel({
       case "slackFree": return (
         <td className="px-2 py-1.5 text-center">
           {(() => {
+            if (!depsCarregadas) return <span className="text-muted-foreground text-[11px]" title="Aguardando as dependências — sem elas a folga sai errada">…</span>;
             if (!a.start_date || !a.end_date) return <span className="text-muted-foreground text-[11px]">—</span>;
             const metrics = slackMetricsById.get(a.id);
             if (!metrics) return <span className="text-muted-foreground text-[11px]">—</span>;
@@ -3338,8 +3477,8 @@ export function ProjectCronogramaPanel({
                                     : "border border-border",
                               )}
                                 onMouseDown={(ev) => startBarDrag(ev, a, "move", DAY_W)}
-                                onClick={() => { if (!barDrag) openFromCronograma(a); }}
-                                title="Arraste para mover · puxe as bordas para redimensionar · clique para abrir"
+                                onClick={() => { if (!barDrag && !acabouDeArrastar.current) openFromCronograma(a); }}
+                                title={a.__janelaDerivada ? "Janela calculada a partir das subatividades · clique para abrir" : "Arraste para mover · puxe as bordas para redimensionar · clique para abrir"}
                                 style={{ left, width, top: BAR_TOP, height: BAR_H }}>
                                 <div className="absolute inset-0 rounded-md overflow-hidden">
                                   {/* Preenchimento = progresso. A cor é o estado. */}
@@ -3801,7 +3940,10 @@ export function ProjectCronogramaPanel({
       {/* Avisos do cálculo. Só aparece quando há o que avisar — em cronograma
           saudável não ocupa espaço. Antes, tudo isto falhava em silêncio: a
           atividade simplesmente sumia do caminho crítico sem explicação. */}
-      {mode === "gantt" && (schedule.violadas.length > 0 || schedule.cycles.size > 0 || schedule.semData.size > 0) && (
+      {/* Nos dois modos: a Tabela é o padrão da página do projeto, e só o Gantt
+          avisava. Medido em 14/09/2026 — a dependência desrespeitada B → Solta
+          era invisível na Tabela. */}
+      {(schedule.violadas.length > 0 || schedule.cycles.size > 0 || schedule.semData.size > 0) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px]">
           <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-3.5 w-3.5" /> Avisos do cálculo

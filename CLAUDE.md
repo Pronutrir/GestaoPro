@@ -175,6 +175,14 @@ O **início real** é carimbado pelo banco (`trg_marcar_inicio_real`), não pela
 concluem. Ele só marca na transição para `in_progress`/`completed`, e nunca depois do término
 real — senão a própria correção criaria a janela invertida.
 
+**Caminho crítico conta o primeiro e o último dia** (`duracaoCpm` em `lib/criticalPath.ts`).
+A fórmula exclusiva deixava a sucessora FS começar no último dia da predecessora: em 14/09/2026
+uma atividade crítica aparecia com 1d de folga e fora do caminho crítico. Havia duas cópias do
+cálculo com o mesmo erro — as duas usam o helper.
+
+**No Cronograma, linha com filhas mostra `derived_start`/`derived_end`** (via `agregadoDoPai`),
+como texto — nunca a data própria, e nunca editável ou arrastável.
+
 ## Nunca
 
 - Escrever UUID ou enum em inglês em qualquer texto que um usuário lê. Resolver o rótulo

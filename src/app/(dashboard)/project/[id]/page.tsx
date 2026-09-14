@@ -2083,6 +2083,9 @@ export default function ProjectDetailsPage() {
                    (já filtradas por visibilidade, atualizadas nas mutações) — não
                    carrega as próprias. Fim do "Backlog cheio / Cronograma vazio". */
                 activitiesExternas={activities}
+                /* Depois de gravar no Cronograma, a página recarrega as atividades —
+                   senão o painel voltava a exibir as velhas por cima do que gravou. */
+                onDataChanged={fetchProjectData}
               />
             </TabsContent>
 

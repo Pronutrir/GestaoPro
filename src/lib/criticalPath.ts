@@ -1,4 +1,34 @@
 import { differenceInDays, parseISO, addDays, format } from "date-fns";
+
+/**
+ * DURAÇÃO PARA O CAMINHO CRÍTICO — em dias corridos, CONTANDO O PRIMEIRO E O
+ * ÚLTIMO.
+ *
+ * Era `max(differenceInDays(fim, início), 1)`, que é EXCLUSIVO: uma atividade
+ * de 01/09 a 30/09 ocupa 30 dias e o cálculo contava 29. Com a travessia
+ * medindo o término como `ES + duração`, isso deixava a sucessora de uma
+ * ligação Término-Início começar NO ÚLTIMO DIA da predecessora.
+ *
+ * Medido em produção em 14/09/2026, na cadeia A (01/09–30/09) → B (01/10–15/10)
+ * → Atividade Solta, todas FS com lag 0: A aparecia com **1d** de folga e fora
+ * do caminho crítico no Gantt — sendo que B começa colada no fim de A, e
+ * atrasar A atrasa o projeto. Atividades independentes saíam com um dia a
+ * MENOS de folga (P2: 36d em vez de 37d). O erro ia nos dois sentidos.
+ *
+ * Com a duração inclusiva, `ES + duração` passa a ser o dia SEGUINTE ao
+ * término, e as quatro fórmulas de ligação (FS, SS, FF, SF) e a detecção de
+ * dependência desrespeitada ficam certas sem mudar uma linha.
+ *
+ * Existiam DOIS cálculos de caminho crítico com a mesma fórmula errada — este
+ * arquivo e uma cópia local no Cronograma. Os dois usam este helper agora;
+ * mudar a regra num lugar só é o ponto.
+ *
+ * Janela invertida (término antes do início) é dado inválido: vale 1, como
+ * antes, para o cálculo não produzir duração negativa.
+ */
+export function duracaoCpm(inicio: string, fim: string): number {
+  return Math.max(differenceInDays(parseISO(fim), parseISO(inicio)) + 1, 1);
+}
 import { isWorkingDay, type Holiday, type WorkSchedule } from "./workCalendar";
 
 export interface CPMActivity {
@@ -41,8 +71,7 @@ export function calculateCriticalPath(
 
   const dur = new Map<string, number>();
   valid.forEach(a => {
-    const days = Math.max(differenceInDays(parseISO(a.end_date!), parseISO(a.start_date!)), 1);
-    dur.set(a.id, days);
+    dur.set(a.id, duracaoCpm(a.start_date!, a.end_date!));
   });
 
   // Forward pass — earliest finish (in days from epoch min)
@@ -205,7 +234,7 @@ export function calculateScheduleSlack(
 
   const dur = new Map<string, number>();
   valid.forEach(a => {
-    dur.set(a.id, Math.max(differenceInDays(parseISO(a.end_date!), parseISO(a.start_date!)), 1));
+    dur.set(a.id, duracaoCpm(a.start_date!, a.end_date!));
   });
 
   const minDate = valid.reduce((m, a) => {

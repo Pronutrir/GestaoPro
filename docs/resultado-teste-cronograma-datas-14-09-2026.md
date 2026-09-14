@@ -130,3 +130,47 @@ morto da leva. A tela não oferece o filtro, então não é defeito visível.
 3. Defeito **3** — não exibir folga/predecessoras antes de as dependências chegarem.
 4. Defeito **4** — linha com filhas consome `derived_start`/`derived_end`.
 5. Defeitos **5 e 6** — sinalizar janela invertida; aviso de dependência também na Tabela.
+
+---
+
+# Correções (14/09/2026)
+
+Validadas localmente — build de produção contra o banco real, na fixture.
+
+| # | Correção | Medido depois |
+|---|---|---|
+| 1 | `carregarDados` não regrava as atividades da página por cima da atualização local; a página é avisada (`onDataChanged`) e recarrega | edições seguidas ficam na tela após +10s; banco igual à tela; a recusa cita o início **novo** (07/09); início real depois do fim real **recusado** |
+| 1 | arrasto otimista com reversão | barra na posição nova já em +300ms e fica; banco igual |
+| 2 | `duracaoCpm` (inclusiva) nos dois cálculos | A = **0d**, B = 0d, Solta = 0d; crítico no Gantt: **A, B, Solta** |
+| 3 | folga, predecessoras e crítico aguardam as dependências | antes delas: "…"; depois: números |
+| 4 | linha com filhas usa `derived_start`/`derived_end`, como texto | Fase de Teste **02/09 → 15/10** (era "Definir"); P1 02/09 → 08/09 (era invertida); 4 barras de pai não arrastam; arrastar o pai não grava |
+| 5 | janela invertida sinalizada | Duração vira **"invertida"** em vermelho; Térm. Real invertido em vermelho |
+| 6 | aviso do cálculo nos dois modos | Tabela e Gantt: "Avisos do cálculo · 1 dependência desrespeitada" |
+| 7 | `count: "exact"` nas três gravações | usuário só-leitura: banco `204 */0` → tela "Não foi possível salvar", célula mantém o valor, banco intocado |
+| 8 | clique depois do arrasto não abre a atividade | continua no Cronograma |
+
+## O 8º, achado durante a validação
+
+Soltar a barra depois de arrastar **abria a tela da atividade**. `mouseup` limpava
+`barDrag` e o React renderizava antes do `click` do mesmo gesto, que então lia
+`barDrag` vazio. Medido com o código antigo em produção — era anterior a esta leva —
+e ele escondia o resultado de toda reprogramação por arrasto. Uma `ref` com 300ms
+de duração cobre o clique do próprio gesto.
+
+## Duas decisões que valem registro
+
+- **Linha de base não congela linha com filhas.** Ela exibe a janela derivada;
+  congelá-la gravaria um agregado em `baseline_*`, e o CLAUDE.md proíbe persistir
+  agregado. A linha de base do pai é a das filhas. Antes, o pai congelava a própria
+  data, que ninguém mantém.
+- **Datas reais de pai continuam editáveis.** Não existe derivação delas no servidor.
+
+## Não corrigido, registrado
+
+- **A célula de data não confere permissão** (`podeEditarCelula`). O usuário
+  só-leitura abre o editor e digita. O banco protege e agora a tela diz a verdade,
+  mas o CLAUDE.md pede "campo sem permissão vira texto". É defeito de permissão, não
+  de data — fica para quando o Cronograma consumir `lib/activityAccess`.
+- **A espera pelas dependências** (~11s) vem do `useProjectAccess`, que varre todas
+  as atividades visíveis sem filtro de projeto. A tela agora é honesta durante a
+  espera; a lentidão continua, e é de um hook usado por doze telas.
