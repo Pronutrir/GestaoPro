@@ -247,3 +247,44 @@ export const anyMatchesIdentity = (
   values: Array<string | null | undefined>,
   candidates: IdentityCandidate[],
 ): boolean => values.some((value) => matchesIdentity(value, candidates));
+
+/**
+ * A CONTA DE QUEM O PROJETO GUARDA COMO TEXTO (Líder, Gestor).
+ *
+ * `projects.owner` e `projects.manager` são NOME. Os diálogos de projeto
+ * achavam a conta com `profiles.find(p => p.full_name === nome)` — e com dois
+ * perfis "Williame Correia de Lima" o `find` devolvia um deles ao acaso. Medido
+ * em 14/09/2026: ao salvar a equipe do projeto, a conta errada foi tratada como
+ * Líder e inserida na equipe com ACESSO TOTAL, já aceita, sem ninguém escolher.
+ *
+ * A ordem de decisão:
+ *   1. o id guardado (`owner_id`/`manager_id`), SE o perfil dele ainda tiver o
+ *      nome do texto — o front nunca gravou essas colunas, então em projeto que
+ *      trocou de Líder depois da conversão o id pode estar velho;
+ *   2. o nome, SE pertencer a um perfil só;
+ *   3. ninguém. Nome de mais de uma pessoa não identifica ninguém — quem chama
+ *      pede a escolha da conta, nunca adivinha.
+ */
+export const contaDoNome = (
+  nome: string | null | undefined,
+  idGuardado: string | null | undefined,
+  perfis: Array<{ id: string; full_name?: string | null }>,
+): string | null => {
+  const n = normalizeIdentity(nome);
+  if (!n) return null;
+  if (idGuardado) {
+    const guardado = perfis.find((p) => p.id === idGuardado);
+    if (guardado && normalizeIdentity(guardado.full_name) === n) return idGuardado;
+  }
+  const achados = perfis.filter((p) => normalizeIdentity(p.full_name) === n);
+  return achados.length === 1 ? achados[0].id : null;
+};
+
+/** O nome pertence a mais de um perfil da lista? (para a tela pedir a escolha) */
+export const nomeEhDeMaisDeUmPerfil = (
+  nome: string | null | undefined,
+  perfis: Array<{ full_name?: string | null }>,
+): boolean => {
+  const n = normalizeIdentity(nome);
+  return !!n && perfis.filter((p) => normalizeIdentity(p.full_name) === n).length > 1;
+};

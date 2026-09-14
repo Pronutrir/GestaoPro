@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from "react";
-import { nomesRepetidosEm, normalizeIdentity } from "@/lib/identityMatch";
+import { nomesRepetidosEm, normalizeIdentity, contaDoNome, nomeEhDeMaisDeUmPerfil } from "@/lib/identityMatch";
 import { normalizeProjectStatus } from "@/lib/projectStatus";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,8 @@ interface MemberRow {
   full_name: string;
   sector: string | null;
   avatar_url?: string | null;
+  /** Mostrado quando o nome é de mais de um perfil — é o que distingue um do outro. */
+  email?: string | null;
   invitation_status: "pending" | "accepted" | "declined";
   persisted: boolean;
   /** O que a pessoa PODE FAZER neste projeto. Ver lib/projectRoles.ts. */
@@ -154,7 +156,15 @@ export const EditProjectDialog = ({
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null; email?: string | null }[]>([]);
   /* NOMES DE MAIS DE UMA PESSOA, na lista que esta tela carregou. Ver o filtro
    * do "Adicionar membro" — é o que decide se Líder/Gestor pode ser escondido. */
-  const nomesAmbiguosDaLista = useMemo(() => new Set(nomesRepetidosEm(profiles)), [profiles]);
+  /* TODOS OS PERFIS, admins incluídos — só para IDENTIFICAR pessoa e homônimo.
+   * `profiles` tira os admins, porque eles não são escolhidos como Líder,
+   * Gestor ou membro. Mas a pergunta "este nome é de uma pessoa só?" tem de
+   * olhar todo mundo, como `nome_e_ambiguo` no banco: sem o admin na conta, os
+   * dois "Williame Correia de Lima" pareciam um só, e o diálogo resolvia o Líder
+   * para a conta não-admin — a mesma que o código antigo inseriu com acesso
+   * total. Medido em 14/09/2026. */
+  const [todosPerfis, setTodosPerfis] = useState<{ id: string; full_name: string }[]>([]);
+  const nomesAmbiguosDaLista = useMemo(() => new Set(nomesRepetidosEm(todosPerfis)), [todosPerfis]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<MemberRow[]>([]);
   const [createdByLabel, setCreatedByLabel] = useState<string>("—");
@@ -183,7 +193,10 @@ export const EditProjectDialog = ({
         supabase.from("sectors").select("id, name").order("name"),
       ]);
       const adminIds = new Set((adminRoles || []).map(r => r.user_id));
-      if (profileData) setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
+      if (profileData) {
+        setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
+        setTodosPerfis(profileData.filter(p => p.full_name));
+      }
       if (sectorData) setSectors(sectorData);
     };
     if (open) fetchProfiles();
@@ -217,6 +230,7 @@ export const EditProjectDialog = ({
             full_name: p?.full_name || "—",
             sector: p?.sector || null,
             avatar_url: p?.avatar_url || null,
+            email: p?.email || null,
             invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
             persisted: true,
             papel: papelDePermissoes(m),
@@ -244,6 +258,7 @@ export const EditProjectDialog = ({
     assignees: "",
     budget_planned: "",
     owner: "",
+    owner_id: null as string | null,
     blockers: "",
     category: "",
     program: "",
@@ -253,6 +268,7 @@ export const EditProjectDialog = ({
     actual_end_date: "",
     sponsor: "",
     manager: "",
+    manager_id: null as string | null,
     sector: "",
     objective: "",
     problem_statement: "",
@@ -260,6 +276,18 @@ export const EditProjectDialog = ({
   });
   const isProjectConcluded = project?.status === "concluido";
   const isProjectReadOnly = isProjectConcluded && formData.status === "concluido";
+
+  /* LÍDER E GESTOR PELA CONTA — ver `contaDoNome`.
+   *
+   * Todo o diálogo decidia por NOME: o valor dos seletores, quem sai da lista de
+   * membros, quem entra com acesso total ao salvar. Com dois "Williame Correia
+   * de Lima", a lista escondia as DUAS contas e o salvar inseriu a conta errada
+   * como Líder, com acesso total. Aqui a conta é resolvida uma vez; com nome
+   * ambíguo e sem conta escolhida, ela é `null` e o campo pede a escolha. */
+  const liderId = contaDoNome(formData.owner, formData.owner_id, todosPerfis);
+  const gestorId = contaDoNome(formData.manager, formData.manager_id, todosPerfis);
+  const liderSemConta = !!formData.owner.trim() && !liderId && nomeEhDeMaisDeUmPerfil(formData.owner, todosPerfis);
+  const gestorSemConta = !!formData.manager.trim() && !gestorId && nomeEhDeMaisDeUmPerfil(formData.manager, todosPerfis);
 
   useEffect(() => {
     if (project && open) {
@@ -278,6 +306,7 @@ export const EditProjectDialog = ({
         assignees: project.assignees.join(", "),
         budget_planned: project.budget_planned?.toString() || "0",
         owner: project.owner || "",
+        owner_id: (project as { owner_id?: string | null }).owner_id ?? null,
         blockers: project.blockers || "",
         category: (project as any).category || "general",
         program: (project as any).program || "",
@@ -287,6 +316,7 @@ export const EditProjectDialog = ({
         actual_end_date: (project as any).actual_end_date || "",
         sponsor: (project as any).sponsor || "",
         manager: (project as any).manager || "",
+        manager_id: (project as { manager_id?: string | null }).manager_id ?? null,
         sector: (project as any).sector || "",
         objective: (project as any).objective || "",
         problem_statement: (project as any).problem_statement || "",
@@ -431,6 +461,10 @@ export const EditProjectDialog = ({
       assignOptional("actual_end_date", formData.actual_end_date);
       assignPerson("sponsor", formData.sponsor);
       assignPerson("manager", formData.manager);
+      // A conta junto do nome. Com nome ambíguo e nenhuma conta escolhida fica
+      // `null` — gravar o palpite seria repetir o defeito no dado.
+      extendedUpdatePayload.owner_id = formData.owner.trim() ? liderId : null;
+      extendedUpdatePayload.manager_id = formData.manager.trim() ? gestorId : null;
       assignOptional("sector", formData.sector);
       assignOptional("objective", formData.objective);
       assignOptional("problem_statement", formData.problem_statement);
@@ -512,8 +546,10 @@ export const EditProjectDialog = ({
 
         // Líder e Gestor são membros com acesso total pelo cargo que ocupam —
         // nunca podem ser removidos pela sincronização da equipe.
-        const leaderId = profiles.find((p) => p.full_name === formData.owner)?.id ?? null;
-        const managerId = profiles.find((p) => p.full_name === formData.manager)?.id ?? null;
+        // Pela CONTA. Antes era `profiles.find(nome)`: com homônimo, a conta
+        // errada entrava na equipe com acesso total (14/09/2026).
+        const leaderId = liderId;
+        const managerId = gestorId;
         const responsibleIds = new Set([leaderId, managerId].filter(Boolean) as string[]);
 
         const keptIds = new Set(team.filter((m) => m.persisted).map((m) => m.id));
@@ -887,32 +923,43 @@ export const EditProjectDialog = ({
                 <Label>Gestor do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
-                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
+                  value={gestorId}
                   placeholder="Selecione o gestor"
                   onSelect={(p) => {
-                    setFormData({ ...formData, manager: p.full_name });
+                    setFormData({ ...formData, manager: p.full_name, manager_id: p.id });
                     setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
                   }}
-                  onClear={() => setFormData({ ...formData, manager: "" })}
+                  onClear={() => setFormData({ ...formData, manager: "", manager_id: null })}
                 />
+                {gestorSemConta && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Há mais de um perfil chamado “{formData.manager}”. Escolha a conta do gestor.
+                  </p>
+                )}
               </div>
               <div className="grid gap-2 content-start" ref={ownerFieldRef}>
                 <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
-                  value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
+                  value={liderId}
                   placeholder="Selecione o líder"
                   onSelect={(p) => {
                     setFormData({
                       ...formData,
                       owner: p.full_name,
+                      owner_id: p.id,
                       sector: formData.sector || p.sector || "",
                     });
                     // Promovido a Líder sai da equipe: entra com acesso total.
                     setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
                   }}
-                  onClear={() => setFormData({ ...formData, owner: "" })}
+                  onClear={() => setFormData({ ...formData, owner: "", owner_id: null })}
                 />
+                {liderSemConta && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Há mais de um perfil chamado “{formData.owner}”. Escolha a conta do líder.
+                  </p>
+                )}
               </div>
             </div>
             <div className="grid gap-2">
@@ -978,7 +1025,9 @@ export const EditProjectDialog = ({
                 return (
                   <div className="space-y-1">
                     {[...porPessoa.entries()].map(([name, roles]) => {
-                      const p = profiles.find((x) => x.full_name === name);
+                      const contaDoCargo = roles.includes("Líder") ? liderId : gestorId;
+                      const p = (contaDoCargo ? profiles.find((x) => x.id === contaDoCargo) : undefined)
+                        ?? profiles.find((x) => x.full_name === name);
                       return (
                         <div key={name} className="flex items-center gap-2 px-2 py-1 rounded-md bg-primary/5 border border-primary/25">
                           <Avatar className="h-5 w-5 shrink-0">
@@ -1026,7 +1075,10 @@ export const EditProjectDialog = ({
                 <div className="space-y-1">
                   {/* Quem é Líder/Gestor já aparece no bloco de cargos acima —
                       sai daqui para não constar duas vezes na mesma equipe. */}
-                  {team.filter((m) => m.full_name !== formData.owner && m.full_name !== formData.manager).map((m) => {
+                  {/* Esconde só quem É o Líder ou o Gestor, pela conta. Por nome,
+                      um homônimo do Líder sumia da equipe — invisível e sem como
+                      ajustar o acesso dele (14/09/2026). */}
+                  {team.filter((m) => m.user_id !== liderId && m.user_id !== gestorId).map((m) => {
                     const initials = (m.full_name || "?")
                       .split(" ")
                       .filter(Boolean)
@@ -1059,6 +1111,11 @@ export const EditProjectDialog = ({
                       </Avatar>
                       <div className="flex-1 min-w-0 flex items-center gap-1.5">
                         <span className="text-[13px] font-medium text-foreground truncate">{m.full_name}</span>
+                        {m.email && nomesAmbiguosDaLista.has(normalizeIdentity(m.full_name)) && (
+                          <span className="text-[10px] text-amber-700 dark:text-amber-400 truncate shrink-0" title="Há mais de um perfil com este nome">
+                            {m.email}
+                          </span>
+                        )}
                         {m.sector && (
                           <span className="text-[10px] text-muted-foreground uppercase tracking-tight shrink-0">
                             · {m.sector}
@@ -1144,23 +1201,11 @@ export const EditProjectDialog = ({
                   variant="add"
                   people={profiles.filter((p) => {
                     if (team.some((t) => t.user_id === p.id)) return false;
-                    /* LÍDER E GESTOR SÓ SAEM DA LISTA QUANDO O NOME É ÚNICO.
-                     *
-                     * Eles já aparecem em destaque acima, então a lista os
-                     * escondia — comparando por NOME, porque `owner`/`manager`
-                     * são texto. Com homônimo, isso escondia as DUAS contas.
-                     * Medido em 14/09/2026: o Líder do projeto é "Williame
-                     * Correia de Lima", há dois perfis com esse nome, e a conta
-                     * que precisava entrar na equipe simplesmente não aparecia
-                     * para ser escolhida — "adicionei e não mudou".
-                     *
-                     * Com nome ambíguo não dá para saber qual das contas é o
-                     * Líder; as duas ficam, e o seletor marca "2 perfis" com o
-                     * e-mail de cada uma. */
-                    const nome = normalizeIdentity(p.full_name);
-                    const ehLiderOuGestor =
-                      nome === normalizeIdentity(formData.owner) || nome === normalizeIdentity(formData.manager);
-                    return !(ehLiderOuGestor && !nomesAmbiguosDaLista.has(nome));
+                    /* Líder e Gestor já aparecem em destaque acima — saem da
+                     * lista, mas pela CONTA. Por nome, com homônimo, as duas
+                     * contas "Williame Correia de Lima" sumiam e a que precisava
+                     * entrar não podia ser escolhida (14/09/2026). */
+                    return p.id !== liderId && p.id !== gestorId;
                   })}
                   placeholder="Adicionar membro por nome, setor ou função..."
                   onSelect={(p) => {
@@ -1173,6 +1218,7 @@ export const EditProjectDialog = ({
                         full_name: p.full_name,
                         sector: p.sector ?? null,
                         avatar_url: p.avatar_url || null,
+                        email: p.email ?? null,
                         invitation_status: "pending",
                         persisted: false,
                         // Entra COM permissão: "adicionar à equipe" quer dizer

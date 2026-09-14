@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from "react";
+import { contaDoNome, nomeEhDeMaisDeUmPerfil } from "@/lib/identityMatch";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +49,8 @@ interface AddProjectDialogProps {
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
+  /** Todos os perfis, admins incluídos — só para identificar pessoa e homônimo (ver EditProjectDialog). */
+  const [todosPerfis, setTodosPerfis] = useState<{ id: string; full_name: string }[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<PendingMember[]>([]);
   // Âncoras dos campos de cargo — ver focusRoleField abaixo.
@@ -69,7 +72,10 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         supabase.from("sectors").select("id, name").order("name"),
       ]);
       const adminIds = new Set((adminRoles || []).map(r => r.user_id));
-      if (profileData) setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
+      if (profileData) {
+        setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
+        setTodosPerfis(profileData.filter(p => p.full_name));
+      }
       if (sectorData) setSectors(sectorData);
     };
     fetchProfiles();
@@ -89,6 +95,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     assignees: "",
     budget_planned: "",
     owner: "",
+    owner_id: null as string | null,
     blockers: "",
     category: defaultCategory || "",
     program: "",
@@ -99,10 +106,19 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     actual_end_date: "",
     sponsor: "",
     manager: "",
+    manager_id: null as string | null,
     sector: "",
     problem_statement: "",
     root_cause: "",
   });
+
+  /* LÍDER E GESTOR PELA CONTA — mesma regra do diálogo de edição (`contaDoNome`).
+   * Criar o projeto inseria Líder e Gestor com ACESSO TOTAL a partir de
+   * `profiles.find(nome)`; com homônimo, a conta errada. */
+  const liderId = contaDoNome(formData.owner, formData.owner_id, todosPerfis);
+  const gestorId = contaDoNome(formData.manager, formData.manager_id, todosPerfis);
+  const liderSemConta = !!formData.owner.trim() && !liderId && nomeEhDeMaisDeUmPerfil(formData.owner, todosPerfis);
+  const gestorSemConta = !!formData.manager.trim() && !gestorId && nomeEhDeMaisDeUmPerfil(formData.manager, todosPerfis);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +170,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         budget_planned: parseFloat(formData.budget_planned) || 0,
         budget_used: 0,
         owner: formData.owner || null,
+        owner_id: formData.owner ? liderId : null,
         blockers: formData.blockers,
         category: formData.category || "general",
         program: formData.program || null,
@@ -164,6 +181,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         actual_end_date: formData.actual_end_date || null,
         sponsor: formData.sponsor || null,
         manager: formData.manager || null,
+        manager_id: formData.manager ? gestorId : null,
         sector: formData.sector || null,
         problem_statement: formData.problem_statement || null,
         root_cause: formData.root_cause || null,
@@ -208,8 +226,9 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
       // no texto projects.owner e não aparecia na equipe nem herdava permissão —
       // por isso parecia que "o líder some" depois de criar o projeto.
       if (created?.id && user?.id) {
-        const leaderId = profiles.find((p) => p.full_name === formData.owner)?.id ?? null;
-        const managerId = profiles.find((p) => p.full_name === formData.manager)?.id ?? null;
+        // Pela CONTA, nunca por palpite de nome (ver `contaDoNome`).
+        const leaderId = liderId;
+        const managerId = gestorId;
         const fullAccessIds = Array.from(new Set([user.id, leaderId, managerId].filter(Boolean) as string[]));
         const { error: creatorMemberError } = await supabase.from("project_members").insert(
           fullAccessIds.map((uid) => ({
@@ -250,6 +269,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         assignees: "",
         budget_planned: "",
         owner: "",
+    owner_id: null as string | null,
         blockers: "",
         category: defaultCategory || "general",
         program: "",
@@ -260,6 +280,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         actual_end_date: "",
         sponsor: "",
         manager: "",
+    manager_id: null as string | null,
         sector: "",
         problem_statement: "",
         root_cause: "",
@@ -277,8 +298,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
           const alreadyMembers = new Set(
             [
               invitedBy,
-              profiles.find((p) => p.full_name === formData.owner)?.id ?? null,
-              profiles.find((p) => p.full_name === formData.manager)?.id ?? null,
+              liderId,
+              gestorId,
             ].filter(Boolean) as string[],
           );
           // Membro da equipe entra CONVIDADO, não aceito — o aceite vem da
@@ -552,33 +573,44 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <Label>Gestor do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
-                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
+                  value={gestorId}
                   placeholder="Selecione o gestor"
                   onSelect={(p) => {
-                    setFormData({ ...formData, manager: p.full_name });
+                    setFormData({ ...formData, manager: p.full_name, manager_id: p.id });
                     setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
                   }}
-                  onClear={() => setFormData({ ...formData, manager: "" })}
+                  onClear={() => setFormData({ ...formData, manager: "", manager_id: null })}
                 />
+                {gestorSemConta && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Há mais de um perfil chamado “{formData.manager}”. Escolha a conta do gestor.
+                  </p>
+                )}
               </div>
               <div className="grid gap-2 content-start" ref={ownerFieldRef}>
                 <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
-                  value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
+                  value={liderId}
                   placeholder="Selecione o líder"
                   onSelect={(p) => {
                     setFormData({
                       ...formData,
                       owner: p.full_name,
+                      owner_id: p.id,
                       sector: formData.sector || p.sector || "",
                     });
                     // Promovido a Líder sai da lista de equipe: passa a entrar
                     // com acesso total, não como membro convidado.
                     setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
                   }}
-                  onClear={() => setFormData({ ...formData, owner: "" })}
+                  onClear={() => setFormData({ ...formData, owner: "", owner_id: null })}
                 />
+                {liderSemConta && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Há mais de um perfil chamado “{formData.owner}”. Escolha a conta do líder.
+                  </p>
+                )}
               </div>
             </div>
             <div className="grid gap-2">
